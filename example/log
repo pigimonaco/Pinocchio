@@ -1,0 +1,632 @@
+[Tue Nov  8 2016 17:46:23] This is pinocchio V4.1, running on 4 MPI tasks
+
+This version uses 3LPT displacements
+Reading parameters from file parameter_file
+Flag for this run: example
+
+PARAMETER VALUES from file parameter_file:
+Omega0                      0.250000
+OmegaLambda                 0.750000
+OmegaBaryon                 0.044000
+DE EoS parameters           -1.000000 0.000000
+Hubble100                   0.700000
+Sigma8                      0.800000
+PrimordialIndex             0.960000
+RandomSeed                  486604
+OutputList                  outputs
+Number of outputs           4
+Output redshifts            2.000000  1.000000  0.500000  0.000000 
+GridSize                    200 200 200
+BoxSize (true Mpc)          714.285714
+BoxSize (Mpc/h)             500.000000
+Particle Mass (true Msun)   1.54883e+12
+Particle Mass (Msun/h)      1.08418e+12
+Inter-part dist (true Mpc)  3.571429
+Inter-part dist (Mpc/h)     2.500000
+MinHaloMass (particles)     10
+BoundaryLayerFactor         1.000000
+MaxMem per task (Mb)        3600
+MaxMem per particle (b)     300.000000
+CatalogInAscii              1
+NumFiles                    1
+DoNotWriteCatalogs          0
+DoNotWriteHistories         0
+WriteSnapshot               0
+OutputInH100                1
+WriteFmax                   0
+WriteVmax                   0
+WriteRmax                   0
+Using Watson et al. (2013) for the analytic mass function
+
+
+GENIC parameters:
+InputSpectrum_UnitLength_in_cm 0.000000
+FileWithInputSpectrum          no
+WDM_PartMass_in_kev            0.000000
+
+Normalization constant for the power spectrum: 2.03146e+07
+Min variance: 0.07896112.6, max variance: 5.57438512.6, number of smoothing radii: 14
+            1)  Radius= 20.635922, Variance=  0.078961
+            2)  Radius= 17.090722, Variance=  0.111535
+            3)  Radius= 13.996056, Variance=  0.157548
+            4)  Radius= 11.318704, Variance=  0.222542
+            5)  Radius=  9.026099, Variance=  0.314349
+            6)  Radius=  7.085912, Variance=  0.444030
+            7)  Radius=  5.465945, Variance=  0.627210
+            8)  Radius=  4.134096, Variance=  0.885957
+            9)  Radius=  3.058354, Variance=  1.251448
+           10)  Radius=  2.206875, Variance=  1.767717
+           11)  Radius=  1.548258, Variance=  2.496966
+           12)  Radius=  1.051984, Variance=  3.527058
+           13)  Radius=  0.689079, Variance=  4.982102
+           14)  Radius=  0.000000, Variance=  5.574385
+
+Determination of the boundary layer
+   growing mode at z=0.000000: 1.000000
+   largest halo expected in this box at z=0.000000: 4.264918e+15 Msun
+   its Lagrangian size: 31.053812 Mpc
+   typical displacement: 15.034898 
+   the boundary layer will be 31.053812, a factor of 2.065449 with respect to the typical displacement
+
+FRAGMENTATION:
+The box will be fragmented in one go
+Number of sub-boxes per dimension: 4 1 1
+Boundary layer (true Mpc):         31.053812
+Boundary layer (gridpoints):       9
+Core 0 will work on a grid:        68 200 200
+Number of particles for core 0:    2720000
+The resolved box will be:          50 200 200
+Periodic boundary conditions:      0 1 1
+Required bytes per fft particle:   264.320000
+The overhead for fragmentation is: 1.360000
+Required memory per task:           504Mb - Maxmem=3600Mb
+
+The mass function will be computed from Log M=13.189953 to Log M=15.779911 (52 bins)
+
+The Past Light Cone will be reconstruct from z=0.300000 to z=0.000000
+Cone data have been decided by the code
+Past Light Cone will be centred on point [520.730290,577.266959,194.407872] (true Mpc)
+The cone vertex will be pointed toward [0.577350,0.577350,0.577350]
+It will have an aperture of 30.000000 degrees
+The proper distance at the starting redshift, z=0.300000, is: 1207.761054 Mpc
+The proper distance at the stopping redshift, z=0.000000, is: 0.000000 Mpc
+The reconstruction will be done for 0.000000 < z < 0.300000
+The corresponding F values are: Fstart=1.300000, Fstop=1.000000
+The box will be replicated 14 times to construct the PLC
+   Replication  0: shift ( 0, 0, 0), from F=1.230000 to F=1.060000
+   Replication  1: shift ( 0, 1, 0), from F=1.280000 to F=1.060000
+   Replication  2: shift ( 0, 1, 1), from F=1.410000 to F=1.120000
+   Replication  3: shift ( 0, 2, 0), from F=1.450000 to F=1.200000
+   Replication  4: shift ( 0, 2, 1), from F=1.550000 to F=1.230000
+   Replication  5: shift ( 1, 0, 0), from F=1.300000 to F=1.060000
+   Replication  6: shift ( 1, 0, 1), from F=1.420000 to F=1.120000
+   Replication  7: shift ( 1, 1, 0), from F=1.340000 to F=1.060000
+   Replication  8: shift ( 1, 1, 1), from F=1.460000 to F=1.120000
+   Replication  9: shift ( 1, 2, 0), from F=1.490000 to F=1.200000
+   Replication 10: shift ( 1, 2, 1), from F=1.590000 to F=1.230000
+   Replication 11: shift ( 2, 0, 1), from F=1.560000 to F=1.240000
+   Replication 12: shift ( 2, 1, 0), from F=1.500000 to F=1.210000
+   Replication 13: shift ( 2, 1, 1), from F=1.590000 to F=1.240000
+Task 0 will use plc.Nmax=272000
+
+
+Map of memory usage for all MPI tasks
+Task N. planes    mem(MB) overhead   products   fields     ffts     fmax  frag pr.  groups fragment  total bytes per particle
+     0      50       504     1.4        112.0     80.4     16.2    208.6    152.3     62.0    264.3    264.3
+     1      50       504     1.4        112.0     80.4     16.2    208.6    152.3     62.0    264.3    264.3
+     2      50       504     1.4        112.0     80.4     16.2    208.6    152.3     62.0    264.3    264.3
+     3      50       504     1.4        112.0     80.4     16.2    208.6    152.3     62.0    264.3    264.3
+
+[Tue Nov  8 2016 17:46:24] Memory has been successfully allocated
+[Tue Nov  8 2016 17:46:25] Generating density in Fourier space
+[Tue Nov  8 2016 17:46:30] Done generating density in Fourier space, cputime = 4.471037 s
+[Tue Nov  8 2016 17:46:30] initialization done, cpu time =       6.977920
+[Tue Nov  8 2016 17:46:30] First part: computation of collapse times
+
+[Tue Nov  8 2016 17:46:30] Starting smoothing radius 1 of 14 (R= 20.63592, sigma=  0.28100)
+[Tue Nov  8 2016 17:46:30] Computing second derivatives
+[Tue Nov  8 2016 17:46:30] Computing 2nd derivative: 1
+[Tue Nov  8 2016 17:46:30] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:30] compute_derivative: done fft, cpu time = 0.077190
+[Tue Nov  8 2016 17:46:30] Computing 2nd derivative: 4
+[Tue Nov  8 2016 17:46:30] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:30] compute_derivative: done fft, cpu time = 0.071643
+[Tue Nov  8 2016 17:46:30] Computing 2nd derivative: 5
+[Tue Nov  8 2016 17:46:30] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:30] compute_derivative: done fft, cpu time = 0.067788
+[Tue Nov  8 2016 17:46:30] Computing 2nd derivative: 2
+[Tue Nov  8 2016 17:46:30] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:31] compute_derivative: done fft, cpu time = 0.238287
+[Tue Nov  8 2016 17:46:31] Computing 2nd derivative: 6
+[Tue Nov  8 2016 17:46:31] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:31] compute_derivative: done fft, cpu time = 0.142758
+[Tue Nov  8 2016 17:46:31] Computing 2nd derivative: 3
+[Tue Nov  8 2016 17:46:31] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:31] compute_derivative: done fft, cpu time = 0.068415
+[Tue Nov  8 2016 17:46:31] Done second derivatives, cpu time = 1.053639 s
+[Tue Nov  8 2016 17:46:31] Computing collapse times
+[Tue Nov  8 2016 17:46:33] Done computing collapse times, cpu time = 1.990972 s
+Smoothing radius completed: 0, R=20.636, expected rms:  0.2810, computed rms:  0.2771, cpu time = 3.044822 s
+
+[Tue Nov  8 2016 17:46:33] Starting smoothing radius 2 of 14 (R= 17.09072, sigma=  0.33397)
+[Tue Nov  8 2016 17:46:33] Computing second derivatives
+[Tue Nov  8 2016 17:46:33] Computing 2nd derivative: 1
+[Tue Nov  8 2016 17:46:33] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:33] compute_derivative: done fft, cpu time = 0.070866
+[Tue Nov  8 2016 17:46:33] Computing 2nd derivative: 4
+[Tue Nov  8 2016 17:46:33] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:33] compute_derivative: done fft, cpu time = 0.090797
+[Tue Nov  8 2016 17:46:33] Computing 2nd derivative: 5
+[Tue Nov  8 2016 17:46:33] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:33] compute_derivative: done fft, cpu time = 0.099240
+[Tue Nov  8 2016 17:46:33] Computing 2nd derivative: 2
+[Tue Nov  8 2016 17:46:33] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:33] compute_derivative: done fft, cpu time = 0.088399
+[Tue Nov  8 2016 17:46:33] Computing 2nd derivative: 6
+[Tue Nov  8 2016 17:46:33] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:34] compute_derivative: done fft, cpu time = 0.127937
+[Tue Nov  8 2016 17:46:34] Computing 2nd derivative: 3
+[Tue Nov  8 2016 17:46:34] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:34] compute_derivative: done fft, cpu time = 0.273254
+[Tue Nov  8 2016 17:46:34] Done second derivatives, cpu time = 1.095726 s
+[Tue Nov  8 2016 17:46:34] Computing collapse times
+[Tue Nov  8 2016 17:46:35] Done computing collapse times, cpu time = 1.481410 s
+Smoothing radius completed: 1, R=17.091, expected rms:  0.3340, computed rms:  0.3299, cpu time = 2.577354 s
+
+[Tue Nov  8 2016 17:46:35] Starting smoothing radius 3 of 14 (R= 13.99606, sigma=  0.39692)
+[Tue Nov  8 2016 17:46:35] Computing second derivatives
+[Tue Nov  8 2016 17:46:35] Computing 2nd derivative: 1
+[Tue Nov  8 2016 17:46:35] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:36] compute_derivative: done fft, cpu time = 0.087077
+[Tue Nov  8 2016 17:46:36] Computing 2nd derivative: 4
+[Tue Nov  8 2016 17:46:36] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:36] compute_derivative: done fft, cpu time = 0.097398
+[Tue Nov  8 2016 17:46:36] Computing 2nd derivative: 5
+[Tue Nov  8 2016 17:46:36] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:36] compute_derivative: done fft, cpu time = 0.079834
+[Tue Nov  8 2016 17:46:36] Computing 2nd derivative: 2
+[Tue Nov  8 2016 17:46:36] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:36] compute_derivative: done fft, cpu time = 0.070893
+[Tue Nov  8 2016 17:46:36] Computing 2nd derivative: 6
+[Tue Nov  8 2016 17:46:36] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:36] compute_derivative: done fft, cpu time = 0.086581
+[Tue Nov  8 2016 17:46:36] Computing 2nd derivative: 3
+[Tue Nov  8 2016 17:46:36] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:36] compute_derivative: done fft, cpu time = 0.098009
+[Tue Nov  8 2016 17:46:36] Done second derivatives, cpu time = 0.863939 s
+[Tue Nov  8 2016 17:46:36] Computing collapse times
+[Tue Nov  8 2016 17:46:38] Done computing collapse times, cpu time = 1.553990 s
+Smoothing radius completed: 2, R=13.996, expected rms:  0.3969, computed rms:  0.3926, cpu time = 2.418143 s
+
+[Tue Nov  8 2016 17:46:38] Starting smoothing radius 4 of 14 (R= 11.31870, sigma=  0.47174)
+[Tue Nov  8 2016 17:46:38] Computing second derivatives
+[Tue Nov  8 2016 17:46:38] Computing 2nd derivative: 1
+[Tue Nov  8 2016 17:46:38] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:38] compute_derivative: done fft, cpu time = 0.075456
+[Tue Nov  8 2016 17:46:38] Computing 2nd derivative: 4
+[Tue Nov  8 2016 17:46:38] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:38] compute_derivative: done fft, cpu time = 0.064254
+[Tue Nov  8 2016 17:46:38] Computing 2nd derivative: 5
+[Tue Nov  8 2016 17:46:38] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:38] compute_derivative: done fft, cpu time = 0.101195
+[Tue Nov  8 2016 17:46:38] Computing 2nd derivative: 2
+[Tue Nov  8 2016 17:46:38] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:38] compute_derivative: done fft, cpu time = 0.119192
+[Tue Nov  8 2016 17:46:38] Computing 2nd derivative: 6
+[Tue Nov  8 2016 17:46:39] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:39] compute_derivative: done fft, cpu time = 0.111118
+[Tue Nov  8 2016 17:46:39] Computing 2nd derivative: 3
+[Tue Nov  8 2016 17:46:39] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:39] compute_derivative: done fft, cpu time = 0.107201
+[Tue Nov  8 2016 17:46:39] Done second derivatives, cpu time = 0.947407 s
+[Tue Nov  8 2016 17:46:39] Computing collapse times
+[Tue Nov  8 2016 17:46:40] Done computing collapse times, cpu time = 1.641700 s
+Smoothing radius completed: 3, R=11.319, expected rms:  0.4717, computed rms:  0.4672, cpu time = 2.589280 s
+
+[Tue Nov  8 2016 17:46:40] Starting smoothing radius 5 of 14 (R=  9.02610, sigma=  0.56067)
+[Tue Nov  8 2016 17:46:40] Computing second derivatives
+[Tue Nov  8 2016 17:46:40] Computing 2nd derivative: 1
+[Tue Nov  8 2016 17:46:41] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:41] compute_derivative: done fft, cpu time = 0.063576
+[Tue Nov  8 2016 17:46:41] Computing 2nd derivative: 4
+[Tue Nov  8 2016 17:46:41] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:41] compute_derivative: done fft, cpu time = 0.075957
+[Tue Nov  8 2016 17:46:41] Computing 2nd derivative: 5
+[Tue Nov  8 2016 17:46:41] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:41] compute_derivative: done fft, cpu time = 0.162776
+[Tue Nov  8 2016 17:46:41] Computing 2nd derivative: 2
+[Tue Nov  8 2016 17:46:41] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:41] compute_derivative: done fft, cpu time = 0.067450
+[Tue Nov  8 2016 17:46:41] Computing 2nd derivative: 6
+[Tue Nov  8 2016 17:46:41] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:41] compute_derivative: done fft, cpu time = 0.062872
+[Tue Nov  8 2016 17:46:41] Computing 2nd derivative: 3
+[Tue Nov  8 2016 17:46:41] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:41] compute_derivative: done fft, cpu time = 0.066737
+[Tue Nov  8 2016 17:46:41] Done second derivatives, cpu time = 0.836400 s
+[Tue Nov  8 2016 17:46:41] Computing collapse times
+[Tue Nov  8 2016 17:46:43] Done computing collapse times, cpu time = 1.517872 s
+Smoothing radius completed: 4, R= 9.026, expected rms:  0.5607, computed rms:  0.5558, cpu time = 2.354518 s
+
+[Tue Nov  8 2016 17:46:43] Starting smoothing radius 6 of 14 (R=  7.08591, sigma=  0.66636)
+[Tue Nov  8 2016 17:46:43] Computing second derivatives
+[Tue Nov  8 2016 17:46:43] Computing 2nd derivative: 1
+[Tue Nov  8 2016 17:46:43] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:43] compute_derivative: done fft, cpu time = 0.107074
+[Tue Nov  8 2016 17:46:43] Computing 2nd derivative: 4
+[Tue Nov  8 2016 17:46:43] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:43] compute_derivative: done fft, cpu time = 0.145514
+[Tue Nov  8 2016 17:46:43] Computing 2nd derivative: 5
+[Tue Nov  8 2016 17:46:43] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:43] compute_derivative: done fft, cpu time = 0.155452
+[Tue Nov  8 2016 17:46:43] Computing 2nd derivative: 2
+[Tue Nov  8 2016 17:46:43] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:44] compute_derivative: done fft, cpu time = 0.147162
+[Tue Nov  8 2016 17:46:44] Computing 2nd derivative: 6
+[Tue Nov  8 2016 17:46:44] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:44] compute_derivative: done fft, cpu time = 0.114411
+[Tue Nov  8 2016 17:46:44] Computing 2nd derivative: 3
+[Tue Nov  8 2016 17:46:44] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:44] compute_derivative: done fft, cpu time = 0.123404
+[Tue Nov  8 2016 17:46:44] Done second derivatives, cpu time = 1.094113 s
+[Tue Nov  8 2016 17:46:44] Computing collapse times
+[Tue Nov  8 2016 17:46:45] Done computing collapse times, cpu time = 1.246008 s
+Smoothing radius completed: 5, R= 7.086, expected rms:  0.6664, computed rms:  0.6614, cpu time = 2.340322 s
+
+[Tue Nov  8 2016 17:46:45] Starting smoothing radius 7 of 14 (R=  5.46594, sigma=  0.79197)
+[Tue Nov  8 2016 17:46:45] Computing second derivatives
+[Tue Nov  8 2016 17:46:45] Computing 2nd derivative: 1
+[Tue Nov  8 2016 17:46:45] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:45] compute_derivative: done fft, cpu time = 0.083499
+[Tue Nov  8 2016 17:46:45] Computing 2nd derivative: 4
+[Tue Nov  8 2016 17:46:45] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:45] compute_derivative: done fft, cpu time = 0.095680
+[Tue Nov  8 2016 17:46:45] Computing 2nd derivative: 5
+[Tue Nov  8 2016 17:46:45] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:46] compute_derivative: done fft, cpu time = 0.095469
+[Tue Nov  8 2016 17:46:46] Computing 2nd derivative: 2
+[Tue Nov  8 2016 17:46:46] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:46] compute_derivative: done fft, cpu time = 0.075848
+[Tue Nov  8 2016 17:46:46] Computing 2nd derivative: 6
+[Tue Nov  8 2016 17:46:46] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:46] compute_derivative: done fft, cpu time = 0.079019
+[Tue Nov  8 2016 17:46:46] Computing 2nd derivative: 3
+[Tue Nov  8 2016 17:46:46] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:46] compute_derivative: done fft, cpu time = 0.080956
+[Tue Nov  8 2016 17:46:46] Done second derivatives, cpu time = 0.829211 s
+[Tue Nov  8 2016 17:46:46] Computing collapse times
+[Tue Nov  8 2016 17:46:47] Done computing collapse times, cpu time = 1.537150 s
+Smoothing radius completed: 6, R= 5.466, expected rms:  0.7920, computed rms:  0.7873, cpu time = 2.366574 s
+
+[Tue Nov  8 2016 17:46:47] Starting smoothing radius 8 of 14 (R=  4.13410, sigma=  0.94125)
+[Tue Nov  8 2016 17:46:47] Computing second derivatives
+[Tue Nov  8 2016 17:46:47] Computing 2nd derivative: 1
+[Tue Nov  8 2016 17:46:48] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:48] compute_derivative: done fft, cpu time = 0.094025
+[Tue Nov  8 2016 17:46:48] Computing 2nd derivative: 4
+[Tue Nov  8 2016 17:46:48] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:48] compute_derivative: done fft, cpu time = 0.098614
+[Tue Nov  8 2016 17:46:48] Computing 2nd derivative: 5
+[Tue Nov  8 2016 17:46:48] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:48] compute_derivative: done fft, cpu time = 0.109618
+[Tue Nov  8 2016 17:46:48] Computing 2nd derivative: 2
+[Tue Nov  8 2016 17:46:48] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:48] compute_derivative: done fft, cpu time = 0.267544
+[Tue Nov  8 2016 17:46:48] Computing 2nd derivative: 6
+[Tue Nov  8 2016 17:46:48] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:48] compute_derivative: done fft, cpu time = 0.170998
+[Tue Nov  8 2016 17:46:48] Computing 2nd derivative: 3
+[Tue Nov  8 2016 17:46:49] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:49] compute_derivative: done fft, cpu time = 0.098015
+[Tue Nov  8 2016 17:46:49] Done second derivatives, cpu time = 1.135834 s
+[Tue Nov  8 2016 17:46:49] Computing collapse times
+[Tue Nov  8 2016 17:46:50] Done computing collapse times, cpu time = 1.231913 s
+Smoothing radius completed: 7, R= 4.134, expected rms:  0.9413, computed rms:  0.9372, cpu time = 2.368000 s
+
+[Tue Nov  8 2016 17:46:50] Starting smoothing radius 9 of 14 (R=  3.05835, sigma=  1.11868)
+[Tue Nov  8 2016 17:46:50] Computing second derivatives
+[Tue Nov  8 2016 17:46:50] Computing 2nd derivative: 1
+[Tue Nov  8 2016 17:46:50] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:50] compute_derivative: done fft, cpu time = 0.098108
+[Tue Nov  8 2016 17:46:50] Computing 2nd derivative: 4
+[Tue Nov  8 2016 17:46:50] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:50] compute_derivative: done fft, cpu time = 0.102763
+[Tue Nov  8 2016 17:46:50] Computing 2nd derivative: 5
+[Tue Nov  8 2016 17:46:50] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:50] compute_derivative: done fft, cpu time = 0.095989
+[Tue Nov  8 2016 17:46:50] Computing 2nd derivative: 2
+[Tue Nov  8 2016 17:46:50] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:50] compute_derivative: done fft, cpu time = 0.097926
+[Tue Nov  8 2016 17:46:50] Computing 2nd derivative: 6
+[Tue Nov  8 2016 17:46:51] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:51] compute_derivative: done fft, cpu time = 0.098486
+[Tue Nov  8 2016 17:46:51] Computing 2nd derivative: 3
+[Tue Nov  8 2016 17:46:51] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:51] compute_derivative: done fft, cpu time = 0.098814
+[Tue Nov  8 2016 17:46:51] Done second derivatives, cpu time = 0.884047 s
+[Tue Nov  8 2016 17:46:51] Computing collapse times
+[Tue Nov  8 2016 17:46:52] Done computing collapse times, cpu time = 1.554660 s
+Smoothing radius completed: 8, R= 3.058, expected rms:  1.1187, computed rms:  1.1153, cpu time = 2.438931 s
+
+[Tue Nov  8 2016 17:46:52] Starting smoothing radius 10 of 14 (R=  2.20688, sigma=  1.32956)
+[Tue Nov  8 2016 17:46:52] Computing second derivatives
+[Tue Nov  8 2016 17:46:52] Computing 2nd derivative: 1
+[Tue Nov  8 2016 17:46:52] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:52] compute_derivative: done fft, cpu time = 0.137311
+[Tue Nov  8 2016 17:46:52] Computing 2nd derivative: 4
+[Tue Nov  8 2016 17:46:53] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:53] compute_derivative: done fft, cpu time = 0.094581
+[Tue Nov  8 2016 17:46:53] Computing 2nd derivative: 5
+[Tue Nov  8 2016 17:46:53] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:53] compute_derivative: done fft, cpu time = 0.092178
+[Tue Nov  8 2016 17:46:53] Computing 2nd derivative: 2
+[Tue Nov  8 2016 17:46:53] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:53] compute_derivative: done fft, cpu time = 0.088688
+[Tue Nov  8 2016 17:46:53] Computing 2nd derivative: 6
+[Tue Nov  8 2016 17:46:53] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:53] compute_derivative: done fft, cpu time = 0.134015
+[Tue Nov  8 2016 17:46:53] Computing 2nd derivative: 3
+[Tue Nov  8 2016 17:46:53] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:53] compute_derivative: done fft, cpu time = 0.251388
+[Tue Nov  8 2016 17:46:53] Done second derivatives, cpu time = 1.086318 s
+[Tue Nov  8 2016 17:46:53] Computing collapse times
+[Tue Nov  8 2016 17:46:55] Done computing collapse times, cpu time = 1.252314 s
+Smoothing radius completed: 9, R= 2.207, expected rms:  1.3296, computed rms:  1.3236, cpu time = 2.338874 s
+
+[Tue Nov  8 2016 17:46:55] Starting smoothing radius 11 of 14 (R=  1.54826, sigma=  1.58018)
+[Tue Nov  8 2016 17:46:55] Computing second derivatives
+[Tue Nov  8 2016 17:46:55] Computing 2nd derivative: 1
+[Tue Nov  8 2016 17:46:55] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:55] compute_derivative: done fft, cpu time = 0.089468
+[Tue Nov  8 2016 17:46:55] Computing 2nd derivative: 4
+[Tue Nov  8 2016 17:46:55] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:55] compute_derivative: done fft, cpu time = 0.133905
+[Tue Nov  8 2016 17:46:55] Computing 2nd derivative: 5
+[Tue Nov  8 2016 17:46:55] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:55] compute_derivative: done fft, cpu time = 0.257308
+[Tue Nov  8 2016 17:46:55] Computing 2nd derivative: 2
+[Tue Nov  8 2016 17:46:55] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:55] compute_derivative: done fft, cpu time = 0.117722
+[Tue Nov  8 2016 17:46:55] Computing 2nd derivative: 6
+[Tue Nov  8 2016 17:46:55] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:56] compute_derivative: done fft, cpu time = 0.093254
+[Tue Nov  8 2016 17:46:56] Computing 2nd derivative: 3
+[Tue Nov  8 2016 17:46:56] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:56] compute_derivative: done fft, cpu time = 0.109561
+[Tue Nov  8 2016 17:46:56] Done second derivatives, cpu time = 1.100358 s
+[Tue Nov  8 2016 17:46:56] Computing collapse times
+[Tue Nov  8 2016 17:46:57] Done computing collapse times, cpu time = 1.734887 s
+Smoothing radius completed: 10, R= 1.548, expected rms:  1.5802, computed rms:  1.5434, cpu time = 2.835398 s
+
+[Tue Nov  8 2016 17:46:57] Starting smoothing radius 12 of 14 (R=  1.05198, sigma=  1.87805)
+[Tue Nov  8 2016 17:46:57] Computing second derivatives
+[Tue Nov  8 2016 17:46:57] Computing 2nd derivative: 1
+[Tue Nov  8 2016 17:46:58] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:58] compute_derivative: done fft, cpu time = 0.141968
+[Tue Nov  8 2016 17:46:58] Computing 2nd derivative: 4
+[Tue Nov  8 2016 17:46:58] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:58] compute_derivative: done fft, cpu time = 0.163538
+[Tue Nov  8 2016 17:46:58] Computing 2nd derivative: 5
+[Tue Nov  8 2016 17:46:58] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:58] compute_derivative: done fft, cpu time = 0.164783
+[Tue Nov  8 2016 17:46:58] Computing 2nd derivative: 2
+[Tue Nov  8 2016 17:46:58] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:58] compute_derivative: done fft, cpu time = 0.159155
+[Tue Nov  8 2016 17:46:58] Computing 2nd derivative: 6
+[Tue Nov  8 2016 17:46:58] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:59] compute_derivative: done fft, cpu time = 0.163871
+[Tue Nov  8 2016 17:46:59] Computing 2nd derivative: 3
+[Tue Nov  8 2016 17:46:59] compute_derivative: starting fft
+[Tue Nov  8 2016 17:46:59] compute_derivative: done fft, cpu time = 0.164056
+[Tue Nov  8 2016 17:46:59] Done second derivatives, cpu time = 1.236568 s
+[Tue Nov  8 2016 17:46:59] Computing collapse times
+[Tue Nov  8 2016 17:47:00] Done computing collapse times, cpu time = 1.344873 s
+Smoothing radius completed: 11, R= 1.052, expected rms:  1.8780, computed rms:  1.7275, cpu time = 2.581615 s
+
+[Tue Nov  8 2016 17:47:00] Starting smoothing radius 13 of 14 (R=  0.68908, sigma=  2.23206)
+[Tue Nov  8 2016 17:47:00] Computing second derivatives
+[Tue Nov  8 2016 17:47:00] Computing 2nd derivative: 1
+[Tue Nov  8 2016 17:47:00] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:00] compute_derivative: done fft, cpu time = 0.105872
+[Tue Nov  8 2016 17:47:00] Computing 2nd derivative: 4
+[Tue Nov  8 2016 17:47:00] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:00] compute_derivative: done fft, cpu time = 0.119148
+[Tue Nov  8 2016 17:47:00] Computing 2nd derivative: 5
+[Tue Nov  8 2016 17:47:00] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:01] compute_derivative: done fft, cpu time = 0.111623
+[Tue Nov  8 2016 17:47:01] Computing 2nd derivative: 2
+[Tue Nov  8 2016 17:47:01] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:01] compute_derivative: done fft, cpu time = 0.113197
+[Tue Nov  8 2016 17:47:01] Computing 2nd derivative: 6
+[Tue Nov  8 2016 17:47:01] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:01] compute_derivative: done fft, cpu time = 0.132850
+[Tue Nov  8 2016 17:47:01] Computing 2nd derivative: 3
+[Tue Nov  8 2016 17:47:01] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:01] compute_derivative: done fft, cpu time = 0.121966
+[Tue Nov  8 2016 17:47:01] Done second derivatives, cpu time = 0.990961 s
+[Tue Nov  8 2016 17:47:01] Computing collapse times
+[Tue Nov  8 2016 17:47:02] Done computing collapse times, cpu time = 1.276389 s
+Smoothing radius completed: 12, R= 0.689, expected rms:  2.2321, computed rms:  1.8466, cpu time = 2.267539 s
+
+[Tue Nov  8 2016 17:47:02] Starting smoothing radius 14 of 14 (R=  0.00000, sigma=  2.36101)
+[Tue Nov  8 2016 17:47:02] Computing second derivatives
+[Tue Nov  8 2016 17:47:02] Computing 2nd derivative: 1
+[Tue Nov  8 2016 17:47:02] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:02] compute_derivative: done fft, cpu time = 0.108040
+[Tue Nov  8 2016 17:47:02] Computing 2nd derivative: 4
+[Tue Nov  8 2016 17:47:02] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:03] compute_derivative: done fft, cpu time = 0.149162
+[Tue Nov  8 2016 17:47:03] Computing 2nd derivative: 5
+[Tue Nov  8 2016 17:47:03] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:03] compute_derivative: done fft, cpu time = 0.125881
+[Tue Nov  8 2016 17:47:03] Computing 2nd derivative: 2
+[Tue Nov  8 2016 17:47:03] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:03] compute_derivative: done fft, cpu time = 0.158765
+[Tue Nov  8 2016 17:47:03] Computing 2nd derivative: 6
+[Tue Nov  8 2016 17:47:03] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:03] compute_derivative: done fft, cpu time = 0.159161
+[Tue Nov  8 2016 17:47:03] Computing 2nd derivative: 3
+[Tue Nov  8 2016 17:47:03] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:03] compute_derivative: done fft, cpu time = 0.165013
+[Tue Nov  8 2016 17:47:03] Done second derivatives, cpu time = 1.028191 s
+[Tue Nov  8 2016 17:47:03] Computing collapse times
+[Tue Nov  8 2016 17:47:05] Done computing collapse times, cpu time = 1.330415 s
+[Tue Nov  8 2016 17:47:05] Computing LPT displacements
+[Tue Nov  8 2016 17:47:05] compute_sources_for_LPT: starting fft
+[Tue Nov  8 2016 17:47:05] compute_sources_for_LPT: done fft, cputime = 0.090057
+[Tue Nov  8 2016 17:47:05] Computing 2nd derivative of 2LPT source: 1
+[Tue Nov  8 2016 17:47:05] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:05] compute_derivative: done fft, cpu time = 0.108395
+[Tue Nov  8 2016 17:47:05] Computing 2nd derivative of 2LPT source: 1
+[Tue Nov  8 2016 17:47:05] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:05] compute_derivative: done fft, cpu time = 0.114219
+[Tue Nov  8 2016 17:47:05] Computing 2nd derivative of 2LPT source: 1
+[Tue Nov  8 2016 17:47:05] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:05] compute_derivative: done fft, cpu time = 0.110915
+[Tue Nov  8 2016 17:47:05] Computing 2nd derivative of 2LPT source: 2
+[Tue Nov  8 2016 17:47:05] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:05] compute_derivative: done fft, cpu time = 0.113168
+[Tue Nov  8 2016 17:47:05] Computing 2nd derivative of 2LPT source: 2
+[Tue Nov  8 2016 17:47:05] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:06] compute_derivative: done fft, cpu time = 0.109136
+[Tue Nov  8 2016 17:47:06] Computing 2nd derivative of 2LPT source: 3
+[Tue Nov  8 2016 17:47:06] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:06] compute_derivative: done fft, cpu time = 0.107187
+[Tue Nov  8 2016 17:47:06] Computing LPT displacements
+[Tue Nov  8 2016 17:47:06] Computing 1st derivative of 2LPT source: 1
+[Tue Nov  8 2016 17:47:06] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:06] compute_derivative: done fft, cpu time = 0.144797
+[Tue Nov  8 2016 17:47:06] Computing 1st derivative of 2LPT source: 2
+[Tue Nov  8 2016 17:47:06] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:06] compute_derivative: done fft, cpu time = 0.147254
+[Tue Nov  8 2016 17:47:06] Computing 1st derivative of 2LPT source: 3
+[Tue Nov  8 2016 17:47:06] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:06] compute_derivative: done fft, cpu time = 0.121733
+[Tue Nov  8 2016 17:47:06] compute_sources_for_LPT: starting fft
+[Tue Nov  8 2016 17:47:06] compute_sources_for_LPT: done fft, cputime = 0.161545
+[Tue Nov  8 2016 17:47:06] Computing 3LPT_1 displacements
+[Tue Nov  8 2016 17:47:06] Computing 1st derivative of 3LPT_1 source: 1
+[Tue Nov  8 2016 17:47:06] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:06] compute_derivative: done fft, cpu time = 0.118668
+[Tue Nov  8 2016 17:47:06] Computing 1st derivative of 3LPT_1 source: 2
+[Tue Nov  8 2016 17:47:06] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:07] compute_derivative: done fft, cpu time = 0.139837
+[Tue Nov  8 2016 17:47:07] Computing 1st derivative of 3LPT_1 source: 3
+[Tue Nov  8 2016 17:47:07] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:07] compute_derivative: done fft, cpu time = 0.139313
+[Tue Nov  8 2016 17:47:07] compute_sources_for_LPT: starting fft
+[Tue Nov  8 2016 17:47:07] compute_sources_for_LPT: done fft, cputime = 0.114574
+[Tue Nov  8 2016 17:47:07] Computing 3LPT_2 displacements
+[Tue Nov  8 2016 17:47:07] Computing 1st derivative of 3LPT_2 source: 1
+[Tue Nov  8 2016 17:47:07] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:07] compute_derivative: done fft, cpu time = 0.108062
+[Tue Nov  8 2016 17:47:07] Computing 1st derivative of 3LPT_2 source: 2
+[Tue Nov  8 2016 17:47:07] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:07] compute_derivative: done fft, cpu time = 0.123324
+[Tue Nov  8 2016 17:47:07] Computing 1st derivative of 3LPT_2 source: 3
+[Tue Nov  8 2016 17:47:07] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:07] compute_derivative: done fft, cpu time = 0.107022
+[Tue Nov  8 2016 17:47:07] Done LPT displacements, cpu time = 2.733327 s
+[Tue Nov  8 2016 17:47:07] Computing first derivatives
+[Tue Nov  8 2016 17:47:07] Computing 1st derivative: 1
+[Tue Nov  8 2016 17:47:07] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:08] compute_derivative: done fft, cpu time = 0.168241
+[Tue Nov  8 2016 17:47:08] Computing 1st derivative: 2
+[Tue Nov  8 2016 17:47:08] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:08] compute_derivative: done fft, cpu time = 0.105740
+[Tue Nov  8 2016 17:47:08] Computing 1st derivative: 3
+[Tue Nov  8 2016 17:47:08] compute_derivative: starting fft
+[Tue Nov  8 2016 17:47:08] compute_derivative: done fft, cpu time = 0.117769
+[Tue Nov  8 2016 17:47:08] Done first derivatives, cpu time = 0.473901 s
+[Tue Nov  8 2016 17:47:08] Computing velocities
+[Tue Nov  8 2016 17:47:08] Done computing velocities, cpu time = 0.033926 s
+Smoothing radius completed: 13, R= 0.000, expected rms:  2.3610, computed rms:  1.9531, cpu time = 5.600263 s
+[Tue Nov  8 2016 17:47:08] Finishing fmax, total cpu time =      38.186272
+[Tue Nov  8 2016 17:47:08] Second part: fragmentation of the collapsed medium
+Fragmentation parameters:
+f      = 0.501000
+f_rm   = 0.052000
+espo   = 0.745000
+f_ra   = 0.334000
+variance on the grid: 3.814448
+
+Task 0 reallocated memory for 0.492334 Gb
+
+[Tue Nov  8 2016 17:47:08] Starting slice N. 1 of 1
+[Tue Nov  8 2016 17:47:08] Starting re-distribution of products
+[Tue Nov  8 2016 17:47:10] Re-distribution of Fmax done, cputime =       2.223521
+[Tue Nov  8 2016 17:47:10] Task 0 found 138615 peaks, in the well resolved region: 104987. Total number of peaks: 421244
+[Tue Nov  8 2016 17:47:10] Starting sorting
+[Tue Nov  8 2016 17:47:12] Sorting done, total cputime =       1.146233
+[Tue Nov  8 2016 17:47:12] Starting the fragmentation process
+[Tue Nov  8 2016 17:47:12] ***   0% done, F =   8.46,  z =   7.46
+[Tue Nov  8 2016 17:47:12] ***   5% done, F =   3.87,  z =   2.87
+[Tue Nov  8 2016 17:47:12] ***  10% done, F =   3.42,  z =   2.42
+[Tue Nov  8 2016 17:47:12] ***  15% done, F =   3.12,  z =   2.12
+[Tue Nov  8 2016 17:47:12] Writing output at z=2.000000 (Dsigma=0.855822)
+[Tue Nov  8 2016 17:47:12] Opening file pinocchio.2.0000.example.catalog.out
+[Tue Nov  8 2016 17:47:13] Task 0 has written 4296 halos on file pinocchio.2.0000.example.catalog.out
+[Tue Nov  8 2016 17:47:13] Writing mass function into file  pinocchio.2.0000.example.mf.out
+[Tue Nov  8 2016 17:47:13] ***  20% done, F =   2.90,  z =   1.90
+[Tue Nov  8 2016 17:47:13] ***  25% done, F =   2.71,  z =   1.71
+[Tue Nov  8 2016 17:47:14] ***  30% done, F =   2.55,  z =   1.55
+[Tue Nov  8 2016 17:47:14] ***  35% done, F =   2.40,  z =   1.40
+[Tue Nov  8 2016 17:47:14] ***  40% done, F =   2.27,  z =   1.27
+[Tue Nov  8 2016 17:47:14] ***  45% done, F =   2.14,  z =   1.14
+[Tue Nov  8 2016 17:47:14] ***  50% done, F =   2.03,  z =   1.03
+[Tue Nov  8 2016 17:47:14] Writing output at z=1.000000 (Dsigma=1.232330)
+[Tue Nov  8 2016 17:47:14] Opening file pinocchio.1.0000.example.catalog.out
+[Tue Nov  8 2016 17:47:15] Task 0 has written 20679 halos on file pinocchio.1.0000.example.catalog.out
+[Tue Nov  8 2016 17:47:15] Writing mass function into file  pinocchio.1.0000.example.mf.out
+[Tue Nov  8 2016 17:47:15] ***  55% done, F =   1.92,  z =   0.92
+[Tue Nov  8 2016 17:47:15] ***  60% done, F =   1.81,  z =   0.81
+[Tue Nov  8 2016 17:47:15] ***  65% done, F =   1.70,  z =   0.70
+[Tue Nov  8 2016 17:47:16] ***  70% done, F =   1.60,  z =   0.60
+[Tue Nov  8 2016 17:47:16] ***  75% done, F =   1.50,  z =   0.50
+[Tue Nov  8 2016 17:47:16] Writing output at z=0.500000 (Dsigma=1.540735)
+[Tue Nov  8 2016 17:47:16] Opening file pinocchio.0.5000.example.catalog.out
+[Tue Nov  8 2016 17:47:17] Task 0 has written 30595 halos on file pinocchio.0.5000.example.catalog.out
+[Tue Nov  8 2016 17:47:17] Writing mass function into file  pinocchio.0.5000.example.mf.out
+[Tue Nov  8 2016 17:47:17] ***  80% done, F =   1.40,  z =   0.40
+[Tue Nov  8 2016 17:47:17] ***  85% done, F =   1.30,  z =   0.30
+[Tue Nov  8 2016 17:47:17] Syncing tasks...
+[Tue Nov  8 2016 17:47:17] Starting PLC reconstruction
+[Tue Nov  8 2016 17:47:18] ***  90% done, F =   1.20,  z =   0.20
+[Tue Nov  8 2016 17:47:18] Syncing tasks...
+[Tue Nov  8 2016 17:47:19] ***  95% done, F =   1.10,  z =   0.10
+[Tue Nov  8 2016 17:47:19] Syncing tasks...
+[Tue Nov  8 2016 17:47:19] *** 100% done, F =   1.00,  z =   0.00
+[Tue Nov  8 2016 17:47:19] PLC: Last check on groups done, Task 0 stored 55463 halos (expected:272000)
+[Tue Nov  8 2016 17:47:19] Opening file pinocchio.example.plc.out
+[Tue Nov  8 2016 17:47:20] Task 0 has written 40411 halos on file pinocchio.example.plc.out
+[Tue Nov  8 2016 17:47:20] Writing output at z=0.000000 (Dsigma=1.953061)
+[Tue Nov  8 2016 17:47:20] Opening file pinocchio.0.0000.example.catalog.out
+[Tue Nov  8 2016 17:47:20] Task 0 has written 37380 halos on file pinocchio.0.0000.example.catalog.out
+[Tue Nov  8 2016 17:47:20] Writing mass function into file  pinocchio.0.0000.example.mf.out
+[Tue Nov  8 2016 17:47:20] Opening file pinocchio.example.histories.out
+[Tue Nov  8 2016 17:47:20] Task 0 has written 37380 trees and 47985 branches on file pinocchio.example.histories.out
+Total number of peaks:                421244
+Total number of good halos:           318634
+Particles with N neighbouring groups: 1634557 630859 78750 3239 45 1
+Total number of accretion events:     1166832
+Accretion before evaluating merger:   438316
+Accretion after evaluating merger:    1996
+Total number of merger events:        102611
+Total number of major merger events:  49197
+Total number of filament particles:   272582
+[Tue Nov  8 2016 17:47:20] Finishing fragment, total cputime =      11.882581
+Total:                 57.179378
+Initialization:         6.977920 (12.20%)
+  Density in FS:        4.471037 ( 7.82%)
+fmax:                  38.186272 (66.78%)
+  LPT:                  2.733327 ( 4.78%)
+  FFTs:                12.446921 (21.77%)
+  Collapse times:      20.694552 (36.19%)
+  Velocities:           0.033926 ( 0.06%)
+Fragmentation:         11.882581 (20.78%)
+  Redistribution:       2.223521 ( 3.89%)
+  Sorting:              1.146233 ( 2.00%)
+  Groups total:         8.240206 (14.41%)
+  Groups PLC:           2.101498 ( 3.68%)
+Total I/O:              2.419452 ( 4.23%)
+Pinocchio done!
