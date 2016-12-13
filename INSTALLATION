@@ -1,0 +1,128 @@
+ *****************************************************************
+ *                        PINOCCHIO  V4.1                        *
+ *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
+ *****************************************************************
+ 
+ This code was written by
+ Pierluigi Monaco
+ Dipartimento di Fisica, Universita` di Trieste
+ Copyright (C) 2016
+ 
+ web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
+
+ The original code was developed with:
+ Tom Theuns           Institute for Computational Cosmology, University of Durham 
+ Giuliano Taffoni     INAF - Osservatorio Astronomico di Trieste
+
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 2 of the License, or
+ (at your option) any later version.
+ 
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ 
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
+
+
+********************************************************************
+
+   This file contains information on how to compile PINOCCHIO 4.1
+
+********************************************************************
+
+
+Pinocchio is a C, fully parallel (MPI) code, and should work on most
+unix machines.
+
+
+REQUIREMENTS
+
+Pinocchio-4.1 requires: 
+
+Message Passing Interface (MPI) libraries;
+fftw3 libraries with MPI support (http://www.fftw.org/);
+the GNU Scientific Libraries (http://www.gnu.org/software/gsl/).
+
+
+SETUP
+
+We assume that all the libraries listed above are properly installed in
+the system.
+
+1.  Extract pinocchio from the .tar.gz file
+
+    prompt> tar xvzf pinocchio-4.1.tar.gz
+
+    or (if you don't have gnu tar)
+
+    prompt> gunzip pinocchio-4.1.tar.gz ; tar xvf pinocchio-4.1.tar
+
+2.  Change directory to Pinocchio-4.1/src/
+
+    prompt> cd Pinocchio-4.1/src/
+
+3.  Edit the Makefile and set the values of compilation flags and
+    variables to those suitable for your system. You find an example
+    valid for a generic linux machine, using the gnu C compiler.
+
+4.  Make the executable by typing
+
+    prompt> make
+
+    If the code does not compile, check carefully the Makefile and ask
+    support to your local system manager. If everything fails, email
+    all the details to monaco@oats.inaf.it.
+
+5.  A utility, called memorytest, has been written to help design a run.
+    Compile it with:
+
+    prompt> make memorytest
+
+    Instruction on how to use it are given in the DOCUMENTATION file.
+
+The codes read_pinocchio_binary.c and read_pinocchio_binary.f90 can be
+easily compiled as indicated in the file headers.
+
+
+RUN THE CODE
+
+The executable is found in the src/ directory after compilation, and
+is pinocchio.x (file name specified by the EXEC variable in the
+Makefile). In the example/ directory you find a small working example
+of a 500 Mpc/h box sampled with 200^3 particles, run with 4 MPI tasks.
+It requires ~2Gb of RAM. The code has been compiled with TWO_LPT,
+THREE_LPT and PLC options, as in the provided Makefile.
+
+Open a new directory my.example/ and copy there the three files
+parameter_file, outputs and PlotExample.py that can be found in the
+example/ directory. The parameter file contains all needed parameters
+with a quick comment, read the DOCUMENTATION for more details. The
+file outputs contains a list of redshifts at which output is required.
+
+chdir to my.directory and run the code:
+
+> mpirun -np 4 ../src/pinocchio.x parameter_file > log
+
+The code will generate four catalogs and four mass function files, a
+past-light cone file and a cosmology file that contains basic
+cosmological quantities. These files, including the log file, should
+be nearly identical to the ones provided in the example/ directory.  A
+quick check can be performed with the PlotExample.py python script
+contained in the example/ directory.
+
+prompt> ipython
+[...]
+
+In [1]: %run PlotExample.py
+
+The script will produce three plots, mf.png with the mass function at
+z=0, lss.png with a slice of the box and plc.png, with a 3D
+visualization of the past-light cone in comoving coordinates; rotation
+can be adjusted in the panel produced by python.
+
