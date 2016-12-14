@@ -313,9 +313,11 @@ int read_parameter_file()
 		      if (number_of_fields<4)
 			j=-10;
 		      else
-			*((double *) addr[j])   = atof(buf2);
-			*((double *) addr[j]+1) = atof(buf3);
-			*((double *) addr[j]+2) = atof(buf4);
+		        {
+			  *((double *) addr[j])   = atof(buf2);
+			  *((double *) addr[j]+1) = atof(buf3);
+			  *((double *) addr[j]+2) = atof(buf4);
+		        }
 		      break;
 
 		    case LOGICAL:
