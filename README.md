@@ -13,7 +13,7 @@ The latest version, V4.1, is available in github. This version is written in C, 
 Important: version 4.1 contains an important bug fix with respect to v 4.0
 
 Webpage:
-http://adlibitum.oats.inaf.it/monaco/Pinocchio
+http://adlibitum.oats.inaf.it/monaco/pinocchio.html
 
 Papers:
 
