@@ -542,23 +542,24 @@ int set_plc(void)
 	}
 
   /* fourth it transforms distances to redshifts */
-  for (z=100.; z>=0.0; z-=0.01)
+  for (z=100.; z>=-0.02; z-=0.01)
     {
       d=ProperDistance(z)/params.InterPartDist;
       for (this=0; this<plc.Nreplications; this++)
-	{
-	  if (plc.repls[this].F1<=0.0 && d<-plc.repls[this].F1)
+  	{
+  	  if (plc.repls[this].F1<0.0 && d<-plc.repls[this].F1)
 	    plc.repls[this].F1=z+0.01+1.0;
-	  if (plc.repls[this].F2<=0.0 && d<-plc.repls[this].F2)
+
+  	  if (plc.repls[this].F2<0.0 && d<-plc.repls[this].F2)
 	    plc.repls[this].F2=z-0.01+1.0;
-	}
+  	}
     }
   for (this=0; this<plc.Nreplications; this++)
     {
-      if (plc.repls[this].F1<=0.0)
-	plc.repls[this].F1=1.0;
-      if (plc.repls[this].F2<=0.0)
-	plc.repls[this].F2=1.0;
+      if (plc.repls[this].F1<0.0)
+  	plc.repls[this].F1=100.0;
+      if (plc.repls[this].F2<0.0)
+  	plc.repls[this].F2=0.0;
     }
 
   plc.Nmax = subbox.Npart / 10;
@@ -612,9 +613,18 @@ int cone_and_cube_intersect(double *Oc, double *L, double *V, double *D, double 
    */
 
 
-  /* these are initialized here and will be computed below */
-  *rmin=L[0]+L[1]+L[2];
-  *rmax=0.0;
+  /* 
+     rmin and rmax are computed as the intersection of the line from the point V
+     to the center of the box and a sphere that includes the box (plus a 1% in radius) 
+  */
+  r = sqrt(pow(Oc[0]+0.5*L[0]-V[0],2.0) +
+	   pow(Oc[1]+0.5*L[1]-V[1],2.0) +
+	   pow(Oc[2]+0.5*L[2]-V[2],2.0));
+  cc = sqrt(L[0]*L[0]+L[1]*L[1]+L[2]*L[2]);
+  *rmin = r - 0.505*cc;
+  if (*rmin<0.0)
+    *rmin=0.0;
+  *rmax = r + 0.505*cc;
 
   /* step 1: if the vertex V is inside the cone then they intersect */
   if (theta>=180. || 
@@ -622,19 +632,6 @@ int cone_and_cube_intersect(double *Oc, double *L, double *V, double *D, double 
 	V[1]>=Oc[1] && V[1]<=Oc[1]+L[1] &&
 	V[2]>=Oc[2] && V[2]<=Oc[2]+L[2] ) )
     {
-      /* compute rmin and rmax */
-      for (i=0;i<2;i++)
-	for (j=0;j<2;j++)
-	  for (k=0;k<2;k++)
-	    {
-	      r = sqrt(pow(Oc[0]+i*L[0]-V[0],2.0) +
-		       pow(Oc[1]+j*L[1]-V[1],2.0) +
-		       pow(Oc[2]+k*L[2]-V[2],2.0));
-	      if (r<*rmin)
-		*rmin=r;
-	      if (r>*rmax)
-		*rmax=r;
-	    }
       /* exit */
       return 1;
     }
@@ -651,11 +648,6 @@ int cone_and_cube_intersect(double *Oc, double *L, double *V, double *D, double 
 	  r = sqrt(pow(Oc[0]+i*L[0]-V[0],2.0) +
 		   pow(Oc[1]+j*L[1]-V[1],2.0) +
 		   pow(Oc[2]+k*L[2]-V[2],2.0));
-	  /* computation of smallest and largest distance */
-	  if (r<*rmin)
-	    *rmin=r;
-	  if (r>*rmax)
-	    *rmax=r;
 
 	  /* this is the angle between cone axis D and nearest vertex direction P */
 	  cosDP=( (Oc[0]+i*L[0]-V[0]) * D[0] + 

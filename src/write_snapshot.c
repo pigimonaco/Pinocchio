@@ -33,8 +33,13 @@ void my_strcpy(char *,char *, int);
 //#define LONGIDS
 #define WRITE_INFO_BLOCK
 //#define POS_IN_KPC
-#define FORCE_PARTICLE_NUMBER
-//#define ONLY_LPT_DISPLACEMENTS
+#define FORCE_PARTICLE_NUMBER      /* DO NOT ACTIVATE THESE */
+//#define ONLY_LPT_DISPLACEMENTS     /* TWO OPTIONS TOGETHER */
+#define WRITE_FMAX_TO_SNAPSHOT
+
+#if defined(FORCE_PARTICLE_NUMBER) && defined(ONLY_LPT_DISPLACEMENTS)
+#error Trying to compile with FORCE_PARTICLE_NUMBER and ONLY_LPT_DISPLACEMENTS together
+#endif
 
 #ifdef LONGIDS
 #define MYIDTYPE unsigned long long int
@@ -103,10 +108,18 @@ int write_snapshot(int iout)
   } AuxStruct;
   
   AuxStruct *Pos,*Vel;
+#ifdef WRITE_FMAX_TO_SNAPSHOT
+  float *FMAX;
+  int *RMAX;
+#endif
 
 #ifdef WRITE_INFO_BLOCK
 #ifndef ONLY_LPT_DISPLACEMENTS
+#ifndef WRITE_FMAX_TO_SNAPSHOT
 #define NBLOCKS 4
+#else
+#define NBLOCKS 6
+#endif
 #else
 #define NBLOCKS 3
 #endif
@@ -119,9 +132,24 @@ int write_snapshot(int iout)
   static int rot[3]={0,1,2};
 #endif
 
-#ifdef FORCE_PARTICLE_NUMBER
-  int *CleanedMasses;
+
+#ifdef ONLY_LPT_DISPLACEMENTS
+  if (!ThisTask)
+    {
+      printf("directive ONLY_LPT_DISPLACEMENTS is present\n");
+      printf("the code will use LPT displacements for all particles\n");
+    }
 #endif
+
+#ifdef FORCE_PARTICLE_NUMBER
+  if (!ThisTask)
+    {
+      printf("directive FORCE_PARTICLE_NUMBER is present\n");
+      printf("the code will conserve the number of particles and will not check for group consistency\n");
+    }
+#endif
+
+
 
   /* Snapshots are written only if fragmentation is done in one slice */
   if (NSlices>1)
@@ -145,6 +173,8 @@ int write_snapshot(int iout)
     (unsigned long long int)MyGrids[0].GSglobal_z;
   Lgridxy = subbox.Lgwbl_x * subbox.Lgwbl_y;
 
+  Dz = GrowingMode(outputs.z[iout]);
+
   /* Each task counts the number of particles that will be output */
   /* first loop is on good particles that are not in groups */
   for (i=0, myNpart=0; i<subbox.Npart; i++)
@@ -157,50 +187,21 @@ int write_snapshot(int iout)
       good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
 			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
 			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
-#ifndef ONLY_LPT_DISPLACEMENTS
-      if (group_ID[i]<=FILAMENT && good_particle)
-#else
-      if (good_particle)
+      if (good_particle
+#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
+	  && group_ID[i]<=FILAMENT
 #endif
+	  )
 	myNpart++;
     }
 
-#ifndef ONLY_LPT_DISPLACEMENTS
-#ifdef FORCE_PARTICLE_NUMBER
-  /* second loop is on good groups
-     here we count the number of good particles that belong to each group
-     and store them */
-  CleanedMasses=(int *)calloc(ngroups+1, sizeof(int));
-
-  for (i=FILAMENT+1; i<=ngroups; i++)
-    if (groups[i].point > 0 && groups[i].good)
-      {
-	CleanedMasses[i]=0;
-	next=groups[i].point;
-	for (npart=0; npart<groups[i].Mass; npart++)
-	  {
-	    kbox=next/Lgridxy;
-	    kk=next-kbox*Lgridxy;
-	    jbox=kk/subbox.Lgwbl_x;
-	    ibox=kk-jbox*subbox.Lgwbl_x;
-	    good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
-			      jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
-			      kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
-	    if (good_particle)
-	      CleanedMasses[i]++;
-
-	    next=linking_list[next];
-	  }
-	myNpart+=CleanedMasses[i];
-      }
-
-#else
+#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
   /* second loop is on good groups */
   for (i=FILAMENT+1; i<=ngroups; i++)
     if (groups[i].point > 0 && groups[i].good)
       myNpart+=groups[i].Mass;
 #endif
-#endif
+
 
   /* Task 0 counts the total number of particles that will be contained in the snapshot */
   longdummy=(unsigned long long)myNpart;
@@ -287,38 +288,126 @@ int write_snapshot(int iout)
       /* info block */
       memset(&InfoBlock, 0, NBLOCKS*sizeof(InfoBlock_data));
 
-      my_strcpy(InfoBlock[0].name,"ID  ",4);
+      int tb=0;
+      my_strcpy(InfoBlock[tb].name,"ID  ",4);
 #ifdef LONGIDS
-      my_strcpy(InfoBlock[0].type,"LLONG   ",8);
+      my_strcpy(InfoBlock[tb].type,"LLONG   ",8);
 #else
-      my_strcpy(InfoBlock[0].type,"LONG    ",8);
+      my_strcpy(InfoBlock[tb].type,"LONG    ",8);
 #endif
-      InfoBlock[0].ndim=1;
+      InfoBlock[tb].ndim=1;
       for (i=0; i<6; i++)
-	InfoBlock[0].active[i]=1;
+	InfoBlock[tb].active[i]=1;
+      if (!ThisTask)
+      printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
+	     InfoBlock[tb].name,
+	     InfoBlock[tb].type,
+	     InfoBlock[tb].ndim,
+	     InfoBlock[tb].active[0],
+	     InfoBlock[tb].active[1],
+	     InfoBlock[tb].active[2],
+	     InfoBlock[tb].active[3],
+	     InfoBlock[tb].active[4],
+	     InfoBlock[tb].active[5]);
+      ++tb;
 
-      my_strcpy(InfoBlock[1].name,"POS ",4);
-      my_strcpy(InfoBlock[1].type,"FLOATN  ",8);
-      InfoBlock[1].ndim=3;
+      my_strcpy(InfoBlock[tb].name,"POS ",4);
+      my_strcpy(InfoBlock[tb].type,"FLOATN  ",8);
+      InfoBlock[tb].ndim=3;
       for (i=0; i<6; i++)
-	InfoBlock[1].active[i]=1;
+	InfoBlock[tb].active[i]=1;
+      if (!ThisTask)
+      printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
+	     InfoBlock[tb].name,
+	     InfoBlock[tb].type,
+	     InfoBlock[tb].ndim,
+	     InfoBlock[tb].active[0],
+	     InfoBlock[tb].active[1],
+	     InfoBlock[tb].active[2],
+	     InfoBlock[tb].active[3],
+	     InfoBlock[tb].active[4],
+	     InfoBlock[tb].active[5]);
+      ++tb;
 
-      my_strcpy(InfoBlock[2].name,"VEL ",4);
-      my_strcpy(InfoBlock[2].type,"FLOATN  ",8);
-      InfoBlock[2].ndim=3;
+      my_strcpy(InfoBlock[tb].name,"VEL ",4);
+      my_strcpy(InfoBlock[tb].type,"FLOATN  ",8);
+      InfoBlock[tb].ndim=3;
       for (i=0; i<6; i++)
-	InfoBlock[2].active[i]=1;
+	InfoBlock[tb].active[i]=1;
+      if (!ThisTask)
+      printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
+	     InfoBlock[tb].name,
+	     InfoBlock[tb].type,
+	     InfoBlock[tb].ndim,
+	     InfoBlock[tb].active[0],
+	     InfoBlock[tb].active[1],
+	     InfoBlock[tb].active[2],
+	     InfoBlock[tb].active[3],
+	     InfoBlock[tb].active[4],
+	     InfoBlock[tb].active[5]);
+      ++tb;
 
 #ifndef ONLY_LPT_DISPLACEMENTS
-      my_strcpy(InfoBlock[3].name,"GRID",4);
+      my_strcpy(InfoBlock[tb].name,"GRID",4);
 #ifdef LONGIDS
-      my_strcpy(InfoBlock[3].type,"LLONG   ",8);
+      my_strcpy(InfoBlock[tb].type,"LLONG   ",8);
 #else
-      my_strcpy(InfoBlock[3].type,"LONG    ",8);
+      my_strcpy(InfoBlock[tb].type,"LONG    ",8);
 #endif
-      InfoBlock[3].ndim=1;
+      InfoBlock[tb].ndim=1;
       for (i=0; i<6; i++)
-	InfoBlock[3].active[i]=1;
+	InfoBlock[tb].active[i]=1;
+      if (!ThisTask)
+      printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
+	     InfoBlock[tb].name,
+	     InfoBlock[tb].type,
+	     InfoBlock[tb].ndim,
+	     InfoBlock[tb].active[0],
+	     InfoBlock[tb].active[1],
+	     InfoBlock[tb].active[2],
+	     InfoBlock[tb].active[3],
+	     InfoBlock[tb].active[4],
+	     InfoBlock[tb].active[5]);
+      ++tb;
+
+#ifdef WRITE_FMAX_TO_SNAPSHOT
+      my_strcpy(InfoBlock[tb].name,"FMAX",4);
+      my_strcpy(InfoBlock[tb].type,"FLOAT   ",8);
+      InfoBlock[tb].ndim=1;
+      for (i=0; i<6; i++)
+	InfoBlock[tb].active[i]=1;
+      if (!ThisTask)
+      printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
+	     InfoBlock[tb].name,
+	     InfoBlock[tb].type,
+	     InfoBlock[tb].ndim,
+	     InfoBlock[tb].active[0],
+	     InfoBlock[tb].active[1],
+	     InfoBlock[tb].active[2],
+	     InfoBlock[tb].active[3],
+	     InfoBlock[tb].active[4],
+	     InfoBlock[tb].active[5]);
+      ++tb;
+
+      my_strcpy(InfoBlock[tb].name,"RMAX",4);
+      my_strcpy(InfoBlock[tb].type,"LONG    ",8);
+      InfoBlock[tb].ndim=1;
+      for (i=0; i<6; i++)
+	InfoBlock[tb].active[i]=1;
+      if (!ThisTask)
+      printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
+	     InfoBlock[tb].name,
+	     InfoBlock[tb].type,
+	     InfoBlock[tb].ndim,
+	     InfoBlock[tb].active[0],
+	     InfoBlock[tb].active[1],
+	     InfoBlock[tb].active[2],
+	     InfoBlock[tb].active[3],
+	     InfoBlock[tb].active[4],
+	     InfoBlock[tb].active[5]);
+      ++tb;
+
+#endif
 #endif
 
       dummy=NBLOCKS*sizeof(InfoBlock_data);
@@ -343,11 +432,11 @@ int write_snapshot(int iout)
       good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
 			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
 			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
-#ifndef ONLY_LPT_DISPLACEMENTS
-      if (group_ID[i]<=FILAMENT && good_particle)
-#else
-      if (good_particle)
+      if (good_particle
+#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
+	  && group_ID[i]<=FILAMENT
 #endif
+	  )
 	{
 	  /* particle coordinates in the box, imposing PBCs */
 	  global_x = ibox + subbox.stabl_x;
@@ -360,7 +449,7 @@ int write_snapshot(int iout)
 	  if (global_z<0) global_z+=MyGrids[0].GSglobal_z;
 	  if (global_z>=MyGrids[0].GSglobal_z) global_z-=MyGrids[0].GSglobal_z;
 #ifdef ROTATE_BOX
-	  ID[index]=(MYIDTYPE)global_x + 
+	  ID[index]=1+(MYIDTYPE)global_x + 
 	    ( (MYIDTYPE)global_z + 
 	      (MYIDTYPE)global_y * (MYIDTYPE)MyGrids[0].GSglobal_z ) * 
 	    (MYIDTYPE)MyGrids[0].GSglobal_x;
@@ -374,7 +463,7 @@ int write_snapshot(int iout)
 	}
     }
 
-#ifndef ONLY_LPT_DISPLACEMENTS
+#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
   /* second loop is on good groups */
   for (i=FILAMENT+1; i<=ngroups; i++)
     if (groups[i].point > 0 && groups[i].good)
@@ -386,39 +475,32 @@ int write_snapshot(int iout)
 	    kk=next-kbox*Lgridxy;
 	    jbox=kk/subbox.Lgwbl_x;
 	    ibox=kk-jbox*subbox.Lgwbl_x;
-#ifdef FORCE_PARTICLE_NUMBER
-	    good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
-			      jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
-			      kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
-	    if (good_particle)
-#endif
-	      {
-		/* particle coordinates in the box, imposing PBCs */
-		global_x = ibox + subbox.stabl_x;
-		if (global_x<0) global_x+=MyGrids[0].GSglobal_x;
-		if (global_x>=MyGrids[0].GSglobal_x) global_x-=MyGrids[0].GSglobal_x;
-		global_y = jbox + subbox.stabl_y;
-		if (global_y<0) global_y+=MyGrids[0].GSglobal_y;
-		if (global_y>=MyGrids[0].GSglobal_y) global_y-=MyGrids[0].GSglobal_y;
-		global_z = kbox + subbox.stabl_z;
-		if (global_z<0) global_z+=MyGrids[0].GSglobal_z;
-		if (global_z>=MyGrids[0].GSglobal_z) global_z-=MyGrids[0].GSglobal_z;
+	    /* particle coordinates in the box, imposing PBCs */
+	    global_x = ibox + subbox.stabl_x;
+	    if (global_x<0) global_x+=MyGrids[0].GSglobal_x;
+	    if (global_x>=MyGrids[0].GSglobal_x) global_x-=MyGrids[0].GSglobal_x;
+	    global_y = jbox + subbox.stabl_y;
+	    if (global_y<0) global_y+=MyGrids[0].GSglobal_y;
+	    if (global_y>=MyGrids[0].GSglobal_y) global_y-=MyGrids[0].GSglobal_y;
+	    global_z = kbox + subbox.stabl_z;
+	    if (global_z<0) global_z+=MyGrids[0].GSglobal_z;
+	    if (global_z>=MyGrids[0].GSglobal_z) global_z-=MyGrids[0].GSglobal_z;
 #ifdef ROTATE_BOX
-		ID[index]=(MYIDTYPE)global_x + 
-		  ( (MYIDTYPE)global_z + 
-		    (MYIDTYPE)global_y * (MYIDTYPE)MyGrids[0].GSglobal_z ) * 
-		  (MYIDTYPE)MyGrids[0].GSglobal_x;
+	    ID[index]=1+(MYIDTYPE)global_x + 
+	      ( (MYIDTYPE)global_z + 
+		(MYIDTYPE)global_y * (MYIDTYPE)MyGrids[0].GSglobal_z ) * 
+	      (MYIDTYPE)MyGrids[0].GSglobal_x;
 #else
-		ID[index]=(MYIDTYPE)global_x + 
-		  ( (MYIDTYPE)global_y + 
-		    (MYIDTYPE)global_z * (MYIDTYPE)MyGrids[0].GSglobal_y ) * 
-		  (MYIDTYPE)MyGrids[0].GSglobal_x;
+	    ID[index]=1+(MYIDTYPE)global_x + 
+	      ( (MYIDTYPE)global_y + 
+		(MYIDTYPE)global_z * (MYIDTYPE)MyGrids[0].GSglobal_y ) * 
+	      (MYIDTYPE)MyGrids[0].GSglobal_x;
 #endif
-		++index;
-	      }
+	    ++index;
 	    next=linking_list[next];
-	  }	
+	  }
       }
+
 #endif
 
   /* writing of IDs */
@@ -470,11 +552,11 @@ int write_snapshot(int iout)
       good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
 			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
 			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
-#ifndef ONLY_LPT_DISPLACEMENTS
-      if (group_ID[i]<=FILAMENT && good_particle)
-#else
-      if (good_particle)
+      if (good_particle
+#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
+	  && group_ID[i]<=FILAMENT
 #endif
+	  )
 	{
 	  /* particle coordinates in the box, imposing PBCs */
 	  global_x = ibox + subbox.stabl_x;
@@ -489,25 +571,82 @@ int write_snapshot(int iout)
 
 	  /* particles outside groups (uncollapsed and filament particles)
 	     are displaced with LPT */
-	  set_point(global_x,global_y,global_z,i,outputs.F[iout],&obj);
-	  for (j=0; j<3; j++)
+#ifdef FORCE_PARTICLE_NUMBER
+	  if (group_ID[i]<=FILAMENT)
 	    {
-	      Pos[index].axis[j]=(float)(q2x(rot[j], &obj, ORDER_FOR_CATALOG) * 
-					 params.InterPartDist * params.Hubble100);
-	      if (Pos[index].axis[j] >= params.BoxSize_h100)
-		Pos[index].axis[j] -= (float)params.BoxSize_h100;
-	      if (Pos[index].axis[j] < 0.0) 
-		Pos[index].axis[j] += (float)params.BoxSize_h100;
-#ifdef POS_IN_KPC
-	      Pos[index].axis[j] *= 1000.;
 #endif
+	      set_point(global_x,global_y,global_z,i,outputs.F[iout],&obj);
+	      for (j=0; j<3; j++)
+		{
+		  Pos[index].axis[j]=(float)(q2x(rot[j], &obj, ORDER_FOR_CATALOG) * 
+					     params.InterPartDist * params.Hubble100);
+		  if (Pos[index].axis[j] >= params.BoxSize_h100)
+		    Pos[index].axis[j] -= (float)params.BoxSize_h100;
+		  if (Pos[index].axis[j] < 0.0) 
+		    Pos[index].axis[j] += (float)params.BoxSize_h100;
+#ifdef POS_IN_KPC
+		  Pos[index].axis[j] *= 1000.;
+#endif
+		}
+#ifdef FORCE_PARTICLE_NUMBER
 	    }
+	  else
+	    {
+	      set_obj(group_ID[i], outputs.F[iout], &obj);
+	      for (j=0; j<3; j++)
+		MyPos[j]=(float)((q2x(rot[j], &obj, ORDER_FOR_CATALOG) + SGrid[rot[j]]) *
+				 params.InterPartDist * params.Hubble100);
+	      /* particles in the group are distributed as NFW */
+	      /* Concentration taken from Bhattacharya, et al. 2013 */
+	      conc = pow(Dz,0.54) * 5.9
+		* pow( (1.12*pow(groups[group_ID[i]].Mass*params.ParticleMass*params.Hubble100 
+				 /5.e13,0.3) + 0.53)/Dz , -0.35);
+	      rvir = pow(0.01 * GRAVITY * groups[group_ID[i]].Mass*params.ParticleMass /
+		   pow(Hubble(outputs.z[iout]),2.0), 1./3.) * (1. + outputs.z[iout]) * params.Hubble100;
+
+	      part=0;
+	      do
+		{
+		  rnd = gsl_rng_uniform(random_generator);
+		  nfwfac = log(1.+conc)-conc/(1.+conc);
+		  area = 1.1*conc/(4.*nfwfac);
+		  xrnd = rnd*area/(1.1*conc/(4.*nfwfac));
+		  rnd = gsl_rng_uniform(random_generator);
+		  yrnd = rnd*1.1*conc*xrnd/(4.*nfwfac);
+		  probfunc = conc*conc*xrnd/pow(1.+conc*xrnd,2)/nfwfac;
+		  if (yrnd <= probfunc)
+		    {
+		      /* From: http://mathworld.wolfram.com/SpherePointPicking.html  */
+		      u = -1.+2.*gsl_rng_uniform(random_generator);
+		      theta = 2.*PI*gsl_rng_uniform(random_generator);
+
+		      Pos[index].axis[0] = MyPos[0] + (float)(xrnd * rvir * sqrt(1.-u*u)*cos(theta));
+		      Pos[index].axis[1] = MyPos[1] + (float)(xrnd * rvir * sqrt(1.-u*u)*sin(theta));
+		      Pos[index].axis[2] = MyPos[2] + (float)(xrnd * rvir * u);
+
+		      for (j=0; j<3; j++)
+			{
+			  if (Pos[index].axis[j] >= params.BoxSize_h100) 
+			    Pos[index].axis[j] -= (float)params.BoxSize_h100;
+			  if (Pos[index].axis[j] < 0.0) 
+			    Pos[index].axis[j] += (float)params.BoxSize_h100;
+#ifdef POS_IN_KPC
+			  Pos[index].axis[j] *= 1000.;
+#endif
+			}
+		      part=1;
+		    }
+		}
+	      while (part==0);
+
+	    }
+#endif
 	  ++index;
 
 	}
     }
 
-#ifndef ONLY_LPT_DISPLACEMENTS
+#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
   /* second loop is on good groups */
   for (i=FILAMENT+1; i<=ngroups; i++)
     if (groups[i].point > 0 && groups[i].good)
@@ -519,10 +658,9 @@ int write_snapshot(int iout)
 			   params.InterPartDist * params.Hubble100);
 
 	/* virial radius and concentration of the group */
-	Dz = GrowingMode(outputs.z[iout]);
 	/* Concentration taken from Bhattacharya, et al. 2013 */
 	conc = pow(Dz,0.54) * 5.9
-	  * pow( (1.12*pow(groups[i].Mass*params.ParticleMass*params.Hubble100 /5.e13,0.3)+ 0.53)/Dz , 
+	  * pow( (1.12*pow(groups[i].Mass*params.ParticleMass*params.Hubble100 /5.e13,0.3)+ 0.53)/Dz ,
 		 -0.35);
 	rvir = pow(0.01 * GRAVITY * groups[i].Mass*params.ParticleMass /
 		   pow(Hubble(outputs.z[iout]),2.0), 1./3.) * (1. + outputs.z[iout]) * params.Hubble100;
@@ -562,11 +700,7 @@ int write_snapshot(int iout)
 		part++;
 	      }
 	  }
-#ifndef FORCE_PARTICLE_NUMBER
 	while (part<groups[i].Mass);
-#else
-	while (part<CleanedMasses[i]);
-#endif
       }
 #endif
 
@@ -619,11 +753,11 @@ int write_snapshot(int iout)
       good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
 			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
 			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
-#ifndef ONLY_LPT_DISPLACEMENTS
-      if (group_ID[i]<=FILAMENT && good_particle)
-#else
-      if (good_particle)
+      if (good_particle
+#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
+	  && group_ID[i]<=FILAMENT
 #endif
+	  )
 	{
 	  /* particle coordinates in the box, imposing PBCs */
 	  global_x = ibox + subbox.stabl_x;
@@ -638,17 +772,35 @@ int write_snapshot(int iout)
 	  
 	  /* particles outside groups (uncollapsed and filament particles)
 	     are displaced with LPT */
-	  set_point(global_x,global_y,global_z,i,outputs.F[iout],&obj);
-	  for (j=0; j<3; j++)
-	    /* GADGET format requires velocities to be divided by sqrt(a) */
-	    Vel[index].axis[j]=(float)(vel(rot[j], &obj)*vfact);
+#ifdef FORCE_PARTICLE_NUMBER
+	  if (group_ID[i]<=FILAMENT)
+	    {
+#endif
+	      set_point(global_x,global_y,global_z,i,outputs.F[iout],&obj);
+	      for (j=0; j<3; j++)
+		/* GADGET format requires velocities to be divided by sqrt(a) */
+		Vel[index].axis[j]=(float)(vel(rot[j], &obj)*vfact);
+#ifdef FORCE_PARTICLE_NUMBER
+	    }
+	  else
+	    {
+	      /* the center of mass of groups is displaced with LPT */
+	      set_obj(group_ID[i], outputs.F[iout], &obj);
+	      for (j=0; j<3; j++)
+		MyVel[j]=(float)(vel(rot[j], &obj)*vfact);
 
+	      sigma = sqrt(GRAVITY * groups[group_ID[i]].Mass * params.ParticleMass / 3./ rvir);
+
+	      for (j=0; j<3; j++)
+		Vel[index].axis[j]=MyVel[j] + gsl_ran_gaussian(random_generator, sigma) * vfact;
+	    }
+#endif
 	  ++index;
 
 	}
     }
 
-#ifndef ONLY_LPT_DISPLACEMENTS
+#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
   /* second loop is on good groups */
   for (i=FILAMENT+1; i<=ngroups; i++)
     if (groups[i].point > 0 && groups[i].good)
@@ -658,18 +810,14 @@ int write_snapshot(int iout)
 	for (j=0; j<3; j++)
 	  MyVel[j]=(float)(vel(rot[j], &obj)*vfact);
 
-	/* virial radius and concentration of the group */
-	Dz = GrowingMode(outputs.z[iout]);
-	/* this is the virial radius in physical true kpc */
-	rvir = pow(0.01 * GRAVITY * groups[i].Mass*params.ParticleMass /
-		   pow(Hubble(outputs.z[iout]),2.0), 1./3.);  
+	/* /\* virial radius and concentration of the group *\/ */
+	/* Dz = GrowingMode(outputs.z[iout]); */
+	/* /\* this is the virial radius in physical true kpc *\/ */
+	/* rvir = pow(0.01 * GRAVITY * groups[i].Mass*params.ParticleMass / */
+	/* 	   pow(Hubble(outputs.z[iout]),2.0), 1./3.);   */
 	sigma = sqrt(GRAVITY * groups[i].Mass * params.ParticleMass / 3./ rvir);
 
-#ifndef FORCE_PARTICLE_NUMBER
 	for (npart=0; npart<groups[i].Mass; npart++)
-#else
-	for (npart=0; npart<CleanedMasses[i]; npart++)
-#endif
 	  {
 	    for (j=0; j<3; j++)
 	      Vel[index].axis[j]=MyVel[j] + gsl_ran_gaussian(random_generator, sigma) * vfact;
@@ -712,6 +860,7 @@ int write_snapshot(int iout)
   if (ThisTask==collector)
     fwrite(&dummy, sizeof(dummy), 1, file);
 
+
 #ifndef ONLY_LPT_DISPLACEMENTS
   /* each task builds its catalogue: GRID */
   GRID = (MYIDTYPE*)malloc(myNpart * sizeof(MYIDTYPE));
@@ -726,25 +875,34 @@ int write_snapshot(int iout)
       good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
 			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
 			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
+#ifndef FORCE_PARTICLE_NUMBER
       if (group_ID[i]<=FILAMENT && good_particle)
-	GRID[index++]=groups[group_ID[i]].name;
+	GRID[index++]=group_ID[i];
+#else
+      if (good_particle)
+	{
+	  if (group_ID[i]<=FILAMENT)
+	    GRID[index++]=group_ID[i];
+	  else
+	    GRID[index++]=groups[group_ID[i]].name;
+	}
+#endif
+
     }
 
+#ifndef FORCE_PARTICLE_NUMBER
   /* second loop is on good groups */
   for (i=FILAMENT+1; i<=ngroups; i++)
     if (groups[i].point > 0 && groups[i].good)
       {
 	next=groups[i].point;
-#ifndef FORCE_PARTICLE_NUMBER
 	for (npart=0; npart<groups[i].Mass; npart++)
-#else
-	for (npart=0; npart<CleanedMasses[i]; npart++)
-#endif
 	  {
 	    GRID[index++]=groups[i].name;
 	    next=linking_list[next];
 	  }
       }
+#endif
 
   /* writing of GRIDs */
   if (ThisTask==collector)
@@ -776,22 +934,160 @@ int write_snapshot(int iout)
 	}
     }
 
-  /* collector task closes the block and the file */
+  /* collector task closes the block */
   if (ThisTask==collector)
+    fwrite(&dummy, sizeof(dummy), 1, file);
+
+#ifdef WRITE_FMAX_TO_SNAPSHOT
+
+  /* each task builds its catalogue: FMAX */
+  FMAX = (float*)malloc(myNpart * sizeof(float));
+  /* first loop is on good particles that are not in groups */
+  for (i=0, index=0; i<subbox.Npart; i++)
     {
-      fwrite(&dummy, sizeof(dummy), 1, file);
-      fclose(file);
+      /* grid coordinates from the indices (sub-box coordinates) */
+      kbox=i/Lgridxy;
+      kk=i-kbox*Lgridxy;
+      jbox=kk/subbox.Lgwbl_x;
+      ibox=kk-jbox*subbox.Lgwbl_x;
+      good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
+			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
+			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
+      if (good_particle
+#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
+	  && group_ID[i]<=FILAMENT
+#endif
+	  )
+	FMAX[index++]=frag[i].Fmax;
     }
 
-#ifdef FORCE_PARTICLE_NUMBER
-  free(CleanedMasses);
+#ifndef FORCE_PARTICLE_NUMBER
+  /* second loop is on good groups */
+  for (i=FILAMENT+1; i<=ngroups; i++)
+    if (groups[i].point > 0 && groups[i].good)
+      {
+	next=groups[i].point;
+	for (npart=0; npart<groups[i].Mass; npart++)
+	  {
+	    FMAX[index++]=frag[next].Fmax;
+	    next=linking_list[next];
+	  }
+      }
 #endif
 
-#else
+  /* writing of FMAX */
+  if (ThisTask==collector)
+    {
+      dummy=NInFile*sizeof(float);
+      WriteBlockName(file,dummy,"FMAX");
+      fwrite(&dummy, sizeof(dummy), 1, file);
+      fwrite(FMAX, sizeof(float), myNpart, file); 
+      free(FMAX);
+    }
+
+  for (next=1; next<NTasksPerFile; next++)
+    {
+      itask=collector+next;
+      if (ThisTask==collector)
+	{
+	  npart=0;
+	  MPI_Recv(&npart, 1, MPI_INT, itask, 0, MPI_COMM_WORLD, &status);
+	  FMAX=(float*)malloc(npart * sizeof(float));
+	  MPI_Recv(FMAX, npart*sizeof(float), MPI_BYTE, itask, 0, MPI_COMM_WORLD, &status);
+	  fwrite(FMAX, sizeof(float), npart, file);
+	  free(FMAX);
+	}
+      else if (ThisTask==itask)
+	{
+	  MPI_Send(&myNpart, 1, MPI_INT, collector, 0, MPI_COMM_WORLD);
+	  MPI_Send(FMAX, myNpart*sizeof(float), MPI_BYTE, collector, 0, MPI_COMM_WORLD);
+	  free(FMAX);
+	}
+    }
+
+  /* collector task closes the block */
+  if (ThisTask==collector)
+    fwrite(&dummy, sizeof(dummy), 1, file);
+
+
+
+  /* each task builds its catalogue: RMAX */
+  RMAX = (int*)malloc(myNpart * sizeof(int));
+  /* first loop is on good particles that are not in groups */
+  for (i=0, index=0; i<subbox.Npart; i++)
+    {
+      /* grid coordinates from the indices (sub-box coordinates) */
+      kbox=i/Lgridxy;
+      kk=i-kbox*Lgridxy;
+      jbox=kk/subbox.Lgwbl_x;
+      ibox=kk-jbox*subbox.Lgwbl_x;
+      good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
+			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
+			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
+      if (good_particle
+#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
+	  && group_ID[i]<=FILAMENT
+#endif
+	  )
+	RMAX[index++]=frag[i].Rmax;
+    }
+
+#ifndef FORCE_PARTICLE_NUMBER
+  /* second loop is on good groups */
+  for (i=FILAMENT+1; i<=ngroups; i++)
+    if (groups[i].point > 0 && groups[i].good)
+      {
+	next=groups[i].point;
+	for (npart=0; npart<groups[i].Mass; npart++)
+	  {
+	    RMAX[index++]=frag[next].Rmax;
+	    next=linking_list[next];
+	  }
+      }
+#endif
+
+  /* writing of RMAX */
+  if (ThisTask==collector)
+    {
+      dummy=NInFile*sizeof(int);
+      WriteBlockName(file,dummy,"RMAX");
+      fwrite(&dummy, sizeof(dummy), 1, file);
+      fwrite(RMAX, sizeof(int), myNpart, file); 
+      free(RMAX);
+    }
+
+  for (next=1; next<NTasksPerFile; next++)
+    {
+      itask=collector+next;
+      if (ThisTask==collector)
+	{
+	  npart=0;
+	  MPI_Recv(&npart, 1, MPI_INT, itask, 0, MPI_COMM_WORLD, &status);
+	  RMAX=(int*)malloc(npart * sizeof(int));
+	  MPI_Recv(RMAX, npart*sizeof(int), MPI_BYTE, itask, 0, MPI_COMM_WORLD, &status);
+	  fwrite(RMAX, sizeof(int), npart, file);
+	  free(RMAX);
+	}
+      else if (ThisTask==itask)
+	{
+	  MPI_Send(&myNpart, 1, MPI_INT, collector, 0, MPI_COMM_WORLD);
+	  MPI_Send(RMAX, myNpart*sizeof(int), MPI_BYTE, collector, 0, MPI_COMM_WORLD);
+	  free(RMAX);
+	}
+    }
+
+  /* collector task closes the block */
+  if (ThisTask==collector)
+    fwrite(&dummy, sizeof(dummy), 1, file);
+
+
+#endif
+#endif
+
+
   /* collector task closes the file */
   if (ThisTask==collector)
     fclose(file);
-#endif
 
   return 0;
 }
