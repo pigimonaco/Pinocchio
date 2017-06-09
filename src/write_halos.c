@@ -631,7 +631,7 @@ int write_PLC()
               writethis.v_los=(plcgroups[i].x[0]*plcgroups[i].v[0]+
 			       plcgroups[i].x[1]*plcgroups[i].v[1]+
 			       plcgroups[i].x[2]*plcgroups[i].v[2])/rhor;
-              writethis.obsz=plcgroups[i].z+writethis.v_los/SPEEDOFLIGHT;
+              writethis.obsz=plcgroups[i].z+writethis.v_los/SPEEDOFLIGHT*(1.0+plcgroups[i].z);
 
 	      if (90.-writethis.theta<params.PLCAperture)
 		{
@@ -666,7 +666,7 @@ int write_PLC()
               writethis.v_los=(plcgroups[i].x[0]*plcgroups[i].v[0]+
 			       plcgroups[i].x[1]*plcgroups[i].v[1]+
 			       plcgroups[i].x[2]*plcgroups[i].v[2])/rhor;
-              writethis.obsz=plcgroups[i].z+writethis.v_los/SPEEDOFLIGHT;
+              writethis.obsz=plcgroups[i].z+writethis.v_los/SPEEDOFLIGHT*(1.0+plcgroups[i].z);
 
 	      if (90.-writethis.theta<params.PLCAperture)
 		{
@@ -722,7 +722,7 @@ int write_PLC()
 		      writethis.v_los=(plcgroups[i].x[0]*plcgroups[i].v[0]+
 				       plcgroups[i].x[1]*plcgroups[i].v[1]+
 				       plcgroups[i].x[2]*plcgroups[i].v[2])/rhor;
-		      writethis.obsz=plcgroups[i].z+writethis.v_los/SPEEDOFLIGHT;
+		      writethis.obsz=plcgroups[i].z+writethis.v_los/SPEEDOFLIGHT*(1.0+plcgroups[i].z);
 
 		      if (90.-writethis.theta<params.PLCAperture)
 			{
@@ -757,7 +757,7 @@ int write_PLC()
 		      writethis.v_los=(plcgroups[i].x[0]*plcgroups[i].v[0]+
 				       plcgroups[i].x[1]*plcgroups[i].v[1]+
 				       plcgroups[i].x[2]*plcgroups[i].v[2])/rhor;
-		      writethis.obsz=plcgroups[i].z+writethis.v_los/SPEEDOFLIGHT;
+		      writethis.obsz=plcgroups[i].z+writethis.v_los/SPEEDOFLIGHT*(1.0+plcgroups[i].z);
 
 		      if (90.-writethis.theta<params.PLCAperture)
 			{
