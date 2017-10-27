@@ -1280,6 +1280,7 @@ void update(pos_data *obj1, pos_data *obj2)
 #ifdef PLC
 #define MAX_ITER 100
 
+void coord_transformation_cartesian_polar(double *, double *, double *, double *);
 
 double condition_F(double F, void *p)
 {
@@ -1313,6 +1314,7 @@ double condition_PLC(double F)
 int store_PLC(double F)
 {
   int i,ii;
+  double x[3],rhor,theta,phi;
 
   if (plc.Nstored==plc.Nmax)
     {
@@ -1324,32 +1326,63 @@ int store_PLC(double F)
     }
 
   set_obj(thisgroup,F,&obj1);
-
-  /* if F is the inverse growing mode: */
-  /* plcgroups[plc.Nstored].z    = InverseGrowingMode(1./F); */
-  plcgroups[plc.Nstored].z    = F-1.0;
-  plcgroups[plc.Nstored].Mass = groups[thisgroup].Mass;
-  plcgroups[plc.Nstored].name = groups[thisgroup].name;
-
   for (i=0; i<3; i++)
     {
-#ifdef ROTATE_BOX
-      ii=i-1;
-      if (ii==-1)
-	ii=2;
-#else
-      ii=i;
-#endif
       /* displacement is done up to ORDER_FOR_CATALOG */
-      plcgroups[plc.Nstored].x[ii] = params.InterPartDist * 
+      x[i] = params.InterPartDist * 
 	( q2x(i,&obj1,ORDER_FOR_CATALOG) + start[i] - ( plc.center[i] - Lgrid[i]*replicate[i] ) );
-      plcgroups[plc.Nstored].v[ii] = vel(i,&obj1);
+    }
+  coord_transformation_cartesian_polar(x,&rhor,&theta,&phi);
+
+  if (90.-theta<params.PLCAperture)
+    {
+
+      /* if F is the inverse growing mode: */
+      /* plcgroups[plc.Nstored].z    = InverseGrowingMode(1./F); */
+      plcgroups[plc.Nstored].z    = F-1.0;
+      plcgroups[plc.Nstored].Mass = groups[thisgroup].Mass;
+      plcgroups[plc.Nstored].name = groups[thisgroup].name;
+
+      for (i=0; i<3; i++)
+	{
+#ifdef ROTATE_BOX
+	  ii=i-1;
+	  if (ii==-1)
+	    ii=2;
+#else
+	  ii=i;
+#endif
+	  /* displacement is done up to ORDER_FOR_CATALOG */
+	  plcgroups[plc.Nstored].x[ii] = x[i];
+	  plcgroups[plc.Nstored].v[ii] = vel(i,&obj1);
+	}
+      plcgroups[plc.Nstored].rhor=rhor;
+      plcgroups[plc.Nstored].theta=theta;
+      plcgroups[plc.Nstored].phi=phi;
+
+      plc.Nstored++;
     }
 
-
-  plc.Nstored++;
-
   return 0;
+}
+
+void coord_transformation_cartesian_polar(double *x, double *rho, double *theta, double *phi)
+{
+  /* transformation from cartesian coordinates to polar */
+
+  *rho   = sqrt(x[0]*x[0]+x[1]*x[1]+x[2]*x[2]);
+  if (*rho>0)
+    {
+      *theta = -acos((x[0]*plc.zvers[0]+x[1]*plc.zvers[1]+x[2]*plc.zvers[2])/ *rho) * 180./PI + 90.;
+      *phi   = atan2(x[0]*plc.yvers[0]+x[1]*plc.yvers[1]+x[2]*plc.yvers[2],
+		     x[0]*plc.xvers[0]+x[1]*plc.xvers[1]+x[2]*plc.xvers[2]) * 180./PI;  
+      if (*phi<0) *phi+=360.;
+    }
+  else
+    {
+      *theta=90.0;
+      *phi=0.0;
+    }
 }
 
 double find_brent(double x_hi, double x_lo)

@@ -407,12 +407,15 @@ int set_grids()
 #ifdef PLC
 
 double myz;
-int cone_and_cube_intersect(double *, double *, double *, double *, double , double *, double *);
+int cone_and_cube_intersect(double *, double *, double *, double *, double , double *, double *, int *);
+double maxF(double *, double *, double *, double *, double *);
 
 int set_plc(void)
 {
-  int NAll,ir,jr,kr,ic,this,intersection;
+  int NAll,ir,jr,kr,ic,this,intersection,axis;
   double Largest_r,Smallest_r,smallestr,largestr,x[3],l[3],z,d,mod;
+  FILE *fout;
+  char filename[BLENGTH];
 
   /* ordering of coordinates to accomodate for rotation caused by fft ordering */
 #ifdef ROTATE_BOX
@@ -486,7 +489,7 @@ int set_plc(void)
     }
 
   /* initialization to compute the number of realizations */
-  NAll=(int)(ProperDistance(params.StartingzForPLC)/MyGrids[0].BoxSize)+2;  /* +2 to be sure... */
+  NAll=(int)(ProperDistance(params.StartingzForPLC)/MyGrids[0].BoxSize)+2;
   plc.Fstart = 1.+params.StartingzForPLC;
   plc.Fstop  = 1.+params.LastzForPLC;
   /* if F is the inverse collapse time: */
@@ -502,15 +505,15 @@ int set_plc(void)
 
   /* first, it counts the number of replications needed */
   plc.Nreplications=0;
-  for (ir=-NAll; ir<NAll; ir++)
-    for (jr=-NAll; jr<NAll; jr++)
-      for (kr=-NAll; kr<NAll; kr++)
+  for (ir=-NAll; ir<=NAll; ir++)
+    for (jr=-NAll; jr<=NAll; jr++)
+      for (kr=-NAll; kr<=NAll; kr++)
 	{
 	  x[0]=ir*l[0];
 	  x[1]=jr*l[1];
 	  x[2]=kr*l[2];
 
-	  intersection = cone_and_cube_intersect(x, l, plc.center, plc.zvers, params.PLCAperture, &smallestr, &largestr);
+	  intersection = cone_and_cube_intersect(x, l, plc.center, plc.zvers, params.PLCAperture, &smallestr, &largestr, &axis);
 
 	  if (intersection && !(smallestr>Largest_r || largestr<Smallest_r))
 	    plc.Nreplications++;
@@ -519,47 +522,64 @@ int set_plc(void)
   /* second, it allocates the needed memory for the replications */
   plc.repls=malloc(plc.Nreplications * sizeof(replication_data));
 
+  if (!ThisTask)
+    {
+      sprintf(filename,"pinocchio.%s.geometry.out",params.RunFlag);
+      fout=fopen(filename,"w");
+      fprintf(fout, "# N. replications: %d (out of %d checked)\n",plc.Nreplications,(2*NAll+1)*(2*NAll+1)*(2*NAll+1));
+      fprintf(fout, "# distance range: %10.6f %10.6f\n",Smallest_r,Largest_r);
+      fprintf(fout, "# V   = %10.6f %10.6f %10.6f\n",plc.center[0],plc.center[1],plc.center[2]);
+      fprintf(fout, "# D   = %10.6f %10.6f %10.6f\n",plc.zvers[0],plc.zvers[1],plc.zvers[2]);
+      fprintf(fout, "# L   = %10.6f %10.6f %10.6f\n",l[0],l[1],l[2]);
+      fprintf(fout, "# A   = %10.6f\n",params.PLCAperture);
+      fprintf(fout, "# IPD = %10.6f\n",params.InterPartDist);
+      fprintf(fout, "#\n");
+    }
+
   /* third, it stores information on replications */
   this=0;
-  for (ir=-NAll; ir<NAll; ir++)
-    for (jr=-NAll; jr<NAll; jr++)
-      for (kr=-NAll; kr<NAll; kr++)
+  for (ir=-NAll; ir<=NAll; ir++)
+    for (jr=-NAll; jr<=NAll; jr++)
+      for (kr=-NAll; kr<=NAll; kr++)
 	{
 	  x[0]=ir*l[0];
 	  x[1]=jr*l[1];
 	  x[2]=kr*l[2];
 
-	  intersection = cone_and_cube_intersect(x, l, plc.center, plc.zvers, params.PLCAperture, &smallestr, &largestr);
+	  intersection = cone_and_cube_intersect(x, l, plc.center, plc.zvers, params.PLCAperture, &smallestr, &largestr, &axis);
 
 	  if (intersection && !(smallestr>Largest_r || largestr<Smallest_r))
 	    {
+	      if (!ThisTask)
+		fprintf(fout," %3d  %3d %3d %3d   %10.6f %10.6f   %d  %d\n",this,ir,jr,kr,smallestr,largestr,intersection,axis);
 	      plc.repls[this].i=ir;
 	      plc.repls[this].j=jr;
 	      plc.repls[this].k=kr;
 	      plc.repls[this].F1=-largestr;
 	      plc.repls[this++].F2=-smallestr;
-	    }
+	    }	  
 	}
+  if (!ThisTask)
+    fclose(fout);
 
   /* fourth it transforms distances to redshifts */
-  for (z=100.; z>=-0.02; z-=0.01)
+  for (z=100.; z>=0.0; z-=0.01)
     {
       d=ProperDistance(z)/params.InterPartDist;
       for (this=0; this<plc.Nreplications; this++)
-  	{
-  	  if (plc.repls[this].F1<0.0 && d<-plc.repls[this].F1)
+	{
+	  if (plc.repls[this].F1<=0.0 && d<-plc.repls[this].F1)
 	    plc.repls[this].F1=z+0.01+1.0;
-
-  	  if (plc.repls[this].F2<0.0 && d<-plc.repls[this].F2)
+	  if (plc.repls[this].F2<=0.0 && d<-plc.repls[this].F2)
 	    plc.repls[this].F2=z-0.01+1.0;
-  	}
+	}
     }
   for (this=0; this<plc.Nreplications; this++)
     {
-      if (plc.repls[this].F1<0.0)
-  	plc.repls[this].F1=100.0;
-      if (plc.repls[this].F2<0.0)
-  	plc.repls[this].F2=0.0;
+      if (plc.repls[this].F1<=0.0)
+	plc.repls[this].F1=1.0;
+      if (plc.repls[this].F2<=0.0)
+	plc.repls[this].F2=1.0;
     }
 
   plc.Nmax = subbox.Npart / 10;
@@ -596,15 +616,41 @@ int set_plc(void)
     }
 
   return 0;
+
 }
 
 
-
-int cone_and_cube_intersect(double *Oc, double *L, double *V, double *D, double theta, double *rmin, double *rmax)
+double maxF(double *P, double *V, double *U, double *D, double *L)
 {
-  int i,j,k, imax[3], dim, condition;
-  double r, F, Fmax, costh, dmax, cosDU, cosDP, sinDP, tmax, alpha[3], cc, cmax;
-  double sinPU[3], cosPU[3], cosgamma, quantity;
+  /* determines the smallest angle between a segment and a cone direction;
+     the cone vertex is in a point vec(V), its direction is versor(D);
+     the segment starts from point vec(P) and goes along the direction versor(U), for a length L;
+     the code returns the cos of the smallest angle between the cone axis and
+     the line that joins vec(V) with a point of the segment.
+  */
+
+  double dP=sqrt((P[0]-V[0])*(P[0]-V[0])+(P[1]-V[1])*(P[1]-V[1])+(P[2]-V[2])*(P[2]-V[2]));
+  if (dP==0.0)
+    return 1.0;
+  double cosDU=(D[0]*U[0]+D[1]*U[1]+D[2]*U[2]);
+  double cosDP=(D[0]*(P[0]-V[0])+D[1]*(P[1]-V[1])+D[2]*(P[2]-V[2]))/dP;
+  double cosUP=(U[0]*(P[0]-V[0])+U[1]*(P[1]-V[1])+U[2]*(P[2]-V[2]))/dP;
+
+  if (cosDP-cosDU*cosUP==0.0)
+    return 0.0;
+  double tmax=(cosDU-cosDP*cosUP)/(cosDP-cosDU*cosUP);
+  if (tmax<0)
+    tmax=0.0;
+  else if (tmax>*L/dP)
+    tmax=*L/dP;
+
+  return (cosDP+tmax*cosDU)/sqrt(1.0+tmax*tmax+2.*tmax*cosUP);
+}
+
+int cone_and_cube_intersect(double *Oc, double *L, double *V, double *D, double theta, double *rmin, double *rmax, int *axis)
+{
+  int i, j, k, ivec[3], dim, dim1, dim2;
+  double r, x, F, Fmax, costh, proj, U[3], P[3];
 
   /* This routine returns 1 if the cone with vertex V, axis direction D and semi-aperture theta (deg)
      intersects the cube starting from point Oc and with edges of lenght L aligned with the axes.
@@ -613,158 +659,103 @@ int cone_and_cube_intersect(double *Oc, double *L, double *V, double *D, double 
    */
 
 
-  /* 
-     rmin and rmax are computed as the intersection of the line from the point V
-     to the center of the box and a sphere that includes the box (plus a 1% in radius) 
-  */
-  r = sqrt(pow(Oc[0]+0.5*L[0]-V[0],2.0) +
-	   pow(Oc[1]+0.5*L[1]-V[1],2.0) +
-	   pow(Oc[2]+0.5*L[2]-V[2],2.0));
-  cc = sqrt(L[0]*L[0]+L[1]*L[1]+L[2]*L[2]);
-  *rmin = r - 0.505*cc;
-  if (*rmin<0.0)
-    *rmin=0.0;
-  *rmax = r + 0.505*cc;
+  /* Computation of rmin and rmax */
+  *rmin=1.e32;
+  *rmax=0.0;
 
-  /* step 1: if the vertex V is inside the cone then they intersect */
-  if (theta>=180. || 
-      ( V[0]>=Oc[0] && V[0]<=Oc[0]+L[0] &&
+  /* max distance from vertices */
+  for (i=0;i<2;i++)
+    for (j=0;j<2;j++)
+      for (k=0;k<2;k++)
+	{
+	  r = sqrt(pow(Oc[0]+i*L[0]-V[0],2.0) +
+		   pow(Oc[1]+j*L[1]-V[1],2.0) +
+		   pow(Oc[2]+k*L[2]-V[2],2.0));
+	  if (r>*rmax)
+	    *rmax=r;
+	}
+
+
+  /* min distance from cube faces */
+  /* and intersection of axis with cube faces */  
+  *axis=0;
+  for (dim=0; dim<3; dim++)  /* three dimension (normals to cube faces) */
+    for (i=0; i<2; i++)      /* two faces per dimension */
+      {
+	proj=Oc[dim]-V[dim]+i*L[dim];
+	dim1=(dim+1)%3;
+	dim2=(dim+2)%3;
+	
+	/* minimum distance */
+	r=proj*proj;                        /* the normal component always contributes */
+	if (V[dim1]<Oc[dim1])               /* only of their projection is outside the face */
+	  r+=pow(V[dim1]-Oc[dim1],2.0);
+	else if (V[dim1]>Oc[dim1]+L[dim1])
+	  r+=pow(V[dim1]-Oc[dim1]-L[dim1],2.0);
+	if (V[dim2]<Oc[dim2])
+	  r+=pow(V[dim2]-Oc[dim2],2.0);
+	else if (V[dim2]>Oc[dim2]+L[dim2])
+	  r+=pow(V[dim2]-Oc[dim2]-L[dim2],2.0);
+	r=sqrt(r);
+	if (r<*rmin)
+	  *rmin=r;
+
+	/* axis intersection */
+	if ( (x=proj/D[dim]) > 0.0 &&
+	     V[dim1] + x*D[dim1] >= Oc[dim1] &&
+	     V[dim1] + x*D[dim1] <= Oc[dim1] + L[dim1] &&
+	     V[dim2] + x*D[dim2] >= Oc[dim2] &&
+	     V[dim2] + x*D[dim2] <= Oc[dim2] + L[dim2] )
+	  *axis+=1<<(dim+i*3);
+      }
+
+  /* step 1: if the whole sky is required, only rmin and rmax are needed */
+  if (theta>=180.)
+    return 1;
+
+  /* step 2: if the vertex V is inside the cube and axis>0 then they intersect */
+  if (( *axis &&
+	V[0]>=Oc[0] && V[0]<=Oc[0]+L[0] &&
 	V[1]>=Oc[1] && V[1]<=Oc[1]+L[1] &&
 	V[2]>=Oc[2] && V[2]<=Oc[2]+L[2] ) )
     {
-      /* exit */
-      return 1;
+      *rmin = 0.0;  /* in this case rmin is unrelated to the cube boundary */
+      return 2;
     }
 
-  /* step2: compute ** F = (P-V)/|P-V| - cos theta ** for each cube vertex 
-     and its largest value */
+  /* step 3: if the axis intersects one face then there is an intersection */
+  if (*axis)
+    return 3;
+
+  /* step4: compute maximum of ** F = (P-V) dot D /|P-V| - cos theta ** 
+     for each cube edge */
   Fmax=-10.0;
   costh = cos( theta / 180. * PI );
   for (i=0;i<2;i++)
     for (j=0;j<2;j++)
       for (k=0;k<2;k++)
 	{
-	  /* this is the distance between V and the vertex */
-	  r = sqrt(pow(Oc[0]+i*L[0]-V[0],2.0) +
-		   pow(Oc[1]+j*L[1]-V[1],2.0) +
-		   pow(Oc[2]+k*L[2]-V[2],2.0));
-
-	  /* this is the angle between cone axis D and nearest vertex direction P */
-	  cosDP=( (Oc[0]+i*L[0]-V[0]) * D[0] + 
-		  (Oc[1]+j*L[1]-V[1]) * D[1] + 
-		  (Oc[2]+k*L[2]-V[2]) * D[2] )/r ;
-	  /* F = Xversor dot D - cos theta */
-	  F = cosDP - costh;
-
-	  /* stores the largest value of X and its position */
-	  if (F>Fmax)
-	    {
-	      Fmax=F;
-	      imax[0]=i;
-	      imax[1]=j;
-	      imax[2]=k;
-	      cmax=cosDP;
-	      dmax=r;
-	    }
+	  ivec[0]=i;
+	  ivec[1]=j;
+	  ivec[2]=k;
+	  
+	  for (dim=0;dim<3;dim++)
+	    if (!ivec[dim])
+	      {
+		U[dim]=1.0;
+		U[(dim+1)%3]=0.0;
+		U[(dim+2)%3]=0.0;
+		P[0]=Oc[0]+ivec[0]*L[0];
+		P[1]=Oc[1]+ivec[1]*L[1];
+		P[2]=Oc[2]+ivec[2]*L[2];
+		F=maxF(P, V, U, D, L+dim)-costh;
+		if (F>Fmax)
+		  Fmax=F;
+	      }
 	}
 
   /* if the nearest vertex is inside the cone then exit */
   if (Fmax>0)
-    return 2;
-
-  /* step 3: compute the largest F for each edge around the nearest corner */
-
-  /* this is the angle between cone axis D and nearest vertex direction P */
-  cosDP = cmax;
-  if (fabs(cosDP)<1.)
-    sinDP = sqrt(1. - cosDP*cosDP);
-  else
-    sinDP = 0.0;
-  /* this angle is > theta, so sinDP cannot be =0 */
-
-  /* loop on the three edges */
-  for (dim=0; dim<3; dim++)
-    {
-      /* relevant angles */
-
-      /* this is the angle between cone axis D and edge direction U */
-      cosDU = D[dim] * (1-2*imax[dim]);
-      /* this is the angle between vertex direction P and edge direction U */
-      cosPU[dim] = (Oc[dim]+imax[dim]*L[dim]-V[dim]) * (1-2*imax[dim]) / dmax;
-      if (fabs(cosPU[dim])<1)
-      	sinPU[dim] = sqrt(1. - cosPU[dim]*cosPU[dim]);
-      else
-      	sinPU[dim] = 0.0;
-      /* cosPU and sinPU are stored because they are needed later */
-
-      /* this is needed later to understand if the cone axis is internal to the cube */
-      if (sinPU[dim]!=0.0) 
-	alpha[dim] = (cosDU - cosDP * cosPU[dim]) / sinPU[dim] / sinDP;
-      else
-	alpha[dim] = -1.0;
-
-      if ((cc=(cosDP - cosPU[dim]*cosDU))==0.0)  /* this is (e.g.) when the cone axis D is aligned with the edge U */
-	tmax=-10.;
-      else
-	tmax = (cosDU - cosDP * cosPU[dim]) / (cosDP - cosPU[dim]*cosDU);
-
-      /* in this case the edge gets nearer to the cone than its vertices */
-      if (tmax>0 && tmax<L[dim]/dmax)
-	{
-	  if ((cc=1 + tmax*tmax + 2*tmax*cosPU[dim])==0.0)
-	    F = 1.0;
-	  else
-	    F = (cosDP + tmax * cosDU) / sqrt( cc ) - costh;
-
-	  if (F>Fmax)
-	    Fmax=F;
-	}
-    }
-
-  /* if one edge is inside the cone then exit */
-  if (Fmax>0)
-    return 3;
-
-  /* now check if the cone is inside the cube, though it does not touch vertices or edges 
-     do it by exploiting the fact that the projection of a cube onto a plane is a convex polygon
-  */
-  condition=0;
-  /* consider a plane perpendicular to P (connecting V and the vertex with largest F) 
-     project D and the versors of two edges onto this plane
-     compute the bisector of the two (projected) edges
-     if the angle between the bisector and one edge is less than the angle between the bisector
-     and the projection of D, then the vertex is inside the cube
-  */
-  if (sinPU[0]!=0.0 && sinPU[1]!=0.0)
-    {
-      cosgamma=-cosPU[0]*cosPU[1]/sinPU[0]/sinPU[1];
-      if (cosgamma<0.99 && cosgamma>-0.99)
-	{
-	  quantity=(alpha[0]+alpha[1])/sqrt(2.0*(1.+cosgamma))-sqrt((1.+cosgamma)/2.);
-	  condition+=(quantity>0);
-	}
-    }
-  if (sinPU[0]!=0.0 && sinPU[2]!=0.0)
-    {
-      cosgamma=-cosPU[0]*cosPU[2]/sinPU[0]/sinPU[2];
-      if (cosgamma<0.99 && cosgamma>-0.99)
-	{
-	  quantity=(alpha[0]+alpha[1])/sqrt(2.0*(1.+cosgamma))-sqrt((1.+cosgamma)/2.);
-	  condition+=(quantity>0);
-	}
-    }
-  if (sinPU[2]!=0.0 && sinPU[1]!=0.0)
-    {
-      cosgamma=-cosPU[2]*cosPU[1]/sinPU[2]/sinPU[1];
-      if (cosgamma<0.99 && cosgamma>-0.99)
-	{
-	  quantity=(alpha[0]+alpha[1])/sqrt(2.0*(1.+cosgamma))-sqrt((1.+cosgamma)/2.);
-	  condition+=(quantity>0);
-	}
-    }
-
-  /* if the cone passes through the cube then exit*/
-  if (condition)
     return 4;
 
   /* at this point the cone and the cube do not intersect */

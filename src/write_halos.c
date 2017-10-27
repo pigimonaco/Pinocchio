@@ -530,14 +530,12 @@ int write_catalog(int iout)
 }
 
 #ifdef PLC
-void coord_transformation_cartesian_polar(double *, double *, double *, double *);
-
 int write_PLC()
 {
   /* Writes the plc catalogues */
 
   int i,nhalos,nstored;
-  double hfactor,rhor;
+  double hfactor;
   char filename[BLENGTH],labh[3];
   int NTasksPerFile,collector,itask,next,ThisFile;
   FILE *file;
@@ -627,26 +625,25 @@ int write_PLC()
 	      writethis.vy=plcgroups[i].v[1];
 	      writethis.vz=plcgroups[i].v[2];
 	      writethis.Mass=plcgroups[i].Mass*params.ParticleMass*hfactor;
-	      coord_transformation_cartesian_polar(plcgroups[i].x,&rhor,&writethis.theta,&writethis.phi);
+	      writethis.theta=plcgroups[i].theta;
+	      writethis.phi=plcgroups[i].phi;
               writethis.v_los=(plcgroups[i].x[0]*plcgroups[i].v[0]+
 			       plcgroups[i].x[1]*plcgroups[i].v[1]+
-			       plcgroups[i].x[2]*plcgroups[i].v[2])/rhor;
+			       plcgroups[i].x[2]*plcgroups[i].v[2])/plcgroups[i].rhor;
               writethis.obsz=plcgroups[i].z+writethis.v_los/SPEEDOFLIGHT*(1.0+plcgroups[i].z);
 
-	      if (90.-writethis.theta<params.PLCAperture)
-		{
-		  fprintf(file," %12Lu %16.6f %16.6f %16.6f %16.6f %16.6f %16.6f %16.6f %15.8e %16.6f %16.6f %16.6f %16.6f\n",
-			  writethis.name,
-			  writethis.red,
-			  writethis.x,writethis.y,writethis.z,
-			  writethis.vx,writethis.vy,writethis.vz,
-			  writethis.Mass,
-			  writethis.theta,
-			  writethis.phi,
-			  writethis.v_los,
-			  writethis.obsz);
-		  nhalos++;
-		}
+	      fprintf(file," %12Lu %16.6f %16.6f %16.6f %16.6f %16.6f %16.6f %16.6f %15.8e %16.6f %16.6f %16.6f %16.6f\n",
+		      writethis.name,
+		      writethis.red,
+		      writethis.x,writethis.y,writethis.z,
+		      writethis.vx,writethis.vy,writethis.vz,
+		      writethis.Mass,
+		      writethis.theta,
+		      writethis.phi,
+		      writethis.v_los,
+		      writethis.obsz);
+	      nhalos++;
+
 	    }
 	}
       else
@@ -662,24 +659,22 @@ int write_PLC()
 	      writethis.vy=plcgroups[i].v[1];
 	      writethis.vz=plcgroups[i].v[2];
 	      writethis.Mass=plcgroups[i].Mass*params.ParticleMass*hfactor;
-	      coord_transformation_cartesian_polar(plcgroups[i].x,&rhor,&writethis.theta,&writethis.phi);
+	      writethis.theta=plcgroups[i].theta;
+	      writethis.phi=plcgroups[i].phi;
               writethis.v_los=(plcgroups[i].x[0]*plcgroups[i].v[0]+
 			       plcgroups[i].x[1]*plcgroups[i].v[1]+
-			       plcgroups[i].x[2]*plcgroups[i].v[2])/rhor;
+			       plcgroups[i].x[2]*plcgroups[i].v[2])/plcgroups[i].rhor;
               writethis.obsz=plcgroups[i].z+writethis.v_los/SPEEDOFLIGHT*(1.0+plcgroups[i].z);
 
-	      if (90.-writethis.theta<params.PLCAperture)
-		{
 #ifdef FORTRAN
-		  idummy=sizeof(struct towrite);
-		  fwrite(&idummy,sizeof(int),1,file);
+	      idummy=sizeof(struct towrite);
+	      fwrite(&idummy,sizeof(int),1,file);
 #endif
-		  fwrite(&writethis,sizeof(struct towrite),1,file);
+	      fwrite(&writethis,sizeof(struct towrite),1,file);
 #ifdef FORTRAN
-		  fwrite(&idummy,sizeof(int),1,file);
+	      fwrite(&idummy,sizeof(int),1,file);
 #endif
-		  nhalos++;
-		}
+	      nhalos++;
 	    }
 	}
     }
@@ -718,26 +713,24 @@ int write_PLC()
 		      writethis.vy=plcgroups[i].v[1];
 		      writethis.vz=plcgroups[i].v[2];
 		      writethis.Mass=plcgroups[i].Mass*params.ParticleMass*hfactor;
-		      coord_transformation_cartesian_polar(plcgroups[i].x,&rhor,&writethis.theta,&writethis.phi);
+		      writethis.theta=plcgroups[i].theta;
+		      writethis.phi=plcgroups[i].phi;
 		      writethis.v_los=(plcgroups[i].x[0]*plcgroups[i].v[0]+
 				       plcgroups[i].x[1]*plcgroups[i].v[1]+
-				       plcgroups[i].x[2]*plcgroups[i].v[2])/rhor;
+				       plcgroups[i].x[2]*plcgroups[i].v[2])/plcgroups[i].rhor;
 		      writethis.obsz=plcgroups[i].z+writethis.v_los/SPEEDOFLIGHT*(1.0+plcgroups[i].z);
 
-		      if (90.-writethis.theta<params.PLCAperture)
-			{
-			  fprintf(file," %12Lu %16.6f %16.6f %16.6f %16.6f %16.6f %16.6f %16.6f %15.8e %16.6f %16.6f %16.6f %16.6f\n",
-				  writethis.name,
-				  writethis.red,
-				  writethis.x,writethis.y,writethis.z,
-				  writethis.vx,writethis.vy,writethis.vz,
-				  writethis.Mass,
-				  writethis.theta,
-				  writethis.phi,
-				  writethis.v_los,
-				  writethis.obsz);
-			  nhalos++;
-			}
+		      fprintf(file," %12Lu %16.6f %16.6f %16.6f %16.6f %16.6f %16.6f %16.6f %15.8e %16.6f %16.6f %16.6f %16.6f\n",
+			      writethis.name,
+			      writethis.red,
+			      writethis.x,writethis.y,writethis.z,
+			      writethis.vx,writethis.vy,writethis.vz,
+			      writethis.Mass,
+			      writethis.theta,
+			      writethis.phi,
+			      writethis.v_los,
+			      writethis.obsz);
+		      nhalos++;
 		    }
 		}
 	      else
@@ -753,24 +746,22 @@ int write_PLC()
 		      writethis.vy=plcgroups[i].v[1];
 		      writethis.vz=plcgroups[i].v[2];
 		      writethis.Mass=plcgroups[i].Mass*params.ParticleMass*hfactor;
-		      coord_transformation_cartesian_polar(plcgroups[i].x,&rhor,&writethis.theta,&writethis.phi);
+		      writethis.theta=plcgroups[i].theta;
+		      writethis.phi=plcgroups[i].phi;
 		      writethis.v_los=(plcgroups[i].x[0]*plcgroups[i].v[0]+
 				       plcgroups[i].x[1]*plcgroups[i].v[1]+
-				       plcgroups[i].x[2]*plcgroups[i].v[2])/rhor;
+				       plcgroups[i].x[2]*plcgroups[i].v[2])/plcgroups[i].rhor;
 		      writethis.obsz=plcgroups[i].z+writethis.v_los/SPEEDOFLIGHT*(1.0+plcgroups[i].z);
 
-		      if (90.-writethis.theta<params.PLCAperture)
-			{
 #ifdef FORTRAN
-			  idummy=sizeof(struct towrite);
-			  fwrite(&idummy,sizeof(int),1,file);
+		      idummy=sizeof(struct towrite);
+		      fwrite(&idummy,sizeof(int),1,file);
 #endif
-			  fwrite(&writethis,sizeof(struct towrite),1,file);
+		      fwrite(&writethis,sizeof(struct towrite),1,file);
 #ifdef FORTRAN
-			  fwrite(&idummy,sizeof(int),1,file);
+		      fwrite(&idummy,sizeof(int),1,file);
 #endif
-			  nhalos++;
-			}
+		      nhalos++;
 		    }
 		}
 	    }
@@ -796,25 +787,6 @@ int write_PLC()
   FirstCall=0;
 
   return 0;
-}
-
-void coord_transformation_cartesian_polar(double *x, double *rho, double *theta, double *phi)
-{
-  /* transformation from cartesian coordinates to polar */
-
-  *rho   = sqrt(x[0]*x[0]+x[1]*x[1]+x[2]*x[2]);
-  if (*rho>0)
-    {
-      *theta = -acos((x[0]*plc.zvers[0]+x[1]*plc.zvers[1]+x[2]*plc.zvers[2])/ *rho) * 180./PI + 90.;
-      *phi   = atan2(x[0]*plc.yvers[0]+x[1]*plc.yvers[1]+x[2]*plc.yvers[2],
-		     x[0]*plc.xvers[0]+x[1]*plc.xvers[1]+x[2]*plc.xvers[2]) * 180./PI;  
-      if (*phi<0) *phi+=360.;
-    }
-  else
-    {
-      *theta=90.0;
-      *phi=0.0;
-    }
 }
 #endif
 

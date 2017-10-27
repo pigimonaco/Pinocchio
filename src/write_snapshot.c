@@ -1119,7 +1119,7 @@ int write_LPT_snapshot(double redshift)
 #ifdef TWO_LPT
   double vf2,G2;
 #ifdef THREE_LPT
-  double vf31,vf32,G31,G32;
+  double G31,G32;
 #endif
 #endif
 #ifdef ROTATE_BOX
@@ -1146,8 +1146,6 @@ int write_LPT_snapshot(double redshift)
 #ifdef THREE_LPT
   G31  = GrowingMode_3LPT_1(redshift);
   G32  = GrowingMode_3LPT_2(redshift);
-  vf31 = params.InterPartDist*fomega_3LPT_1(redshift)*Hubble(redshift)/sqrt(1.+redshift) * G31;
-  vf32 = params.InterPartDist*fomega_3LPT_2(redshift)*Hubble(redshift)/sqrt(1.+redshift) * G32;
 #endif
 #endif
   SGrid[0]=(double)MyGrids[0].GSstart_x;

@@ -221,7 +221,7 @@ typedef struct
 {
   int Mass;
   unsigned long long int name;
-  double z,x[3],v[3];
+  double z,x[3],v[3],rhor,theta,phi;
 } plcgroup_data;
 extern plcgroup_data *plcgroups;
 #endif
