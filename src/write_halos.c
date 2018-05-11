@@ -698,7 +698,7 @@ int write_PLC()
 	  if (nstored)
 	    {
 
-	      MPI_Recv(plcgroups, nstored*sizeof(plcgroups_data), MPI_CHAR, itask, 0, MPI_COMM_WORLD, &status);
+	      MPI_Recv(plcgroups, nstored*sizeof(plcgroup_data), MPI_CHAR, itask, 0, MPI_COMM_WORLD, &status);
 
 	      if (params.CatalogInAscii)
 		{
@@ -771,7 +771,7 @@ int write_PLC()
 	  MPI_Send(&plc.Nstored, 1, MPI_INT, collector, 0, MPI_COMM_WORLD);
 	  if (plc.Nstored)
 	    {
-	      MPI_Send(plcgroups, plc.Nstored*sizeof(plcgroups_data), MPI_CHAR, collector, 0, MPI_COMM_WORLD);
+	      MPI_Send(plcgroups, plc.Nstored*sizeof(plcgroup_data), MPI_CHAR, collector, 0, MPI_COMM_WORLD);
 	    }
 	}
       
