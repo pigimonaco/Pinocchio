@@ -26,18 +26,28 @@
 
 #include "pinocchio.h"
 
-void abort_code(void);
-void write_cputimes(void);
-
+void         abort_code(void);
+void         write_cputimes(void);
+  
 int main(int argc, char **argv, char **envp)
 {
   double time;
   int ThisGrid;
 
+#ifdef USE_GPERFTOOLS
+  ProfilerStart("pinocchio_gprofile.log");
+#endif
+  
   /* Initialize MPI */
   MPI_Init(&argc, &argv);
   MPI_Comm_rank(MPI_COMM_WORLD, &ThisTask);
   MPI_Comm_size(MPI_COMM_WORLD, &NTasks);
+
+  /* Initialize pfft */
+  pfft_init();
+
+  /* Inititalize fftw */
+  fftw_mpi_init();
 
   /* timing of the code */
   cputime.total=MPI_Wtime();
@@ -93,19 +103,37 @@ int main(int argc, char **argv, char **envp)
       if (!ThisTask)
 	printf("Usage: pinocchio.x parameterfile\n");
       MPI_Finalize();
-      return 0;
+      exit(1);
     }
-
+  
+  
   /* initialization */
   memset(&params, 0, sizeof(param_data));
   strcpy(params.ParameterFile,argv[1]);
   if (initialization())
     abort_code();
 
-
+  
   fflush(stdout);
   MPI_Barrier(MPI_COMM_WORLD);
 
+  if (argc>=3 && atoi(argv[2]) == 0 )
+    {
+      if (!ThisTask)
+	{
+	  printf("Pinocchio done!\n");
+	  write_cputimes();
+	}
+      MPI_Finalize();
+      
+#ifdef USE_GPERFTOOLS
+      ProfilerStop();
+#endif
+
+      return 0;
+    }
+
+  
   /* called as "pinocchio.x parameterfile 1" it writes the density field  of Grid 0
      in configuration space and exits */
   if (argc>=3 && atoi(argv[2])==1)
@@ -125,10 +153,89 @@ int main(int argc, char **argv, char **envp)
 	  write_from_rvector(ThisGrid, density[ThisGrid]);
 	  if (write_density(ThisGrid))
 	    abort_code();
+	  /* dump_rvector((double*)rvector_fft[ThisGrid], */
+	  /* 	       MyGrids[ThisGrid].GSglobal[_x_], */
+	  /* 	       MyGrids[ThisGrid].GSlocal, */
+	  /* 	       MyGrids[ThisGrid].GSstart, "my.density_rvector", 0); */
+
 	}
+
+      // <<<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>>>
+
+      if(1 == 0)
+	{
+	  // this has to be dropped in production
+	  // DEBUG
+	  // perform a derivative to check it
+
+	  ThisGrid = 0;
+	  if(ThisTask == 0) {
+	    printf("now compute first derivatives %d\n", params.use_transposed_fft*internal.tasks_subdivision_dim); fflush(stdout); }
+	  MPI_Barrier(MPI_COMM_WORLD);
+
+	  write_in_cvector(ThisGrid, kdensity[ThisGrid]);
+	  dump_cvector((double*)kdensity[ThisGrid], params.use_transposed_fft*internal.tasks_subdivision_dim,
+		       MyGrids[ThisGrid].GSglobal[_x_],
+		       MyGrids[ThisGrid].GSlocal_k,
+		       MyGrids[ThisGrid].GSstart_k, "kdensity.check", 0);
+      
+      
+	  write_in_cvector(ThisGrid, kdensity[ThisGrid]);      
+	  if(ThisTask == 0) {
+	    printf("now compute actual x-derivatives\n"); fflush(stdout); }
+	  MPI_Barrier(MPI_COMM_WORLD);
+	  compute_derivative(0, 1, 0);
+	  dump_cvector((double*)cvector_fft[ThisGrid], params.use_transposed_fft*internal.tasks_subdivision_dim,
+		       MyGrids[ThisGrid].GSglobal[_x_],
+		       MyGrids[ThisGrid].GSlocal_k,
+		       MyGrids[ThisGrid].GSstart_k, "cderivative.1.x", 0);
+	  dump_rvector((double*)rvector_fft[ThisGrid],
+		       MyGrids[ThisGrid].GSglobal[_x_],
+		       MyGrids[ThisGrid].GSlocal,
+		       MyGrids[ThisGrid].GSstart, "derivative.1.x", 0);
+
+	  write_in_cvector(ThisGrid, kdensity[ThisGrid]);
+	  if(ThisTask == 0) {
+	    printf("now compute actual y-derivatives\n"); fflush(stdout); }
+	  compute_derivative(0, 2, 0);
+	  dump_cvector((double*)cvector_fft[ThisGrid], params.use_transposed_fft*internal.tasks_subdivision_dim,
+		       MyGrids[ThisGrid].GSglobal[_x_],
+		       MyGrids[ThisGrid].GSlocal_k,
+		       MyGrids[ThisGrid].GSstart_k, "cderivative.1.y", 0);
+	  dump_rvector((double*)rvector_fft[ThisGrid],
+		       MyGrids[ThisGrid].GSglobal[_x_],
+		       MyGrids[ThisGrid].GSlocal,
+		       MyGrids[ThisGrid].GSstart, "derivative.1.y", 0);
+      
+      
+	  write_in_cvector(ThisGrid, kdensity[ThisGrid]);
+	  if(ThisTask == 0) {
+	    printf("now compute actual z-derivatives\n"); fflush(stdout); }
+	  compute_derivative(0, 3, 0);
+	  dump_cvector((double*)cvector_fft[ThisGrid], params.use_transposed_fft*internal.tasks_subdivision_dim,
+		       MyGrids[ThisGrid].GSglobal[_x_],
+		       MyGrids[ThisGrid].GSlocal_k,
+		       MyGrids[ThisGrid].GSstart_k, "cderivative.1.z", 0);
+	  dump_rvector((double*)rvector_fft[ThisGrid],
+		       MyGrids[ThisGrid].GSglobal[_x_],
+		       MyGrids[ThisGrid].GSlocal,
+		       MyGrids[ThisGrid].GSstart, "derivative.1.z", 0);
+	}
+
+      // <<<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>>>
+
+
+      
       if (!ThisTask)
-	printf("Pinocchio done!\n");
+	{
+	  printf("Pinocchio done!\n");
+	  write_cputimes();
+	}
       MPI_Finalize();
+
+#ifdef USE_GPERFTOOLS
+      ProfilerStop();
+#endif
 
       return 0;
     }
@@ -164,18 +271,34 @@ int main(int argc, char **argv, char **envp)
 	
       if (!ThisTask)
 	printf("Pinocchio done!\n");
+
+      if (!ThisTask)
+	write_cputimes();
+
       MPI_Finalize();
 
+#ifdef USE_GPERFTOOLS
+      ProfilerStop();
+#endif
+      
       return 0;
     }
 
   /* computation of collapse times and displacements */
   if (compute_fmax())
     abort_code();
-
+  
   fflush(stdout);
   MPI_Barrier(MPI_COMM_WORLD);
 
+#ifdef TEST_ONLY  
+  dprintf(VMSG, 0, "Test end point reached. Au revoir.\n");
+  if(ThisTask == 0)
+    write_cputimes();
+  MPI_Finalize();
+  exit(0);
+#endif  
+  
   /* fragmentation of the collapsed medium */
   if (fragment())
     abort_code();
@@ -184,7 +307,7 @@ int main(int argc, char **argv, char **envp)
   MPI_Barrier(MPI_COMM_WORLD);
 
   /* output detailed cpu times */
-  cputime.total=MPI_Wtime()-cputime.total;
+  cputime.total = MPI_Wtime() - cputime.total;
   if (!ThisTask)
     write_cputimes();
 
@@ -193,6 +316,10 @@ int main(int argc, char **argv, char **envp)
     printf("Pinocchio done!\n");
   MPI_Finalize();
 
+#ifdef USE_GPERFTOOLS
+      ProfilerStop();
+#endif
+  
   return 0;
 }
 
@@ -206,24 +333,30 @@ void abort_code(void)
 
 void write_cputimes()
 {
-  printf("Total:            %14.6f\n",cputime.total);
-  printf("Initialization:   %14.6f (%5.2f%%)\n",cputime.init, 100.*cputime.init/cputime.total);
-  printf("  Density in FS:  %14.6f (%5.2f%%)\n",cputime.dens, 100.*cputime.dens/cputime.total);
-  printf("fmax:             %14.6f (%5.2f%%)\n",cputime.fmax, 100.*cputime.fmax /cputime.total);
+  printf("Total:            %14.6f\n", cputime.total);
+  printf("Initialization:   %14.6f (%5.2f%%)\n", cputime.init, 100.*cputime.init/cputime.total);
+  printf("  Density in FS:  %14.6f (%5.2f%%)\n", cputime.dens, 100.*cputime.dens/cputime.total);
+  printf("fmax:             %14.6f (%5.2f%%)\n", cputime.fmax, 100.*cputime.fmax /cputime.total);
 #ifdef TWO_LPT
-  printf("  LPT:            %14.6f (%5.2f%%)\n",cputime.lpt,  100.*cputime.lpt  /cputime.total);
+  printf("  LPT:            %14.6f (%5.2f%%)\n", cputime.lpt,  100.*cputime.lpt  /cputime.total);
 #endif
-  printf("  FFTs:           %14.6f (%5.2f%%)\n",cputime.fft,  100.*cputime.fft  /cputime.total);
-  printf("  Collapse times: %14.6f (%5.2f%%)\n",cputime.coll, 100.*cputime.coll /cputime.total);
-  printf("  Velocities:     %14.6f (%5.2f%%)\n",cputime.vel,  100.*cputime.vel  /cputime.total);
-  printf("Fragmentation:    %14.6f (%5.2f%%)\n",cputime.frag, 100.*cputime.frag /cputime.total);
-  printf("  Redistribution: %14.6f (%5.2f%%)\n",cputime.distr,100.*cputime.distr/cputime.total);
-  printf("  Sorting:        %14.6f (%5.2f%%)\n",cputime.sort, 100.*cputime.sort /cputime.total);
+  printf("  Derivatives:    %14.6f (%5.2f%%)\n", cputime.deriv,  100.*cputime.deriv  /cputime.total);
+  printf("    Mem transfer: %14.6f (%5.2f%%)\n", cputime.mem_transf, 100.*cputime.mem_transf  /cputime.total);
+  printf("    FFTs:         %14.6f (%5.2f%%)\n", cputime.fft,  100.*cputime.fft  /cputime.total);
+  printf("  Collapse times: %14.6f (%5.2f%%)\n", cputime.coll, 100.*cputime.coll /cputime.total);
+  printf("    inv.collapse: %14.6f (%5.2f%%)\n", cputime.invcoll, 100.*cputime.invcoll /cputime.total);
+  printf("    ellipsoid:    %14.6f (%5.2f%%)\n", cputime.ell, 100.*cputime.ell /cputime.total);
+  printf("  Velocities:     %14.6f (%5.2f%%)\n", cputime.vel,  100.*cputime.vel  /cputime.total);
+  printf("Fragmentation:    %14.6f (%5.2f%%)\n", cputime.frag, 100.*cputime.frag /cputime.total);
+  printf("  Redistribution: %14.6f (%5.2f%%)\n", cputime.distr,100.*cputime.distr/cputime.total);
+  printf("  Sorting:        %14.6f (%5.2f%%)\n", cputime.sort, 100.*cputime.sort /cputime.total);
 #ifdef PLC
-  printf("  Groups total:   %14.6f (%5.2f%%)\n",cputime.group,100.*cputime.group/cputime.total);
-  printf("  Groups PLC:     %14.6f (%5.2f%%)\n",cputime.plc,100.*cputime.plc/cputime.total);
+  printf("  Groups total:   %14.6f (%5.2f%%)\n", cputime.group,100.*cputime.group/cputime.total);
+  printf("  Groups PLC:     %14.6f (%5.2f%%)\n", cputime.plc,100.*cputime.plc/cputime.total);
 #else
-  printf("  Groups:         %14.6f (%5.2f%%)\n",cputime.group,100.*cputime.group/cputime.total);
+  printf("  Groups:         %14.6f (%5.2f%%)\n", cputime.group,100.*cputime.group/cputime.total);
 #endif
-  printf("Total I/O:        %14.6f (%5.2f%%)\n",cputime.io,   100.*cputime.io   /cputime.total);
+  printf("Total I/O:        %14.6f (%5.2f%%)\n", cputime.io,   100.*cputime.io   /cputime.total);
 }
+
+

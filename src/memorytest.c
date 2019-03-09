@@ -73,8 +73,8 @@ int main(int argc, char **argv)
 
   printf("Number of MPI tasks used for the run: %d\n",NTasks);
 
-  Nplanes=MyGrids[0].GSglobal_x/NTasks;
-  if (Nplanes*NTasks<MyGrids[0].GSglobal_x)
+  Nplanes=MyGrids[0].GSglobal[_x_]/NTasks;
+  if (Nplanes*NTasks<MyGrids[0].GSglobal[_x_])
     ++Nplanes;
   printf("Nplanes=%d\n",Nplanes);
 
@@ -114,8 +114,8 @@ int main(int argc, char **argv)
   /* finds the optimal number of sub-boxes to use for the fragmentation */
   ssafe=2.*subbox.safe;
   FmaxBPP = (double)sizeof(product_data) + 10.0*(double)sizeof(double) + 
-    (double)sizeof(int) * (double)NTasks / (double)MyGrids[0].GSglobal_z;
-  TotalNP = (double)MyGrids[0].GSglobal_x * (double)MyGrids[0].GSglobal_y * (double)MyGrids[0].GSglobal_z;
+    (double)sizeof(int) * (double)NTasks / (double)MyGrids[0].GSglobal[_z_];
+  TotalNP = (double)MyGrids[0].GSglobal[_x_] * (double)MyGrids[0].GSglobal[_y_] * (double)MyGrids[0].GSglobal[_z_];
   TotalNP_pertask = TotalNP/(double)NTasks;
 
   FragP_BPP=(double)sizeof(product_data);
@@ -143,9 +143,9 @@ int main(int argc, char **argv)
 	    if (i*j*k==NTasks)
 	      {
 		/* number of particles in the sub-box */
-		N1 = find_length(MyGrids[0].GSglobal_x,i,0);
-		N2 = find_length(MyGrids[0].GSglobal_y,j,0);
-		N3 = find_length(MyGrids[0].GSglobal_z,k*NSlices,0);
+		N1 = find_length(MyGrids[0].GSglobal[_x_],i,0);
+		N2 = find_length(MyGrids[0].GSglobal[_y_],j,0);
+		N3 = find_length(MyGrids[0].GSglobal[_z_],k*NSlices,0);
 		if (N1<ssafe || N2<ssafe || N3<ssafe)
 		  continue;
 		NN = (N1 + (i==1? 0 : ssafe))
@@ -228,9 +228,9 @@ int main(int argc, char **argv)
   subbox.mybox_y=NN1/subbox.nbox_z_thisslice;
   subbox.mybox_z=NN1-subbox.mybox_y*subbox.nbox_z_thisslice;
 
-  subbox.Lgrid_x = find_length(MyGrids[0].GSglobal_x,subbox.nbox_x,subbox.mybox_x);
-  subbox.Lgrid_y = find_length(MyGrids[0].GSglobal_y,subbox.nbox_y,subbox.mybox_y);
-  subbox.Lgrid_z = find_length(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,subbox.mybox_z);
+  subbox.Lgrid_x = find_length(MyGrids[0].GSglobal[_x_],subbox.nbox_x,subbox.mybox_x);
+  subbox.Lgrid_y = find_length(MyGrids[0].GSglobal[_y_],subbox.nbox_y,subbox.mybox_y);
+  subbox.Lgrid_z = find_length(MyGrids[0].GSglobal[_z_],subbox.nbox_z_allslices,subbox.mybox_z);
 
   subbox.Lgwbl_x = subbox.Lgrid_x + 2*subbox.safe_x; 
   subbox.Lgwbl_y = subbox.Lgrid_y + 2*subbox.safe_y;
@@ -238,9 +238,9 @@ int main(int argc, char **argv)
 
   subbox.Npart = subbox.Lgwbl_x * subbox.Lgwbl_y * subbox.Lgwbl_z;
 
-  subbox.start_x = find_start(MyGrids[0].GSglobal_x,subbox.nbox_x,subbox.mybox_x);
-  subbox.start_y = find_start(MyGrids[0].GSglobal_y,subbox.nbox_y,subbox.mybox_y);
-  subbox.start_z = find_start(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,subbox.mybox_z);
+  subbox.start_x = find_start(MyGrids[0].GSglobal[_x_],subbox.nbox_x,subbox.mybox_x);
+  subbox.start_y = find_start(MyGrids[0].GSglobal[_y_],subbox.nbox_y,subbox.mybox_y);
+  subbox.start_z = find_start(MyGrids[0].GSglobal[_z_],subbox.nbox_z_allslices,subbox.mybox_z);
 
   subbox.stabl_x = subbox.start_x - subbox.safe_x;
   subbox.stabl_y = subbox.start_y - subbox.safe_y;
@@ -248,35 +248,35 @@ int main(int argc, char **argv)
 
   subbox.overhead=(double)subbox.Npart/(double)(subbox.Lgrid_x * subbox.Lgrid_y * subbox.Lgrid_z);
 
-  double MemPerPlane = BytesPerParticle * (double)MyGrids[0].GSglobal_x * (double)MyGrids[0].GSglobal_x / 1024. / 1024. / 1024.;
+  double MemPerPlane = BytesPerParticle * (double)MyGrids[0].GSglobal[_x_] * (double)MyGrids[0].GSglobal[_x_] / 1024. / 1024. / 1024.;
   MemPerTask  = BytesPerParticle * TotalNP_pertask / 1024. / 1024. / 1024.;
   int NPlanesPerTask = (int)(params.MaxMem/1024.0/MemPerPlane);
 
-  printf("\n");
-  printf("FRAGMENTATION:\n");
+  dprintf(VXX, "\n");
+  dprintf(VXX, "FRAGMENTATION:\n");
   if (NSlices>1)
-    printf("The box will be fragmented in %d slices\n",NSlices);
+    dprintf(VXX, "The box will be fragmented in %d slices\n",NSlices);
   else
-    printf("The box will be fragmented in one go\n");
-  printf("Number of sub-boxes per dimension: %d %d %d\n",subbox.nbox_x,subbox.nbox_y,subbox.nbox_z_allslices);
-  printf("Boundary layer (true Mpc):         %f\n",subbox.SafetyBorder);
-  printf("Boundary layer (gridpoints):       %d\n",subbox.safe);
-  printf("Cores will work on a grid:         %d %d %d\n",subbox.Lgwbl_x,subbox.Lgwbl_y,subbox.Lgwbl_z);
-  printf("Number of particles per core:      %d\n",subbox.Npart);
-  printf("The resolved box will be:          %d %d %d\n",subbox.Lgrid_x,subbox.Lgrid_y,subbox.Lgrid_z);
-  printf("Periodic boundary conditions:      %d %d %d\n",subbox.pbc_x,subbox.pbc_y,subbox.pbc_z);
-  printf("Required bytes per fft particle:   %f\n",BytesPerParticle);
-  printf("The overhead for fragmentation is: %f\n",subbox.overhead);
-  printf("Required memory per task:          %4.0fMb - Maxmem=%dMb\n", MemPerTask*1024.,params.MaxMem);
-  printf("\n");
-  printf("\n");
+    dprintf(VXX, "The box will be fragmented in one go\n");
+  dprintf(VMSG, "Number of sub-boxes per dimension: %d %d %d\n",subbox.nbox_x,subbox.nbox_y,subbox.nbox_z_allslices);
+  dprintf(VMSG, "Boundary layer (true Mpc):         %f\n",subbox.SafetyBorder);
+  dprintf(VMSG, "Boundary layer (gridpoints):       %d\n",subbox.safe);
+  dprintf(VMSG, "Cores will work on a grid:         %d %d %d\n",subbox.Lgwbl_x,subbox.Lgwbl_y,subbox.Lgwbl_z);
+  dprintf(VMSG, "Number of particles per core:      %d\n",subbox.Npart);
+  dprintf(VMSG, "The resolved box will be:          %d %d %d\n",subbox.Lgrid_x,subbox.Lgrid_y,subbox.Lgrid_z);
+  dprintf(VMSG, "Periodic boundary conditions:      %d %d %d\n",subbox.pbc_x,subbox.pbc_y,subbox.pbc_z);
+  dprintf(VMSG, "Required bytes per fft particle:   %f\n",BytesPerParticle);
+  dprintf(VMSG, "The overhead for fragmentation is: %f\n",subbox.overhead);
+  dprintf(VMSG, "Required memory per task:          %4.0fMb - Maxmem=%dMb\n", MemPerTask*1024.,params.MaxMem);
+  dprintf(VMSG, "\n");
+  dprintf(VMSG, "\n");
 
   if (MemPerTask > params.MaxMem/1024.0)
     printf("FATAL ERROR: your requirements overshoot the available memory per MPI task, the run will fail\n");
   printf("Required memory per plane: %fGb\n", MemPerPlane);
   printf("You will be able to load at most %d planes per MPI task (%d in total over %d required)\n",
-	 NPlanesPerTask,NPlanesPerTask * NTasks,MyGrids[0].GSglobal_x);
-  if (NPlanesPerTask * NTasks < MyGrids[0].GSglobal_x)
+	 NPlanesPerTask,NPlanesPerTask * NTasks,MyGrids[0].GSglobal[_x_]);
+  if (NPlanesPerTask * NTasks < MyGrids[0].GSglobal[_x_])
     printf("FATAL ERROR: you will not be able to load all the planes on a task, the run will fail (%d)\n",NPlanesPerTask * NTasks);
   printf("Total required memory: %fGb\n",
 	 BytesPerParticle * TotalNP / 1024. / 1024. / 1024.);
@@ -297,25 +297,32 @@ void abort_code(void)
 int my_initialization(void)
 {
   workspace = gsl_integration_workspace_alloc(NWINT);
+  
   if (set_parameters())
     return 1;
+  
 #ifdef SCALE_DEPENDENT_GROWTH
-  /* reads the P(k) tables from CAMB */
+  // reads the P(k) tables from CAMB
   if (read_power_table_from_CAMB())
     return 1;
 #endif
+  
   if (initialize_cosmology())
     return 1;
+  
   if (set_grids())
     return 1;
-  /* now it re-initializes the variance with a top-hat filter */
+  
+  // now it re-initializes the variance with a top-hat filter
   WindowFunctionType=2;
   if (initialize_MassVariance())
     return 1;
+  
 #ifdef SCALE_DEPENDENT_GROWTH
-  /* initialize scale-dependent growing modes and fomegas */
+  // initialize scale-dependent growing modes and fomegas
   if (initialize_ScaleDependentGrowth())
     return 1;
 #endif
+  
   return 0;
 }

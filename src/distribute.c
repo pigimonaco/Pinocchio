@@ -1,5 +1,5 @@
 /*****************************************************************
- *                        PINOCCHIO  V4.1                        *
+ *                        PINOCCHI0  V4.1                        *
  *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
  *****************************************************************
  
@@ -35,6 +35,7 @@ typedef struct
 
 static int largest_size;
 static product_data *sub_plane;
+static int frag_offset;
 
 int find_task(int, int, int, int, int *, int *, int *);
 int send_data(comm_struct *);
@@ -57,10 +58,13 @@ int distribute(void)
   fflush(stdout);
   MPI_Barrier(MPI_COMM_WORLD);
 
+  // AGGIUNTO
+  frag_offset=subbox.Nstored;
+  
 #ifdef VERBOSE
   printf("\n");
   printf("task %d, plan of sub-boxes:  %d %d %d - %d %d %d/%d - %d %d %d - %d %d %d - %d %d %d - %d %d %d - %d %d %d\n",
-	 ThisTask,MyGrids[0].GSlocal_x,MyGrids[0].GSlocal_y,MyGrids[0].GSlocal_z,
+	 ThisTask,MyGrids[0].GSlocal[_x_],MyGrids[0].GSlocal[_y_],MyGrids[0].GSlocal[_z_],
 	 subbox.nbox_x, subbox.nbox_y, subbox.nbox_z_thisslice, subbox.nbox_z_allslices,
 	 subbox.mybox_x,subbox.mybox_y,subbox.mybox_z,
 	 subbox.Lgrid_x,subbox.Lgrid_y,subbox.Lgrid_z,
@@ -74,19 +78,19 @@ int distribute(void)
   /* here it builds a map of which task owns which plane */
   /* NB: here it is assumed that tasks are distributed by planes */
 
-  belongs_local  = (int*)malloc(MyGrids[0].GSglobal_z*sizeof(int));
-  belongs_global = (int*)malloc(MyGrids[0].GSglobal_z*sizeof(int));
-  for (global_z=0; global_z<MyGrids[0].GSglobal_z; global_z++)
+  belongs_local  = (int*)malloc(MyGrids[0].GSglobal[_z_]*sizeof(int));
+  belongs_global = (int*)malloc(MyGrids[0].GSglobal[_z_]*sizeof(int));
+  for (global_z=0; global_z<MyGrids[0].GSglobal[_z_]; global_z++)
     {
       belongs_global[global_z]=0;
-      if (global_z >= MyGrids[0].GSstart_z && global_z < MyGrids[0].GSstart_z + MyGrids[0].GSlocal_z)
+      if (global_z >= MyGrids[0].GSstart[_z_] && global_z < MyGrids[0].GSstart[_z_] + MyGrids[0].GSlocal[_z_])
 	belongs_local[global_z]=ThisTask;
       else
 	belongs_local[global_z]=0;
     }  
 
   if (MPI_Reduce(belongs_local, belongs_global, 
-		 MyGrids[0].GSglobal_z, MPI_INT, MPI_SUM, 0, 
+		 MyGrids[0].GSglobal[_z_], MPI_INT, MPI_SUM, 0, 
 		 MPI_COMM_WORLD) != MPI_SUCCESS)
     {
       printf("ERROR on task %d: distribute could not perform an MPI_Reduce\n",ThisTask);
@@ -94,7 +98,7 @@ int distribute(void)
       return 1;
     }
 
-  if (MPI_Bcast(belongs_global, MyGrids[0].GSglobal_z, 
+  if (MPI_Bcast(belongs_global, MyGrids[0].GSglobal[_z_], 
 		MPI_INT, 0, MPI_COMM_WORLD) != MPI_SUCCESS)
     {
       printf("ERROR on task %d: distribute could not perform an MPI_Bcast\n",ThisTask);
@@ -105,11 +109,11 @@ int distribute(void)
   /* loop on global planes to count the number of communications needed */
   /* i3 is the counter of sub-boxes, on the z direction, updated at the end of the do cycle */
 
-  for (global_z = i3=count_send=count_recv=count_keep=0; global_z<MyGrids[0].GSglobal_z; global_z++)
+  for (global_z = i3=count_send=count_recv=count_keep=0; global_z<MyGrids[0].GSglobal[_z_]; global_z++)
     {
       /* updates the z-sub-box index if necessary
          NB: i3 is related to the complete box, with all slices */
-      if (i3<subbox.nbox_z_allslices-1 && global_z==find_start(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,i3+1))
+      if (i3<subbox.nbox_z_allslices-1 && global_z==find_start(MyGrids[0].GSglobal[_z_],subbox.nbox_z_allslices,i3+1))
         i3++;
 
        /* loop on all sub-planes, that is sub-boxes on the plane */
@@ -148,10 +152,10 @@ int distribute(void)
   comm_keep=(comm_struct*)malloc(count_keep * sizeof(comm_struct));
 
   /* loop on global planes to record the needed communications */
-  for (global_z = i3=count_send=count_recv=count_keep=0; global_z<MyGrids[0].GSglobal_z; global_z++)
+  for (global_z = i3=count_send=count_recv=count_keep=0; global_z<MyGrids[0].GSglobal[_z_]; global_z++)
     {
       /* updates the z-sub-box index if necessary */
-      if (i3<subbox.nbox_z_allslices-1 && global_z==find_start(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,i3+1))
+      if (i3<subbox.nbox_z_allslices-1 && global_z==find_start(MyGrids[0].GSglobal[_z_],subbox.nbox_z_allslices,i3+1))
         i3++;
 
        /* loop on all sub-planes, that is sub-boxes on the plane */
@@ -279,8 +283,8 @@ int distribute(void)
     }
 #endif
 
-  largest_size=(find_length(MyGrids[0].GSglobal_x,subbox.nbox_x,0) + 2.*subbox.safe_x) *
-    (find_length(MyGrids[0].GSglobal_y,subbox.nbox_y,0) + 2.*subbox.safe_y);
+  largest_size=(find_length(MyGrids[0].GSglobal[_x_],subbox.nbox_x,0) + 2.*subbox.safe_x) *
+    (find_length(MyGrids[0].GSglobal[_y_],subbox.nbox_y,0) + 2.*subbox.safe_y);
   sub_plane=(product_data*)malloc(largest_size * sizeof(product_data));
   if (sub_plane==0x0)
     {
@@ -359,7 +363,9 @@ int distribute(void)
 	}
     }
 
-
+  /* updates the number of stored particles */
+  subbox.Nstored=frag_offset;
+  
   /* check that all wanted communications have been performed */
   for (i=0; i<count_keep; i++)
     if (!comm_keep[i].check) 
@@ -383,7 +389,15 @@ int distribute(void)
   fflush(stdout);
   MPI_Barrier(MPI_COMM_WORLD);
 
-  return 0;
+  if (subbox.Nstored <= subbox.Nalloc)
+    return 0;
+  else
+    {
+      printf("ERROR in Task %d: it stored more particles than allocated, %d > %d\n",
+	     ThisTask,subbox.Nstored,subbox.Nalloc);
+      printf("Please increase MaxMemPerParticle and start again\n");
+      return 1;
+    }
 }
 
 
@@ -401,8 +415,8 @@ int find_task(int global_z, int i1, int i2, int i3, int *second_task, int *box_z
     main_task=-1;
 
   /* this is the local z variable in the subbox-system WITHOUT the boundary layer */
-  *box_z=global_z-find_start(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,i3);
-  TL=find_length(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,i3);
+  *box_z=global_z-find_start(MyGrids[0].GSglobal[_z_],subbox.nbox_z_allslices,i3);
+  TL=find_length(MyGrids[0].GSglobal[_z_],subbox.nbox_z_allslices,i3);
 
   /* the second task to communicate the sub_plane to is decided using box_z */
   if (*box_z<subbox.safe_z)            // lower border, second task is the previous in z
@@ -413,7 +427,7 @@ int find_task(int global_z, int i1, int i2, int i3, int *second_task, int *box_z
       if (i3bis>=subbox.nbox_z_thisslice*ThisSlice && i3bis<subbox.nbox_z_thisslice*(ThisSlice+1))
 	{
 	  *second_task = subbox.nbox_z_thisslice*(i1*subbox.nbox_y+i2)+(i3bis-subbox.nbox_z_thisslice*ThisSlice);
-	  *second_z = find_length(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,i3bis) + *box_z;
+	  *second_z = find_length(MyGrids[0].GSglobal[_z_],subbox.nbox_z_allslices,i3bis) + *box_z;
 	}
       else
 	{
@@ -469,8 +483,8 @@ int send_data(comm_struct *comm_data)
   printf("SEND_DATA: Task %d sending to %d\n",ThisTask,comm_data->task);
 #endif
 
-  Lgrid_x = find_length(MyGrids[0].GSglobal_x,subbox.nbox_x,comm_data->box_x) + 2.*subbox.safe_x;
-  Lgrid_y = find_length(MyGrids[0].GSglobal_y,subbox.nbox_y,comm_data->box_y) + 2.*subbox.safe_y;
+  Lgrid_x = find_length(MyGrids[0].GSglobal[_x_],subbox.nbox_x,comm_data->box_x) + 2.*subbox.safe_x;
+  Lgrid_y = find_length(MyGrids[0].GSglobal[_y_],subbox.nbox_y,comm_data->box_y) + 2.*subbox.safe_y;
 
   /* allocates the plane for communications */
   size = Lgrid_x * Lgrid_y;
@@ -481,25 +495,25 @@ int send_data(comm_struct *comm_data)
     }
 
   /* starting coordinates of the sub-box (can be negative) */
-  k2start=find_start(MyGrids[0].GSglobal_y,subbox.nbox_y,comm_data->box_y)-subbox.safe_y;
-  k1start=find_start(MyGrids[0].GSglobal_x,subbox.nbox_x,comm_data->box_x)-subbox.safe_x;
+  k2start=find_start(MyGrids[0].GSglobal[_y_],subbox.nbox_y,comm_data->box_y)-subbox.safe_y;
+  k1start=find_start(MyGrids[0].GSglobal[_x_],subbox.nbox_x,comm_data->box_x)-subbox.safe_x;
 
   /* storing of information on sub_plane */
   /* NB: anche qui assume che la distribuzione della memoria sia in piani */
-  offset = (comm_data->gz - MyGrids[0].GSstart_z) * MyGrids[0].GSlocal_x *  MyGrids[0].GSlocal_y;
+  offset = (comm_data->gz - MyGrids[0].GSstart[_z_]) * MyGrids[0].GSlocal[_x_] *  MyGrids[0].GSlocal[_y_];
   for (j2=0; j2<Lgrid_y; j2++)
     {
       k2=j2+k2start;
-      if (k2<0) k2+=MyGrids[0].GSglobal_y;
-      if (k2>=MyGrids[0].GSglobal_y) k2-=MyGrids[0].GSglobal_y;
+      if (k2<0) k2+=MyGrids[0].GSglobal[_y_];
+      if (k2>=MyGrids[0].GSglobal[_y_]) k2-=MyGrids[0].GSglobal[_y_];
       for (j1=0; j1<Lgrid_x; j1++)
 	{
 	  k1=j1+k1start;
-	  if (k1<0) k1+=MyGrids[0].GSglobal_x;
-	  if (k1>=MyGrids[0].GSglobal_x) k1-=MyGrids[0].GSglobal_x;
+	  if (k1<0) k1+=MyGrids[0].GSglobal[_x_];
+	  if (k1>=MyGrids[0].GSglobal[_x_]) k1-=MyGrids[0].GSglobal[_x_];
 
 	  *(sub_plane + j1 + j2*Lgrid_x) = 
-	    *(products + k1 + MyGrids[0].GSlocal_x * k2 + offset);
+	    *(products + k1 + MyGrids[0].GSlocal[_x_] * k2 + offset);
 	}
     }
 
@@ -546,11 +560,16 @@ int recv_data(comm_struct *comm_data)
       return 1;
     }
 
+  
+  // CAMBIATO
   /* copying information onto the frag structure */
   offset = comm_data->bz * size;
   for (i=0; i<size; i++)
-    *(frag + i + offset) = *(sub_plane+i);
-  
+    if (get_mapup_bit((unsigned int)(i+offset)) && sub_plane[i].Fmax>=outputs.Flast)
+      {
+	frag_pos[frag_offset]=i+offset;
+	*(frag + frag_offset++) = *(sub_plane+i);
+      }
   /* done */
   return 0;
 }
@@ -561,22 +580,27 @@ int keep_data(comm_struct *comm_data)
 
   /* storing of information on the product structure */
   /* NB: anche qui assume che la distribuzione della memoria sia in piani */
-  offmax = (comm_data->gz - MyGrids[0].GSstart_z) * MyGrids[0].GSlocal_x *  MyGrids[0].GSlocal_y;
+  offmax = (comm_data->gz - MyGrids[0].GSstart[_z_]) * MyGrids[0].GSlocal[_x_] *  MyGrids[0].GSlocal[_y_];
   offrag = comm_data->bz * subbox.Lgwbl_x * subbox.Lgwbl_y;
 
   for (j2=0; j2<subbox.Lgwbl_y; j2++)
     {
       k2=j2+subbox.stabl_y;
-      if (k2<0) k2+=MyGrids[0].GSlocal_y;
-      if (k2>=MyGrids[0].GSlocal_y) k2-=MyGrids[0].GSlocal_y;
+      if (k2<0) k2+=MyGrids[0].GSlocal[_y_];
+      if (k2>=MyGrids[0].GSlocal[_y_]) k2-=MyGrids[0].GSlocal[_y_];
       for (j1=0; j1<subbox.Lgwbl_x; j1++)
 	{
 	  k1=j1+subbox.stabl_x;
-	  if (k1<0) k1+=MyGrids[0].GSlocal_x;
-	  if (k1>=MyGrids[0].GSlocal_x) k1-=MyGrids[0].GSlocal_x;
+	  if (k1<0) k1+=MyGrids[0].GSlocal[_x_];
+	  if (k1>=MyGrids[0].GSlocal[_x_]) k1-=MyGrids[0].GSlocal[_x_];
 
-	  *(frag + j1 + j2*subbox.Lgwbl_x + offrag) =
-	    *(products + k1 + MyGrids[0].GSlocal_x * k2 + offmax);
+	  if (get_mapup_bit((unsigned int)(j1 + j2*subbox.Lgwbl_x + offrag)) && products[k1 + MyGrids[0].GSlocal_x * k2 + offmax].Fmax>=outputs.Flast)
+	    {
+	      // CAMBIATO
+	      frag_pos[frag_offset]=j1 + j2*subbox.Lgwbl_x + offrag;
+	      *(frag + frag_offset++) =
+		*(products + k1 + MyGrids[0].GSlocal_x * k2 + offmax);
+	    }	  
 	}
     }
 

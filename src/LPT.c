@@ -55,13 +55,13 @@ int compute_LPT_displacements(int ismooth)
 
   /* Computes the source for 2 LPT, 3LPT_1 and 3LPT_2 term */
   /* loop on all local particles */
-  for (local_z=0; local_z < MyGrids[0].GSlocal_z; local_z++)
-    for (local_y=0; local_y < MyGrids[0].GSlocal_y; local_y++)
-      for (local_x=0; local_x < MyGrids[0].GSlocal_x; local_x++)
+  for (local_z=0; local_z < MyGrids[0].GSlocal[_z_]; local_z++)
+    for (local_y=0; local_y < MyGrids[0].GSlocal[_y_]; local_y++)
+      for (local_x=0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)
 	{
 
-	  index = local_x + (MyGrids[0].GSlocal_x) * 
-	    (local_y + local_z * MyGrids[0].GSlocal_y);
+	  index = local_x + (MyGrids[0].GSlocal[_x_]) * 
+	    (local_y + local_z * MyGrids[0].GSlocal[_y_]);
 
 	  /* NB: QUI BISOGNERA` SOMMARE I CONTRIBUTI DELLE DUE GRIGLIE QUANDO USIAMO LE GRIGLIE MULTIPLE */
 
@@ -123,14 +123,14 @@ int compute_LPT_displacements(int ismooth)
 	  return 1;
 
 	/* this substitutes write_from_rvector: it adds to the 3LPT_2 source term the mixed products of the two second derivative tensors */
-	for (local_z=0; local_z<MyGrids[0].GSlocal_z; local_z++)
-	  for (local_y=0; local_y<MyGrids[0].GSlocal_y; local_y++)
-	    for (local_x=0; local_x<MyGrids[0].GSlocal_x; local_x++)
+	for (local_z=0; local_z<MyGrids[0].GSlocal[_z_]; local_z++)
+	  for (local_y=0; local_y<MyGrids[0].GSlocal[_y_]; local_y++)
+	    for (local_x=0; local_x<MyGrids[0].GSlocal[_x_]; local_x++)
 	      {
-		index = local_x + MyGrids[0].GSlocal_x * (local_y + local_z * MyGrids[0].GSlocal_y);
+		index = local_x + MyGrids[0].GSlocal[_x_] * (local_y + local_z * MyGrids[0].GSlocal[_y_]);
 
 		source_3LPT_2[index] -= 2.0 * (ider<=3? 1.0 : 2.0) *    /* the first 2 factor is needed because nabla2phi is half the theoretical one */
-		  *(rvector_fft[0] + local_x + (MyGrids[0].GSlocal_x + MyGrids[0].off) * (local_y + local_z * MyGrids[0].GSlocal_y))
+		  *(rvector_fft[0] + local_x + (MyGrids[0].GSlocal[_x_] + MyGrids[0].off) * (local_y + local_z * MyGrids[0].GSlocal[_y_]))
 		  * second_derivatives[0][ider-1][index];
 	      }
       }
@@ -156,13 +156,13 @@ int compute_LPT_displacements(int ismooth)
     }
 
   /* assigns displacement to particles whose collapse time has just been updated */
-  for (local_z=0; local_z < MyGrids[0].GSlocal_z; local_z++)
-    for (local_y=0; local_y < MyGrids[0].GSlocal_y; local_y++)
-      for (local_x=0; local_x < MyGrids[0].GSlocal_x; local_x++)
+  for (local_z=0; local_z < MyGrids[0].GSlocal[_z_]; local_z++)
+    for (local_y=0; local_y < MyGrids[0].GSlocal[_y_]; local_y++)
+      for (local_x=0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)
 	{
 
-	  index = local_x + (MyGrids[0].GSlocal_x) * 
-	    (local_y + local_z * MyGrids[0].GSlocal_y);
+	  index = local_x + (MyGrids[0].GSlocal[_x_]) * 
+	    (local_y + local_z * MyGrids[0].GSlocal[_y_]);
 
 #ifdef SMOOTH_VELOCITIES
 	  if (products[index].Rmax == ismooth || (products[index].Fmax<0.0 && final) )
@@ -207,13 +207,13 @@ int compute_LPT_displacements(int ismooth)
       write_from_rvector(0, first_derivatives[0][ia-1]);
     }
 
-  for (local_z=0; local_z < MyGrids[0].GSlocal_z; local_z++)
-    for (local_y=0; local_y < MyGrids[0].GSlocal_y; local_y++)
-      for (local_x=0; local_x < MyGrids[0].GSlocal_x; local_x++)
+  for (local_z=0; local_z < MyGrids[0].GSlocal[_z_]; local_z++)
+    for (local_y=0; local_y < MyGrids[0].GSlocal[_y_]; local_y++)
+      for (local_x=0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)
 	{
 
-	  index = local_x + (MyGrids[0].GSlocal_x) * 
-	    (local_y + local_z * MyGrids[0].GSlocal_y);
+	  index = local_x + (MyGrids[0].GSlocal[_x_]) * 
+	    (local_y + local_z * MyGrids[0].GSlocal[_y_]);
 
 #ifdef SMOOTH_VELOCITIES
 	  if (products[index].Rmax == ismooth || (products[index].Fmax<0.0 && final) )
@@ -255,13 +255,13 @@ int compute_LPT_displacements(int ismooth)
       write_from_rvector(0, first_derivatives[0][ia-1]);
     }
 
-  for (local_z=0; local_z < MyGrids[0].GSlocal_z; local_z++)
-    for (local_y=0; local_y < MyGrids[0].GSlocal_y; local_y++)
-      for (local_x=0; local_x < MyGrids[0].GSlocal_x; local_x++)
+  for (local_z=0; local_z < MyGrids[0].GSlocal[_z_]; local_z++)
+    for (local_y=0; local_y < MyGrids[0].GSlocal[_y_]; local_y++)
+      for (local_x=0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)
 	{
 
-	  index = local_x + (MyGrids[0].GSlocal_x) * 
-	    (local_y + local_z * MyGrids[0].GSlocal_y);
+	  index = local_x + (MyGrids[0].GSlocal[_x_]) * 
+	    (local_y + local_z * MyGrids[0].GSlocal[_y_]);
 
 #ifdef SMOOTH_VELOCITIES
 	  if (products[index].Rmax == ismooth || (products[index].Fmax<0.0 && final) )

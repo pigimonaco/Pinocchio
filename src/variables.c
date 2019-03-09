@@ -28,60 +28,67 @@
 
 int ThisTask,NTasks;
 
-void *main_memory, *wheretoplace_mycat;
-product_data *products, *frag;
-unsigned int **seedtable;
-double **kdensity;
-double **density;
-double ***first_derivatives;
-double ***second_derivatives;
-double **VEL_for_displ;
+//int            pfft_flags_c2r, pfft_flags_r2c;
+MPI_Comm        FFT_Comm;
+internal_data   internal;
+
+
+char           *main_memory, *wheretoplace_mycat;
+product_data   *products, *frag;
+//unsigned int **seedtable;
+unsigned int   *cubes_ordering;
+double        **kdensity;
+double        **density;
+double       ***first_derivatives;
+double       ***second_derivatives;
+double        **VEL_for_displ;
 
 #ifdef TWO_LPT
-double *kvector_2LPT;
-double *source_2LPT;
-double **VEL2_for_displ;
+double         *kvector_2LPT;
+double         *source_2LPT;
+double        **VEL2_for_displ;
 #ifdef THREE_LPT
-double *kvector_3LPT_1,*kvector_3LPT_2;
-double *source_3LPT_1,*source_3LPT_2;
+double         *kvector_3LPT_1,*kvector_3LPT_2;
+double         *source_3LPT_1,*source_3LPT_2;
 #endif
 #endif
 
-double Rsmooth;
-smoothing_data Smoothing;
+double          Rsmooth;
+smoothing_data  Smoothing;
 
-grid_data *MyGrids;
-int Ngrids;
+grid_data      *MyGrids;
+int             Ngrids;
 
-fftw_complex **cvector_fft;
-double **rvector_fft;
+pfft_complex  **cvector_fft;
+double        **rvector_fft;
 
-param_data params={0};
-output_data outputs;
-subbox_data subbox;
+param_data      params = {0};
+output_data     outputs;
+subbox_data     subbox;
 #ifdef PLC
-plc_data plc;
-plcgroup_data *plcgroups;
+plc_data        plc;
+plcgroup_data  *plcgroups;
 #endif
 
-cputime_data cputime={0.0};
+cputime_data    cputime = {0.0};
 
-int WindowFunctionType;
+int             WindowFunctionType;
 
-group_data *groups;
+group_data     *groups;
 
-char date_string[25];
+char            date_string[25];
 
-int *indices,*group_ID,*linking_list;
-double f_m, f_rm, espo, f_a, f_ra, f_200, sigmaD0;
-int NSlices,ThisSlice;
+int            *frag_pos,*indicesY,*sorted_pos,
+int            *indices,*group_ID,*linking_list;
+double          f_m, f_rm, espo, f_a, f_ra, f_200, sigmaD0;
+int             NSlices,ThisSlice;
 
 #ifdef SCALE_DEPENDENT_GROWTH
-SDGM_data SDGM;
+SDGM_data       SDGM;
 #endif
 
 gsl_integration_workspace * workspace;
-gsl_rng *random_generator;
+gsl_rng        *random_generator;
 
-mf_data mf;
+mf_data         mf;
 

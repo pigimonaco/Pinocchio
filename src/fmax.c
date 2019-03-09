@@ -1,5 +1,5 @@
 /*****************************************************************
- *                        PINOCCHIO  V4.1                        *
+ *                        PINOCCHI0  V4.0                        *
  *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
  *****************************************************************
  
@@ -59,48 +59,49 @@ int compute_fmax(void)
    ****************************/
   for (ismooth=0; ismooth<Smoothing.Nsmooth; ismooth++)
     {
-
-      cpusm=MPI_Wtime();
-
       if (!ThisTask)
 	printf("\n[%s] Starting smoothing radius %d of %d (R=%9.5f, sigma=%9.5f)\n", 
 	       fdate(), ismooth+1, Smoothing.Nsmooth, Smoothing.Radius[ismooth],
 	       sqrt(Smoothing.Variance[ismooth]) );
+
+      cpusm=MPI_Wtime();
 
       /* 
 	 Part 1:
 	 Compute second derivatives of the potential
       */
 
-      cputmp=MPI_Wtime();
-
       if (!ThisTask)
 	printf("[%s] Computing second derivatives\n",fdate());
+
+      cputmp=MPI_Wtime();
 
       if (compute_second_derivatives(Smoothing.Radius[ismooth] ,ThisGrid))
 	return 1;
 
       cputmp=MPI_Wtime()-cputmp;
+
       if (!ThisTask)
 	printf("[%s] Done second derivatives, cpu time = %f s\n",fdate(),cputmp);
+      cputime.deriv += cputmp;
 
       /* 
 	 Part 2:
 	 Compute collapse times
       */
 
-      cputmp=MPI_Wtime();
-
       if (!ThisTask)
 	printf("[%s] Computing collapse times\n",fdate());
+
+      cputmp=MPI_Wtime();
 
       if (compute_collapse_times(ismooth))
 	return 1;
 
-      cputmp=MPI_Wtime()-cputmp;
+      cputmp = MPI_Wtime()-cputmp;
       if (!ThisTask)
 	printf("[%s] Done computing collapse times, cpu time = %f s\n",fdate(),cputmp);
-      cputime.coll+=cputmp;
+      cputime.coll += cputmp;
 
 #ifdef TWO_LPT
 #ifndef SMOOTH_VELOCITIES
@@ -108,10 +109,10 @@ int compute_fmax(void)
 #endif
 	{
 	  /* computes sources and displacements for 2LPT (and 3LPT in case...) */
-	  cputmp=MPI_Wtime();
-
 	  if (!ThisTask)
 	    printf("[%s] Computing LPT displacements\n",fdate());
+
+	  cputmp=MPI_Wtime();
 
 	  if (compute_LPT_displacements(ismooth))
 	    return 1;
@@ -132,10 +133,10 @@ int compute_fmax(void)
       if (ismooth==Smoothing.Nsmooth-1)
 #endif
 	{
-	  cputmp=MPI_Wtime();
-
 	  if (!ThisTask)
 	    printf("[%s] Computing first derivatives\n",fdate());
+
+	  cputmp=MPI_Wtime();
 
 	  if (compute_first_derivatives(Smoothing.Radius[ismooth] ,ThisGrid))
 	    return 1;
@@ -149,10 +150,10 @@ int compute_fmax(void)
 	 Store velocities of collapsed particles
       */
 
-	  cputmp=MPI_Wtime();
-
 	  if (!ThisTask)
 	    printf("[%s] Computing velocities\n",fdate());
+
+	  cputmp=MPI_Wtime();
 
 	  if (compute_velocities(ismooth))
 	    return 1;
@@ -186,17 +187,24 @@ int compute_fmax(void)
   /* Writes the results in files in the Data/ directory */
   cputmp=MPI_Wtime();
 
+#ifndef TEST_ONLY
   if (write_fields())
     return 1;
 
-  cputime.io+=MPI_Wtime()-cputmp;
+  cputime.io += MPI_Wtime()-cputmp;
+#endif
 
-  if (finalize_fftw())
+  if (finalize_fft())
     return 1;
 
   cputime.fmax = MPI_Wtime() - cputime.fmax;
+  
   if (!ThisTask)
-    printf("[%s] Finishing fmax, total cpu time = %14.6f\n", fdate(), cputime.fmax);
+    printf("[%s] Finishing fmax, total fmax cpu time = %14.6f\n"
+	   "\t\t IO       : %14.6f (%14.6f total time without I/O)\n"
+	   "\t\t FFT      : %14.6f\n"
+	   "\t\t COLLAPSE : %14.6f\n",
+	   fdate(), cputime.fmax, cputime.io, cputime.fmax-cputime.io, cputime.fft, cputime.coll);
 
   return 0;
 }
@@ -206,26 +214,30 @@ int compute_first_derivatives(double R, int ThisGrid)
 {
   /* computes second derivatives of the potential */
 
-  int ia;
-
+  double time = 0;
+  
   /* smoothing radius in grid units */
   Rsmooth = R / MyGrids[ThisGrid].CellSize;
 
-  for (ia=1; ia<=3; ia++)
+  for (int ia = 1; ia <= 3; ia++)
     {
 
       if (!ThisTask)
 	printf("[%s] Computing 1st derivative: %d\n",fdate(),ia);
 
+      double timetmp = MPI_Wtime();
       write_in_cvector(ThisGrid, kdensity[ThisGrid]);
-
+      time += MPI_Wtime() - timetmp;
+      
       if (compute_derivative(ThisGrid,ia,0))
 	return 1;
 
+      timetmp = MPI_Wtime();
       write_from_rvector(ThisGrid, first_derivatives[ThisGrid][ia-1]);
-
+      time += MPI_Wtime() - timetmp;
     }
 
+  cputime.mem_transf += time;
   return 0;
 }
 
@@ -235,29 +247,33 @@ int compute_second_derivatives(double R, int ThisGrid)
 
   /* computes second derivatives of the potential */
 
-  int ia,ib,ider;
-
+  double time = 0;
+  
   /* smoothing radius in grid units */
   Rsmooth = R / MyGrids[ThisGrid].CellSize;
 
-  for (ia=1; ia<=3; ia++)
-    for (ib=ia; ib<=3; ib++)
+  for ( int ia = 1; ia <= 3; ia++ )
+    for ( int ib = ia; ib <= 3; ib++ )
       {
 
-	ider=( ia==ib? ia : ia+ib+1 );
+	int ider=( ia == ib ? ia : ia+ib+1 );
 
 	if (!ThisTask)
 	  printf("[%s] Computing 2nd derivative: %d\n",fdate(),ider);
 
+	double timetmp = MPI_Wtime();
 	write_in_cvector(ThisGrid, kdensity[ThisGrid]);
+	time += MPI_Wtime() - timetmp;
 
 	if (compute_derivative(ThisGrid,ia,ib))
 	  return 1;
 
+	timetmp = MPI_Wtime();
 	write_from_rvector(ThisGrid, second_derivatives[ThisGrid][ider-1]);
-
+	time += MPI_Wtime() - timetmp;
       }
 
+  cputime.mem_transf += time;
   return 0;
 }
 
@@ -295,30 +311,26 @@ char *fdate()
 
 int compute_displacements(void)
 {
-  int i;
-
 #ifdef TWO_LPT
-  int j;
-
   if (compute_second_derivatives(0.0, 0))
     return 1;
   if (compute_LPT_displacements(0))
     return 1;
 
-  for (i=0; i<3; i++)
-    for (j=0; j<MyGrids[0].total_local_size; j++)
-      second_derivatives[0][i+3][j]=second_derivatives[0][i][j];
+  for ( int i = 0; i < 3; i++ )
+    for (int j = 0; j < MyGrids[0].total_local_size; j++ )
+      second_derivatives[0][i+3][j] = second_derivatives[0][i][j];
 
-  for (i=0; i<3; i++)
-    VEL2_for_displ[i]=second_derivatives[0][i+3];
+  for ( int i = 0; i < 3; i++ )
+    VEL2_for_displ[i] = second_derivatives[0][i+3];
 
 #endif
 
   if (compute_first_derivatives(0.0, 0))
     return 1;
 
-  for (i=0; i<3; i++)
-    VEL_for_displ[i]=first_derivatives[0][i];
+  for ( int i = 0; i < 3; i++ )
+    VEL_for_displ[i] = first_derivatives[0][i];
 
   return 0;
 }

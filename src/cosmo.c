@@ -327,24 +327,28 @@ int initialize_cosmology()
       fprintf(fd,"# 2: cosmic time (Gyr)\n");
       fprintf(fd,"# 3: growth factor\n");
       fprintf(fd,"# 4: 2nd-order growth factor\n");
-      fprintf(fd,"# 5: dark energy EOS\n");
-      fprintf(fd,"# 6: proper distance (true Mpc)\n");
-      fprintf(fd,"# 7: d/dz of proper distance (true Mpc)\n");
+      fprintf(fd,"# 5: 3rd-order first growth factor\n");
+      fprintf(fd,"# 6: 3rd-order second growth factor\n");
+      fprintf(fd,"# 7: dark energy EOS\n");
+      fprintf(fd,"# 8: proper distance (true Mpc)\n");
+      fprintf(fd,"# 9: d/dz of proper distance (true Mpc)\n");
       fprintf(fd,"# SCALE-DEPENDENT QUANTITIES\n");
-      fprintf(fd,"# 8: scale (true Mpc)\n");
-      fprintf(fd,"# 9: mass variance\n");
-      fprintf(fd,"#10: d Log sigma^2 / d Log R\n");
-      fprintf(fd,"#11: k (true Mpc^-1)\n");
-      fprintf(fd,"#12: P(k)\n");
+      fprintf(fd,"#10: scale (true Mpc)\n");
+      fprintf(fd,"#11: mass variance\n");
+      fprintf(fd,"#12: d Log sigma^2 / d Log R\n");
+      fprintf(fd,"#13: k (true Mpc^-1)\n");
+      fprintf(fd,"#14: P(k)\n");
       fprintf(fd,"#\n");
       for (i=0; i<NBIN; i++)
 	{
 	  k=pow(10.,-4.0+(double)i/(double)NBIN*6.0);
-	  fprintf(fd," %lg %lg %lg %lg %lg %lg %lg %lg %lg %lg %lg %lg  %lg %lg\n",
+	  fprintf(fd," %lg %lg %lg %lg %lg %lg %lg %lg %lg %lg %lg %lg %lg %lg  %lg %lg\n",
 		  pow(10.,splineGrow->x[i]),
 		  pow(10.,splineTime->y[i]),
 		  pow(10.,splineGrow->y[i]),
+		  pow(10.,splineGrow2->y[i]),
 		  -pow(10.,splineGrow2->y[i]),
+		  pow(10.,splineGrow2->y[i]),
 		  (!params.simpleLambda ? -1 : splineEoS->y[i]),
 		  splineDist->y[i],
 		  splinedrdz->y[i],

@@ -371,6 +371,10 @@ int set_grids()
   MyGrids[0].GSglobal_x = params.GridSize[0];
   MyGrids[0].GSglobal_y = params.GridSize[1];
   MyGrids[0].GSglobal_z = params.GridSize[2];
+  
+  MyGrids[0].Ntotal = (unsigned long long)MyGrids[0].GSglobal_x * 
+    (unsigned long long)MyGrids[0].GSglobal_y * 
+    (unsigned long long)MyGrids[0].GSglobal_z;
 
   MyGrids[0].BoxSize = params.BoxSize_htrue;
   MyGrids[0].lower_k_cutoff=0.;
@@ -781,140 +785,71 @@ int set_plc()
 int set_subboxes()
 {
 
-  int i,j,k, i1,j1,k1, i2,j2,k2,NS2, NN,NN1,N1,N2,N3,ssafe;
-  double tdis,size,this,BytesPerParticle,FmaxBPP,FragG_BPP,FragP_BPP,
-    TotalNP,TotalNP_pertask,ratio,smallest,cc,MemPerTask;
+  int i,j,k, i1,j1,k1, NN,NN1,N1,N2,N3,surface,this,tt;
+  double size,sizeG,cc;
+  unsigned int TotalNP_pertask;
 
 #ifdef SCALE_DEPENDENT_GROWTH
   SDGM.flag=-1;
 #endif
 
-  /* typical displacement at zlast */
-  tdis = GrowingMode(outputs.zlast) * sqrt( DisplVariance(params.InterPartDist) );
-
   /* mass of the largest halo expected in the box */
   params.Largest=1.e18;
   cc=1./pow(params.BoxSize_htrue,3.0);
-
   double aa=AnalyticMassFunction(params.Largest,outputs.zlast);
   while (aa*params.Largest<cc)
     {
-      params.Largest*=0.99; 
+      params.Largest*=0.99;
       aa=AnalyticMassFunction(params.Largest,outputs.zlast);
     }
-
-  /* boundary layer */
   size=SizeForMass(params.Largest);
-  subbox.SafetyBorder = params.BoundaryLayerFactor * size;
-  subbox.safe = (int)(subbox.SafetyBorder/params.InterPartDist)+1;
+  sizeG=size/params.InterPartDist;
 
-  if (!ThisTask)
-    {
-      printf("\n");
-      printf("Determination of the boundary layer\n");
-      printf("   growing mode at z=%f: %f\n",outputs.zlast, GrowingMode( outputs.zlast ));
-      printf("   largest halo expected in this box at z=%f: %e Msun\n",
-	     outputs.zlast, params.Largest);
-      printf("   its Lagrangian size: %f Mpc\n",size);
-      printf("   typical displacement: %f \n",tdis);
-      printf("   the boundary layer will be %f, a factor of %f with respect to the typical displacement\n",
-	     subbox.SafetyBorder, subbox.SafetyBorder/tdis);
-    }
+  /*  
+      The number of loadable subbox particles is equal 
+      to the number allowed by the specified MaxMemPerParticle.
+      The boundary layer is set to its maximum value.
+  */
 
   /* finds the optimal number of sub-boxes to use for the fragmentation */
-  ssafe=2.*subbox.safe;
-  FmaxBPP = (double)sizeof(product_data) + 10.0*(double)sizeof(double) + 
-    (double)sizeof(int) * (double)NTasks / (double)MyGrids[0].GSglobal_z;
-  TotalNP = (double)MyGrids[0].GSglobal_x * (double)MyGrids[0].GSglobal_y * (double)MyGrids[0].GSglobal_z;
-  TotalNP_pertask = TotalNP/(double)NTasks;
+  TotalNP_pertask = (unsigned int)(MyGrids[0].Ntotal/(unsigned long long)NTasks);
+  surface=TotalNP_pertask;
+  NSlices=1;   // Qui ho spento il calcolo del numero di slice
+  for (k=1; k<=NTasks; k++)
+    for (j=1; j<=NTasks/k; j++)
+      for (i=1; i<=NTasks/k/j; i++)
+	/* the three indices must be exact divisors of the three grid lengths */
+	if (i*j*k==NTasks)
+	  {
+	    /* number of particles in the sub-box */
+	    N1 = find_length(MyGrids[0].GSglobal_x,i,0);
+	    N2 = find_length(MyGrids[0].GSglobal_y,j,0);
+	    N3 = find_length(MyGrids[0].GSglobal_z,k*NSlices,0);
 
-  FragP_BPP=(double)sizeof(product_data);
-  FragG_BPP=3.0*(double)sizeof(int)+(double)(sizeof(group_data) +sizeof(histories_data))/10.0;
-#ifdef PLC
-  FragG_BPP+=(double)sizeof(plcgroup_data)/10.;
-#endif
+	    this = (i>1? 2*(N2*N3) : 0) + 
+	      (j>1? 2*(N1*N3) : 0) +
+	      (k>1? 2*(N1*N2) : 0);
+	    tt=this;
+	    if (N1/2 < sizeG)
+	      this+=(int)((double)tt*pow(2*sizeG/(double)N1,2.0));
+	    if (N2/2 < sizeG)
+	      this+=(int)((double)tt*pow(2*sizeG/(double)N2,2.0));
+	    if (N3/2 < sizeG)
+	      this+=(int)((double)tt*pow(2*sizeG/(double)N3,2.0));
 
-  smallest=1.e10;
-  NSlices=0;
-
-  do
-    {
-      ++NSlices;
-
-      BytesPerParticle=1.e10;
-      for (k=1; k<=NTasks; k++)
-	for (j=1; j<=NTasks/k; j++)
-	  for (i=1; i<=NTasks/k/j; i++)
-	    /* the three indices must be exact divisors of the three grid lengths */
-	    if (i*j*k==NTasks)
+	    if (this<surface)
 	      {
-		/* number of particles in the sub-box */
-		N1 = find_length(MyGrids[0].GSglobal_x,i,0);
-		N2 = find_length(MyGrids[0].GSglobal_y,j,0);
-		N3 = find_length(MyGrids[0].GSglobal_z,k*NSlices,0);
-		if (N1<ssafe || N2<ssafe || N3<ssafe)
-		  continue;
-		NN = (N1 + (i==1? 0 : ssafe))
-		  *  (N2 + (j==1? 0 : ssafe)) 
-		  *  (N3 + (k*NSlices==1? 0 : ssafe));
-
-		ratio = (double)NN/TotalNP_pertask;
-		if (NSlices>1)
-		  this=(double)sizeof(product_data) + ratio * (FragP_BPP + FragG_BPP);
-		else		    
-		  this=( (double)sizeof(product_data) > ratio * FragG_BPP ?
-			 (double)sizeof(product_data) : ratio * FragG_BPP) +
-		    ratio * FragP_BPP;
-		if (this<FmaxBPP)
-		  this=FmaxBPP;
-		
-		if (this<smallest)
-		  {
-		    smallest=this;
-		    i2=i; j2=j; k2=k; NS2=NSlices;
-		  }
-
-		if (this < BytesPerParticle)
-		  {
-		    BytesPerParticle=this;
-		    NN1=NN;
-		    i1=i;
-		    j1=j;
-		    k1=k;
-		  }
+		surface=this;
+		i1=i; 
+		j1=j; 
+		k1=k; 
 	      }
-      if (BytesPerParticle>1000.)
-	break;
-    }
-  while (BytesPerParticle>params.MaxMemPerParticle);
-
-
-  if (BytesPerParticle>1000.)
-    {
-      if (!ThisTask)
-	{
-	  printf("ERROR: no possible division of sub-boxes found up to Nslices=%d\n", 
-		 NSlices);
-	  printf("lowest possible value of memory per particle is %f ",smallest);
-	  printf("found on a subdivision %d-%d-%d on %d slices\n",i2,j2,k2,NS2);
-	  printf("please decrease BoundaryLayerFactor or increase MaxMemPerParticle\n");
-	  fflush(stdout);
-	}
-      return 1;
-    }
+	  }
 
   subbox.nbox_x=i1;
   subbox.nbox_y=j1;
   subbox.nbox_z_thisslice=k1;
   subbox.nbox_z_allslices=k1*NSlices;
-
-  subbox.safe_x = (subbox.nbox_x>1 ? subbox.safe : 0);
-  subbox.safe_y = (subbox.nbox_y>1 ? subbox.safe : 0);
-  subbox.safe_z = (subbox.nbox_z_allslices>1 ? subbox.safe : 0);
-
-  subbox.pbc_x = (subbox.nbox_x==1);
-  subbox.pbc_y = (subbox.nbox_y==1);
-  subbox.pbc_z = (subbox.nbox_z_allslices==1);
 
   /* this will be mybox for the first slice */
   NN=subbox.nbox_y*subbox.nbox_z_thisslice;
@@ -927,11 +862,17 @@ int set_subboxes()
   subbox.Lgrid_y = find_length(MyGrids[0].GSglobal_y,subbox.nbox_y,subbox.mybox_y);
   subbox.Lgrid_z = find_length(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,subbox.mybox_z);
 
-  subbox.Lgwbl_x = subbox.Lgrid_x + 2*subbox.safe_x; 
+  subbox.pbc_x = (subbox.nbox_x==1);
+  subbox.pbc_y = (subbox.nbox_y==1);
+  subbox.pbc_z = (subbox.nbox_z_allslices==1);
+
+  subbox.safe_x = (subbox.pbc_x ? 0 : subbox.Lgrid_x/2);
+  subbox.safe_y = (subbox.pbc_y ? 0 : subbox.Lgrid_y/2);
+  subbox.safe_z = (subbox.pbc_z ? 0 : subbox.Lgrid_z/2);
+
+  subbox.Lgwbl_x = subbox.Lgrid_x + 2*subbox.safe_x;
   subbox.Lgwbl_y = subbox.Lgrid_y + 2*subbox.safe_y;
   subbox.Lgwbl_z = subbox.Lgrid_z + 2*subbox.safe_z;
-
-  subbox.Npart = subbox.Lgwbl_x * subbox.Lgwbl_y * subbox.Lgwbl_z;
 
   subbox.start_x = find_start(MyGrids[0].GSglobal_x,subbox.nbox_x,subbox.mybox_x);
   subbox.start_y = find_start(MyGrids[0].GSglobal_y,subbox.nbox_y,subbox.mybox_y);
@@ -941,9 +882,58 @@ int set_subboxes()
   subbox.stabl_y = subbox.start_y - subbox.safe_y;
   subbox.stabl_z = subbox.start_z - subbox.safe_z;
 
-  subbox.overhead=(double)subbox.Npart/(double)(subbox.Lgrid_x * subbox.Lgrid_y * subbox.Lgrid_z);
+  /* 
+     Npart: total number of particles in the whole sub-volume 
+     Ngood: total number of particles in the well reconstructed region
+     Npredpeaks: a guess of the maximum number of peaks in the subbox
+     Nalloc: number of particles for which memory has been allocated (set in allocate_main_memory)
+     Nstored: number of actually stored particles
+  */
 
-  MemPerTask  = BytesPerParticle * TotalNP_pertask / 1024. / 1024. / 1024.;
+  subbox.Npart = subbox.Lgwbl_x * subbox.Lgwbl_y * subbox.Lgwbl_z;
+  subbox.Ngood = subbox.Lgrid_x * subbox.Lgrid_y * subbox.Lgrid_z;
+  subbox.PredNpeaks = subbox.Ngood/5;
+  subbox.Nstored=0;
+  /* this is the size of frag_map*/
+  subbox.maplength = subbox.Npart/UINTLEN + (subbox.Npart%UINTLEN!=0);
+  subbox.Nalloc = set_main_memory(TotalNP_pertask);
+
+  /* messagges */
+  if (!ThisTask)
+    {
+      printf("\n");
+      printf("FRAGMENTATION:\n");
+      printf("Number of sub-boxes per dimension:     %d %d %d\n",subbox.nbox_x,subbox.nbox_y,subbox.nbox_z_allslices);
+      printf("Periodic boundary conditions:          %d %d %d\n",subbox.pbc_x,subbox.pbc_y,subbox.pbc_z);
+      printf("Core 0 will work on a grid:            %d %d %d\n",subbox.Lgwbl_x,subbox.Lgwbl_y,subbox.Lgwbl_z);
+      printf("The resolved box will be:              %d %d %d\n",subbox.Lgrid_x,subbox.Lgrid_y,subbox.Lgrid_z);
+      printf("Boundary layer:                        %d %d %d\n",subbox.safe_x,subbox.safe_y,subbox.safe_z);
+      printf("Number of total particles for core 0:  %d\n",subbox.Npart);
+      printf("Number of good particles for core 0:   %d\n",subbox.Ngood);
+      printf("Particles that core 0 will allocate:   %d\n",subbox.Nalloc);
+      printf("Largest allowed overhead:              %f\n",(float)subbox.Nalloc/(float)subbox.Ngood);
+      printf("Best number of surface particles: %d %f\n",surface,(float)surface/(float)TotalNP_pertask);  // POI SI LEVA
+      printf("Largest halo expected in this box at z=%f: %e Msun\n",
+  	     outputs.zlast, params.Largest);
+      printf("   its Lagrangian size: %f Mpc (%6.2f grid points)\n",size,sizeG);
+      if ((!subbox.pbc_x && sizeG>subbox.safe_x) || 
+	  (!subbox.pbc_y && sizeG>subbox.safe_y) || 
+	  (!subbox.pbc_z && sizeG>subbox.safe_z))
+	{
+	  printf("WARNING: the boundary layer on some dimension smaller than the predicted size of the largest halos,\n");
+	  printf("         the most massive halos may be inaccurate\n");
+	}
+//      printf("Allowed overhead: %f\n",subbox.overhead);
+    }
+
+
+  if (subbox.Nalloc<0)
+    {
+      printf("ERROR on Task %d: negative Nalloc, please increase MaxMemPerParticle\n",ThisTask);
+      return 1;
+    }
+
+  // AGGIUNGERE CHECK SU OVERHEAD, USCIRE SE E` <1
 
   /* NSlices>1 is incompatible with WriteSnapshot */
   if (NSlices>1 && params.WriteSnapshot)
@@ -969,35 +959,13 @@ int set_subboxes()
   mf.massinbin=(double*)calloc(mf.NBIN,sizeof(double));
   mf.massinbin_local=(double*)calloc(mf.NBIN,sizeof(double));
 
-  /* messages */
   if (!ThisTask)
     {
-      printf("\n");
-      printf("FRAGMENTATION:\n");
-      if (NSlices>1)
-	printf("The box will be fragmented in %d slices\n",NSlices);
-      else
-	printf("The box will be fragmented in one go\n");
-      printf("Number of sub-boxes per dimension: %d %d %d\n",subbox.nbox_x,subbox.nbox_y,subbox.nbox_z_allslices);
-      printf("Boundary layer (true Mpc):         %f\n",subbox.SafetyBorder);
-      printf("Boundary layer (gridpoints):       %d\n",subbox.safe);
-      printf("Core 0 will work on a grid:        %d %d %d\n",subbox.Lgwbl_x,subbox.Lgwbl_y,subbox.Lgwbl_z);
-      printf("Number of particles for core 0:    %d\n",subbox.Npart);
-      printf("The resolved box will be:          %d %d %d\n",subbox.Lgrid_x,subbox.Lgrid_y,subbox.Lgrid_z);
-      printf("Periodic boundary conditions:      %d %d %d\n",subbox.pbc_x,subbox.pbc_y,subbox.pbc_z);
-      printf("Required bytes per fft particle:   %f\n",BytesPerParticle);
-      printf("The overhead for fragmentation is: %f\n",subbox.overhead);
-      printf("Required memory per task:          %4.0fMb - Maxmem=%dMb\n", MemPerTask*1024.,params.MaxMem);
       printf("\nThe mass function will be computed from Log M=%f to Log M=%f (%d bins)\n",
       	     mf.mmin, mf.mmax, mf.NBIN);
+      printf("HO ABBASSATO DELTAM A 0.01, RIPORTARLO A 0.05!!!\n");
       printf("\n");
-    }
-
-  if (MemPerTask > params.MaxMem/1024.0)
-    {
-      if (!ThisTask)
-      printf("ERROR: your requirements overshoot the available memory per MPI task\n");
-      return 1;
+      fflush(stdout);      
     }
 
   return 0;

@@ -28,8 +28,63 @@
 
 //#define VERBOSE
 
-static size_t group_memory, frag_prods_memory, frag_memory, prods_memory, fft_memory,
-  all_memory, first_allocated_memory, fmax_memory, fields_memory;
+static size_t prods_memory, fields_memory, fft_memory, fmax_memory, first_allocated_memory,
+  group_memory, frag_prods_memory, frag_arrays_memory, frag_memory, all_memory;
+
+
+int set_main_memory(unsigned int TotalNP_pertask)
+{
+
+  /* here it computes the size of required memory 
+     and returns the number of allocatable particles for fragmentation */
+  int igrid;
+
+  prods_memory = MyGrids[0].total_local_size * sizeof(product_data);       // products
+  fields_memory=0;
+  for (igrid=0; igrid<Ngrids; igrid++)
+    fields_memory += MyGrids[igrid].total_local_size_fft * sizeof(double); // kdensity
+  for (igrid=0; igrid<Ngrids; igrid++)
+    fields_memory += 6 * MyGrids[igrid].total_local_size * sizeof(double); // second_derivatives
+#ifdef TWO_LPT
+  fields_memory += MyGrids[0].total_local_size_fft * sizeof(double);       // kvector_2LPT
+#ifdef THREE_LPT
+  fields_memory += 2 * MyGrids[0].total_local_size_fft * sizeof(double);   // kvector_3LPT_*
+#endif
+#endif
+  for (igrid=0; igrid<Ngrids; igrid++)
+    fields_memory += MyGrids[igrid].GSglobal_x * MyGrids[igrid].GSglobal_y * sizeof(unsigned int);  // seedtable
+  for (igrid=0, fft_memory=0; igrid<Ngrids; igrid++)
+    fft_memory += 2 * MyGrids[igrid].total_local_size_fft * sizeof(double);
+  first_allocated_memory = prods_memory + fields_memory;
+  fmax_memory = first_allocated_memory + fft_memory;
+
+  /* this is the memory needed to fragment the collapsed medium, including PLC data;
+     we assume that all peaks are at worst 1/10 of the particles in the well resolved region 
+     we add to it the memory for the fragmentation map */
+  group_memory = subbox.PredNpeaks * (sizeof(group_data) + sizeof(histories_data)) +
+    2*subbox.maplength*sizeof(unsigned int);
+#ifdef PLC
+  group_memory += plc.Nmax * sizeof(plcgroup_data);
+#endif
+
+  /* checks that the requested memory is sufficient for fmax */
+  /* the +2 is put to have a good margin for rounding of integer divisions etc. */
+  if (params.MaxMemPerParticle < (prods_memory + fields_memory + fft_memory)/TotalNP_pertask + 2)
+    {
+      if (!ThisTask)
+	{
+	  printf("ERROR: the memory specified in MaxMemPerParticle is insufficient to perform the run,\n");
+	  printf("       please raise it to at least %d\n", (int)(prods_memory + fields_memory + fft_memory)/TotalNP_pertask + 2);
+	}
+      return -1;
+    }
+  else
+    /* -1 is to compensate for remainder in integer division */
+    return (TotalNP_pertask*params.MaxMemPerParticle - prods_memory - group_memory)/
+      (sizeof(product_data) + 6 * sizeof(int)) -1;
+
+}
+
 
 int allocate_main_memory()
 {
@@ -87,13 +142,11 @@ int allocate_main_memory()
      first_allocated_memory:  memory needed by fmax, exluding fftw vectors
      fft_memory:              memory needed by fftw vectors
      fmax_memory:             memory needed by fmax, including fftw vectors 
-     frag_prods_memory:       memory needed by fragment products
+     frag_prods_memory:       memory needed by products in subbox space
+     frag_arrays_memory:      memory needed by fragment arrays
      group_memory:            memory needed by group catalogs
      frag_memory:             memory needed by fragment
      all_memory:              total memory needed
-
-     IN CASE DO_NOT_REALLOC IS DEFINED:
-     first_allocated_memory is large enough to include frag_memory, fftw vectors are an extra overhead
 
    */
 
@@ -101,7 +154,7 @@ int allocate_main_memory()
   size_t memory;
   struct map{
     int lz;
-    double oh,am,m1,m2,m3,m4,m5,m6,m7,m8;
+    double on,am,m1,m2,m3,m4,m5,m6,m7,m8,m9;
   } mymap;
   MPI_Status status;
 #ifdef VERBOSE
@@ -110,88 +163,38 @@ int allocate_main_memory()
   void *last;
 #endif
 
-  /* Computes total required memory */
-  prods_memory = MyGrids[0].total_local_size * sizeof(product_data);   // products
-  fields_memory=0;
-  for (igrid=0; igrid<Ngrids; igrid++)
-    fields_memory += MyGrids[igrid].total_local_size_fft * sizeof(double); // kdensity
-  for (igrid=0; igrid<Ngrids; igrid++)
-    fields_memory += 6 * MyGrids[igrid].total_local_size * sizeof(double); // second_derivatives
-#ifdef TWO_LPT
-  fields_memory += MyGrids[0].total_local_size_fft * sizeof(double);       // kvector_2LPT
-#ifdef THREE_LPT
-  fields_memory += 2 * MyGrids[0].total_local_size_fft * sizeof(double);   // kvector_3LPT_*
-#endif
-#endif
-  for (igrid=0; igrid<Ngrids; igrid++)
-    fields_memory += MyGrids[igrid].GSglobal_x * MyGrids[igrid].GSglobal_y * sizeof(unsigned int);  // seedtable
-  first_allocated_memory = prods_memory + fields_memory;
+  /* Fmax: prods_memory + fields_memory + fft_memory
+     fragment: prods_memory + frag_prods + frag_arrays + group_memory */
 
-  /* adds memory for fft vectors */
-  for (igrid=0, fft_memory=0; igrid<Ngrids; igrid++)
-    fft_memory += 2 * MyGrids[igrid].total_local_size_fft * sizeof(double);
+  frag_prods_memory  = subbox.Nalloc * sizeof(product_data);
+  frag_arrays_memory = subbox.Nalloc * 6 * sizeof(int);
 
-  fmax_memory = first_allocated_memory + fft_memory;
+  frag_memory = prods_memory + frag_prods_memory + frag_arrays_memory + group_memory;
 
-  /* this is the memory needed to fragment the collapsed medium, including PLC data;
-     we assume that all peaks are at worst 1/10 of the particles */
-  frag_prods_memory = subbox.Npart * sizeof(product_data);
-  group_memory = subbox.Npart * 3 * sizeof(int) + subbox.Npart/10 * 
-    (sizeof(group_data) + sizeof(histories_data));
-#ifdef PLC
-  group_memory += plc.Nmax * sizeof(plcgroup_data);
-#endif
-
-  if (NSlices>1)
-    frag_memory = prods_memory + frag_prods_memory + group_memory;
-  else
-    frag_memory = (group_memory > prods_memory ? group_memory : prods_memory) + frag_prods_memory;
-
-#ifdef DO_NOT_REALLOC
-  if (frag_memory > first_allocated_memory)
-    first_allocated_memory = frag_memory;
-  all_memory = first_allocated_memory + fft_memory;
-#else
-  /* this is the largest amount of memory needed by the code */
+  /* this is the largest amount of memory needed by the code (they are almost equal) */
   all_memory = (fmax_memory > frag_memory? fmax_memory : frag_memory);
-#endif
 
   /* map of memory usage for all tasks */
+
+  double overN=(double)(MyGrids[0].total_local_size>subbox.Ngood?MyGrids[0].total_local_size:subbox.Ngood);
   mymap.lz=MyGrids[0].GSlocal_z;
   mymap.am=(double)all_memory/MBYTE;
-  if (MyGrids[0].total_local_size)
-    {
-      mymap.oh=(double)subbox.Npart/(double)MyGrids[0].total_local_size;
-      mymap.m1=(double)prods_memory/(double)MyGrids[0].total_local_size;
-      mymap.m2=(double)fields_memory/(double)MyGrids[0].total_local_size;
-      mymap.m3=(double)fft_memory/(double)MyGrids[0].total_local_size;
-      mymap.m4=(double)fmax_memory/(double)MyGrids[0].total_local_size;
-      mymap.m5=(double)frag_prods_memory/(double)MyGrids[0].total_local_size;
-      mymap.m6=(double)group_memory/(double)MyGrids[0].total_local_size;
-      mymap.m7=(double)frag_memory/(double)MyGrids[0].total_local_size;
-      mymap.m8=(double)all_memory/(double)MyGrids[0].total_local_size;
-    }
-  else
-    {
-      mymap.oh=0.0;
-      mymap.m1=0.0;
-      mymap.m2=0.0;
-      mymap.m3=0.0;
-      mymap.m4=0.0;
-      mymap.m5=0.0;
-      mymap.m6=0.0;
-      mymap.m7=0.0;
-      mymap.m8=0.0;
-    }
+  mymap.on=overN;
+  mymap.m1=(double)prods_memory/overN;
+  mymap.m2=(double)fields_memory/overN;
+  mymap.m3=(double)fft_memory/overN;
+  mymap.m4=(double)fmax_memory/overN;
+  mymap.m5=(double)frag_prods_memory/overN;
+  mymap.m6=(double)frag_arrays_memory/overN;
+  mymap.m7=(double)group_memory/overN;
+  mymap.m8=(double)frag_memory/overN;
+  mymap.m9=(double)all_memory/overN;
 
   if (!ThisTask)
     {
       printf("\n");
       printf("Map of memory usage for all MPI tasks\n");
-#ifdef DO_NOT_REALLOC
-      printf("  NB: here we avoid reallocations\n");
-#endif
-      printf("Task N. planes    mem(MB) overhead   products   fields     ffts     fmax  frag pr.  groups fragment  total bytes per particle\n");
+      printf("Task N. planes   mem(MB)  Particles   products  fields   ffts    fmax  frag pr. frag ar. groups  frag   total bytes per particle\n");
     }
   for (i=0; i<NTasks; i++)
     {
@@ -199,8 +202,8 @@ int allocate_main_memory()
 	{
 	  if (i)
 	    MPI_Recv((void*)&mymap, sizeof(struct map), MPI_BYTE, i, 0, MPI_COMM_WORLD, &status);
-	  printf("%6d  %6d  %8.0f  %6.1f       %6.1f   %6.1f   %6.1f   %6.1f   %6.1f   %6.1f   %6.1f   %6.1f\n",
-		 i, mymap.lz, mymap.am, mymap.oh, mymap.m1, mymap.m2, mymap.m3, mymap.m4, mymap.m5, mymap.m6, mymap.m7, mymap.m8);
+	  printf("%6d  %6d  %8.0f  %9d    %6.1f  %6.1f  %6.1f  %6.1f  %6.1f  %6.1f  %6.1f  %6.1f  %6.1f\n",
+		 i, mymap.lz, mymap.am, (int)mymap.on, mymap.m1, mymap.m2, mymap.m3, mymap.m4, mymap.m5, mymap.m6, mymap.m7, mymap.m8, mymap.m9);
 	}
       else if (ThisTask==i)
 	MPI_Send((void*)&mymap, sizeof(struct map), MPI_BYTE, 0, 0, MPI_COMM_WORLD);
@@ -405,18 +408,11 @@ int deallocate_fft_vectors(int ThisGrid)
   return 0;
 }
 
-int reallocate_memory_for_fragmentation_1()
+int reallocate_memory_for_fragmentation()
 {
 
-  int PredNpeaks;
   size_t memory;
   void *tmp;
-#ifdef VERBOSE
-  size_t *bcast;
-  int bsize, s, n;
-  MPI_Status status;
-  void *last;
-#endif
 
   kdensity=0x0;
   density=0x0;
@@ -436,7 +432,6 @@ int reallocate_memory_for_fragmentation_1()
 
   /* products in the sub-box are stored in the memory that has been freed */
 
-#ifndef DO_NOT_REALLOC
   /* enlarge memory allocation if needed */
   if (frag_memory > first_allocated_memory)
     {
@@ -456,89 +451,38 @@ int reallocate_memory_for_fragmentation_1()
 	  return 1;
 	}
     }
-#endif
 
   /* the frag structure is located just after memory products */
-  if (NSlices>1)
-    {
-      frag = (product_data *)(main_memory + prods_memory);
-      memory=prods_memory+frag_prods_memory;
-    }
-  else
-    {
-      frag = (product_data *)(main_memory + (group_memory > prods_memory ? group_memory : prods_memory));
-      memory=0;
-    }
+  frag = (product_data *)(main_memory + prods_memory);
+  memory=prods_memory+frag_prods_memory;
 
-  /* QUESTO CREAVA PROBLEMI DI MEMORIA, BISOGNA CAPIRE PERCHE' */
-  /* for (i=0; i<frag_prods_memory; i++) */
-  /*   *((char*)frag+i)=0; */
 
-  PredNpeaks=subbox.Npart/10;
 
+  frag_pos = (int*)(main_memory+memory);
+  memory+=subbox.Nalloc*sizeof(int);
   indices = (int*)(main_memory+memory);
-  memory+=subbox.Npart*sizeof(int);
+  memory+=subbox.Nalloc*sizeof(int);
+  indicesY = (int*)(main_memory+memory);
+  memory+=subbox.Nalloc*sizeof(int);
+  sorted_pos = (int*)(main_memory+memory);
+  memory+=subbox.Nalloc*sizeof(int);
   group_ID = (int*)(main_memory+memory);
-  memory+=subbox.Npart*sizeof(int);
+  memory+=subbox.Nalloc*sizeof(int);
   linking_list = (int*)(main_memory+memory);
-  memory+=subbox.Npart*sizeof(int);
+  memory+=subbox.Nalloc*sizeof(int);
   groups = (group_data *)(main_memory + memory);
-  memory += PredNpeaks*sizeof(group_data);
+  memory += subbox.PredNpeaks*sizeof(group_data);
   wheretoplace_mycat = (void*)(main_memory + memory);
-  memory += PredNpeaks*sizeof(histories_data);
+  memory += subbox.PredNpeaks*sizeof(histories_data);
+  frag_map = (unsigned int*)(main_memory+memory);
+  memory+=subbox.maplength*sizeof(unsigned int);
+  frag_map_update = (unsigned int*)(main_memory+memory);
+  memory+=subbox.maplength*sizeof(unsigned int);
 #ifdef PLC
   plcgroups = (plcgroup_data *)(main_memory + memory);
   memory+=plc.Nmax*sizeof(plcgroup_data);
 #endif
 
-  return 0;
-}
-
-int reallocate_memory_for_fragmentation_2(int Npeaks)
-{
-  int i,PredNpeaks;
-#ifdef VERBOSE
-  size_t *bcast;
-  int bsize, s, n;
-  MPI_Status status;
-#endif
-
-
-  PredNpeaks=subbox.Npart/10;
-
-  /* the number of peaks was supposed to be at most 1/10 of the number of particles
-     (we need space for Npeaks+2 groups) */
-  if (Npeaks+2 > PredNpeaks)
-    {
-      printf("ERROR on task %d: surprisingly, the number of peaks %d exceeds Npart/10 (%d)\n",
-	     ThisTask,Npeaks,subbox.Npart/10);
-      fflush(stdout);
-      return 1;
-    }
-
-  if (!NSlices)
-    products=0x0;
-
-  /* initializes group memory */
-  for (i=0; i<subbox.Npart; i++)
-    *(indices+i)=i;
-
-  for (i=0; i<subbox.Npart; i++)
-    *(group_ID+i)=0;
-
-  for (i=0; i<subbox.Npart; i++)
-    *(linking_list+i)=0;
-
-  for (i=0; i<PredNpeaks*sizeof(group_data); i++)
-    *((char*)groups + i)=0;
-
-  for (i=0; i<PredNpeaks*sizeof(histories_data); i++)
-    *((char*)wheretoplace_mycat + i)=0;
-
-#ifdef PLC
-  for (i=0; i<plc.Nmax*sizeof(plcgroup_data); i++)
-    *((char*)plcgroups + i)=0;
-#endif
 
   return 0;
 }
