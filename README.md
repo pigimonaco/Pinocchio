@@ -1,7 +1,6 @@
-#### DEV BRANCH
+# DEV BRANCH
 
-## This branch is not for normal users
-## The code is undergoing a drastic development
+## This branch is not for normal users: the code is undergoing a drastic development, pls refer to master branch
 ## ---
 
 
