@@ -258,8 +258,8 @@ int allocate_main_memory(void)
     }
 
   // it tests than there is enough space to allocate all needed memory
-  main_memory=(char*)aligned_alloc(32, (all_memory + cubes_ordering_memory) * sizeof(char));
-  //main_memory = (char*)calloc(all_memory + cubes_ordering_memory,  sizeof(char));
+  //main_memory=(char*)aligned_alloc(32, (all_memory + cubes_ordering_memory) * sizeof(char));
+  main_memory = (char*)calloc(all_memory + cubes_ordering_memory,  sizeof(char));
   if (main_memory==0x0)
     {
       dprintf(VXERR, ThisTask, "ERROR on task %d: I cannot allocate memory\n",ThisTask);

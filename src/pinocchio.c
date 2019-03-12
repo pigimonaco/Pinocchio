@@ -162,7 +162,7 @@ int main(int argc, char **argv, char **envp)
 
       // <<<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>>>
 
-      if(1 == 0)
+      //if(1 == 0)
 	{
 	  // this has to be dropped in production
 	  // DEBUG
