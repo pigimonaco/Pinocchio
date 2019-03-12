@@ -37,7 +37,7 @@ int compute_mf(int iout)
 {
   /* computes the mass function of the groups and the analytic mass function */
 
-  int ibin,idummy;
+  int i,ibin,idummy;
   char filename[BLENGTH],lab1[10],lab2[10];
   double amass,x,dm,a,a1,a2,a3,m,D,mx,r,massvar,sigma,ni,fdummy;
   FILE *file;
@@ -49,7 +49,7 @@ int compute_mf(int iout)
   D=GrowingMode(outputs.z[iout]);
 
   /* sets counters to zero */
-  for (int i = 0; i < mf.NBIN; i++)
+  for (i=0; i<mf.NBIN; i++)
     {
       mf.ninbin_local[i]=0;
       mf.massinbin_local[i]=0.0;
@@ -58,15 +58,15 @@ int compute_mf(int iout)
     }
 
   /* constructs the histograms; this is done for all slices */
-  for (int i = FILAMENT+1; i <= ngroups; i++)
-    if (groups[i].point >= 0 && groups[i].good && groups[i].Mass >= params.MinHaloMass)
+  for (i=FILAMENT+1; i<=ngroups; i++)
+    if (groups[i].point>0 && groups[i].good && groups[i].Mass >= params.MinHaloMass)
       {
-	amass = groups[i].Mass*params.ParticleMass;
-        ibin  = (int)((log10(amass)-mf.mmin)/DELTAM);
+	amass=groups[i].Mass*params.ParticleMass;
+        ibin=(int)((log10(amass)-mf.mmin)/DELTAM);
         if (ibin < 0 || ibin >= mf.NBIN)
 	  continue;
         mf.ninbin_local[ibin]++;
-        mf.massinbin_local[ibin] += amass;
+        mf.massinbin_local[ibin]+=amass;
       }
 
   /* sums counters over all tasks */
@@ -82,7 +82,7 @@ int compute_mf(int iout)
 	  sprintf(filename,"pinocchio.%6.4f.%s.mf.save",outputs.z[iout],params.RunFlag);
 	  printf("[%s] Reading data from file  %s\n",fdate(),filename);
 	  file=fopen(filename,"r");
-	  for ( int i = 0; i < mf.NBIN; i++ )
+	  for (i=0; i<mf.NBIN; i++)
 	    {
 	      (void)fread(&idummy,sizeof(int),1,file);
 	      (void)fread(&fdummy,sizeof(double),1,file);
@@ -97,12 +97,12 @@ int compute_mf(int iout)
 	}
 
       /* if this is not the last slice, write the stored values */
-      if (ThisSlice < NSlices-1 )
+      if (ThisSlice<NSlices-1)
 	{
 	  sprintf(filename,"pinocchio.%6.4f.%s.mf.save",outputs.z[iout],params.RunFlag);
 	  printf("[%s] Storing data for slice %d into file %s\n",fdate(),ThisSlice,filename);
 	  file=fopen(filename,"w");
-	  for ( int i = 0; i < mf.NBIN; i++ )
+	  for (i=0; i<mf.NBIN; i++)
 	    {
 	      fwrite(&mf.ninbin[i],sizeof(int),1,file);
 	      fwrite(&mf.massinbin[i],sizeof(double),1,file);
@@ -174,7 +174,7 @@ int compute_mf(int iout)
 	    }
 	  fprintf(file,"#\n");
 
-	  for ( int i = 0; i < mf.NBIN; i++ )
+	  for (i=0; i<mf.NBIN; i++)
 	    {
 	      x=mf.mmin+(i+0.5)*DELTAM;
 	      m=pow(10.,x);
@@ -258,15 +258,15 @@ int write_catalog(int iout)
 {
   /* Writes the group catalogues */
 
-  int    ngood, nhalos;
-  double hfactor, GGrid[3], SGrid[3];
-  char   filename[BLENGTH], labh[3];
-  int    NTasksPerFile, collector, itask, ThisFile;
-  FILE   *file;
+  int igood,i,ngood,nhalos,j;
+  double hfactor,GGrid[3],SGrid[3];
+  char filename[BLENGTH],labh[3];
+  int NTasksPerFile,collector,itask,next,ThisFile;
   catalog_data *mycat;
+  FILE *file;
   MPI_Status status;
 #ifdef FORTRAN
-  int    idummy;
+  int idummy;
 #endif
 
   /* ordering of coordinates to accomodate for rotation caused by fft ordering */
@@ -283,12 +283,12 @@ int write_catalog(int iout)
       return 0;
     }
 
-  GGrid[0] = (double)MyGrids[0].GSglobal[_x_];
-  GGrid[1] = (double)MyGrids[0].GSglobal[_y_];
-  GGrid[2] = (double)MyGrids[0].GSglobal[_z_];
-  SGrid[0] = (double)subbox.stabl_x;
-  SGrid[1] = (double)subbox.stabl_y;
-  SGrid[2] = (double)subbox.stabl_z;
+  GGrid[0]=(double)MyGrids[0].GSglobal[_x_];
+  GGrid[1]=(double)MyGrids[0].GSglobal[_y_];
+  GGrid[2]=(double)MyGrids[0].GSglobal[_z_];
+  SGrid[0]=(double)subbox.stabl_x;
+  SGrid[1]=(double)subbox.stabl_y;
+  SGrid[2]=(double)subbox.stabl_z;
 
   NTasksPerFile=NTasks/params.NumFiles;
   ThisFile=ThisTask/NTasksPerFile;
@@ -302,14 +302,14 @@ int write_catalog(int iout)
 
   /* each processor builds the catalogue */
   nhalos=0;
-  for ( int i = FILAMENT+1, ngood = 0; i <= ngroups; i++ )
-     if (groups[i].point >= 0 && groups[i].good && 
+  for (i=FILAMENT+1, ngood=0; i<=ngroups; i++)
+     if (groups[i].point > 0 && groups[i].good && 
 	 groups[i].Mass >= params.MinHaloMass) 
        ngood++;
 
   /* space to store catalogs */
   mycat = (catalog_data *)wheretoplace_mycat;
-  if (ngood * sizeof(catalog_data) > subbox.PredNpeaks * sizeof(histories_data))
+  if (ngood * sizeof(catalog_data) > subbox.Npart/10*sizeof(histories_data))
     {
       printf("ERROR on task %d: surprisingly, memory reserved to mycat is insufficient in write_catalog\n",ThisTask);
       fflush(stdout);
@@ -318,15 +318,15 @@ int write_catalog(int iout)
 
   if (ngood)
     {
-      for ( int i=FILAMENT+1, igood=0; i<=ngroups; i++ )
-	if (groups[i].point >= 0 && groups[i].good && 
+      for (i=FILAMENT+1, igood=0; i<=ngroups; i++)
+	if (groups[i].point > 0 && groups[i].good && 
 	    groups[i].Mass >= params.MinHaloMass) 
 	  {
 	    set_obj(i,outputs.F[iout],&obj1);
 	    mycat[igood].name=groups[i].name;
 	    mycat[igood].n=groups[i].Mass;
 	    mycat[igood].M=groups[i].Mass*params.ParticleMass*hfactor;
-	    for ( int j = 0; j<3; j++ )
+	    for (j=0; j<3; j++)
 	      {
 		/* q and x are in sub-box coordinates, they are transformed
 		   to global box coordinates (forcing PBCs) */
@@ -393,7 +393,7 @@ int write_catalog(int iout)
 	      fprintf(file,"#\n");
 	    }
 	  if (ngood)
-	    for ( int igood = 0; igood < ngood; igood++ )
+	    for (igood=0; igood<ngood; igood++)
 	      fprintf(file," %12Lu %13.6e %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %12d\n",
 		      mycat[igood].name,
 		      mycat[igood].M,
@@ -429,7 +429,7 @@ int write_catalog(int iout)
 	  idummy=sizeof(catalog_data);
 #endif
 	  if (ngood)
-	    for ( int igood=0; igood < ngood; igood++ )
+	    for (igood=0; igood<ngood; igood++)
 	      {
 #ifdef FORTRAN
 		fwrite(&idummy,sizeof(int),1,file);
@@ -451,7 +451,7 @@ int write_catalog(int iout)
      while collector (allocates mycat and) receives the groups;
      finally collector writes mycat on the file 
   */
-  for (int next=1; next < NTasksPerFile; next++)
+  for (next=1; next<NTasksPerFile; next++)
     {
       itask=collector+next;
 
@@ -478,7 +478,7 @@ int write_catalog(int iout)
 	    
 	      if (params.CatalogInAscii)
 		{
-		  for (int igood = 0; igood < ngood; igood++ )
+		  for (igood=0; igood<ngood; igood++)
 		    fprintf(file," %12Lu %13.6e %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %12d\n",
 			    mycat[igood].name,
 			    mycat[igood].M,
@@ -492,7 +492,7 @@ int write_catalog(int iout)
 #ifdef FORTRAN
 		  idummy=sizeof(catalog_data);
 #endif
-		  for ( int igood = 0; igood < ngood; igood++)
+		  for (igood=0; igood<ngood; igood++)
 		    {
 #ifdef FORTRAN
 		      fwrite(&idummy,sizeof(int),1,file);
@@ -507,7 +507,7 @@ int write_catalog(int iout)
 	      nhalos+=ngood;
 	    }
 	}
-      else if (ThisTask == itask)
+      else if (ThisTask==itask)
 	{
 	  MPI_Send(&ngood, 1, MPI_INT, collector, 0, MPI_COMM_WORLD);
 	  if (ngood)
@@ -518,7 +518,7 @@ int write_catalog(int iout)
 
     }
   /* end of loop on tasks */
-  if (ThisTask == collector) 
+  if (ThisTask==collector) 
     {
       fclose(file);
       printf("[%s] Task %d has written %d halos on file %s\n",fdate(),ThisTask,nhalos,filename);
@@ -795,10 +795,10 @@ int write_histories(void)
 {
   /* writes merger histories at the end of the run */
 
-  int  commint[2], ntrees, nbranch_all, nbranch_tree, ntrees_global, nbranch_global,
-    ibranch, thisbranch, thistree;
+  int i, commint[2], ntrees, nbranch_all, nbranch_tree, ntrees_global, nbranch_global,
+    ibranch, thisbranch, thistree, itree;
   char filename[BLENGTH];
-  int  NTasksPerFile, collector, itask, ThisFile;
+  int NTasksPerFile,collector,itask,next,ThisFile;
   histories_data *mycat;
   FILE *file;
   MPI_Status status;
@@ -817,17 +817,17 @@ int write_histories(void)
   ThisFile=ThisTask/NTasksPerFile;
   collector=ThisFile*NTasksPerFile;
 
-  for (int i = 0; i <= ngroups; i++)
-    {
-      groups[i].trackT = 0;
-      groups[i].trackC = 0;
-    }
+  for (i=0; i<=ngroups; i++)
+    groups[i].trackT=0;
+  for (i=0; i<=ngroups; i++)
+    groups[i].trackC=0;
+
 
   /* each processor builds its catalogue */
 
   /* this loop counts the total number of branches in the local catalog */
   nbranch_all=ntrees=0;
-  for (int i = FILAMENT+1, nbranch_all=0;  i <= ngroups; i++)
+  for (i=FILAMENT+1, nbranch_all=0;  i<=ngroups; i++)
     if (groups[groups[i].halo_app].good &&                       /* if the halo belongs to a good group */
 	groups[groups[i].halo_app].Mass >= params.MinHaloMass)   /* and if its mass is large enough */
       nbranch_all++;
@@ -847,7 +847,7 @@ int write_histories(void)
       thisbranch=0;  /* this is the counter of the number of stored halos (branches) */
 
       /* loop on main halos */
-      for (int i = FILAMENT+1, ntrees=0;  i <= ngroups; i++)
+      for (i=FILAMENT+1, ntrees=0;  i<=ngroups; i++)
 	if (groups[i].halo_app==i &&               /* if this is a main halo */
 	    groups[i].good &&                      /* and if it is a good one */
 	    groups[i].Mass >= params.MinHaloMass)  /* and if its mass is large enough */
@@ -856,7 +856,7 @@ int write_histories(void)
 
 	    /* counts the number of branches in the tree */
 	    nbranch_tree=0;
-	    int next = i;
+	    next=i;
 	    do
 	      {
 		++nbranch_tree;
@@ -903,7 +903,7 @@ int write_histories(void)
       ntrees_global=ntrees;
       nbranch_global=nbranch_all;
     }
-  for ( int next = 1; next < NTasksPerFile; next++)
+  for (next=1; next<NTasksPerFile; next++)
     {
       itask=collector+next;
       if (ThisTask==collector)
@@ -998,7 +998,7 @@ int write_histories(void)
 	  thisbranch=0;
 	  if (params.CatalogInAscii)
 	    {
-	      for ( int itree = 0; itree < ntrees; itree++)
+	      for (itree=0; itree<ntrees; itree++)
 		{
 		  nbranch_tree=mycat[thisbranch].nick;
 		  fprintf(file,"#Tree %d, Nbranches=%d\n", thistree++, nbranch_tree);
@@ -1020,7 +1020,7 @@ int write_histories(void)
 	    }
 	  else
 	    {
-	      for (int itree = 0; itree < ntrees; itree++ )
+	      for (itree=0; itree<ntrees; itree++)
 		{
 		  nbranch_tree=mycat[thisbranch].nick;
 #ifdef FORTRAN
@@ -1057,7 +1057,7 @@ int write_histories(void)
      finally collector writes mycat on the file 
   */
 
-  for (int next = 1; next < NTasksPerFile; next++)
+  for (next=1; next<NTasksPerFile; next++)
     {
       itask=collector+next;
 
@@ -1082,7 +1082,7 @@ int write_histories(void)
 	      thisbranch=0;
 	      if (params.CatalogInAscii)
 		{
-		  for (int itree = 0; itree < ntrees; itree++ )
+		  for (itree=0; itree<ntrees; itree++)
 		    {
 		      nbranch_tree=mycat[thisbranch].nick;
 		      fprintf(file,"#Tree %d, Nbranches=%d\n", thistree++, nbranch_tree);
@@ -1104,7 +1104,7 @@ int write_histories(void)
 		}
 	      else
 		{
-		  for ( int itree=0; itree < ntrees; itree++ )
+		  for (itree=0; itree<ntrees; itree++)
 		    {
 		      nbranch_tree=mycat[thisbranch].nick;
 #ifdef FORTRAN

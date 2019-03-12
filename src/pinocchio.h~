@@ -61,8 +61,6 @@
 #define TWO_LPT
 #endif
 
-#define UINTLEN 32   // 8*sizeof(unsigned int)
-
 #define _x_ 0
 #define _y_ 1
 #define _z_ 2
@@ -124,13 +122,12 @@ typedef unsigned long long int UL;
 
 typedef struct
 {
-  double Fmax;
-  float Vmax[3], zacc;
-  int   Rmax;
+  int Rmax;
+  double Fmax, Vmax[3];
 #ifdef TWO_LPT
-  float Vmax_2LPT[3];
+  double Vmax_2LPT[3];
 #ifdef THREE_LPT
-  float Vmax_3LPT_1[3], Vmax_3LPT_2[3];
+  double Vmax_3LPT_1[3],Vmax_3LPT_2[3];
 #endif
 #endif
 } product_data __attribute__((aligned (ALIGN)));
@@ -169,13 +166,13 @@ extern smoothing_data Smoothing;
 extern int Ngrids;
 typedef struct
 {
-  unsigned int total_local_size, total_local_size_fft, off;
+  unsigned int total_local_size, total_local_size_fft;
+  unsigned int off;
   ptrdiff_t    GSglobal[3];
   ptrdiff_t    GSlocal[3];
   ptrdiff_t    GSstart[3];
   ptrdiff_t    GSlocal_k[3];
   ptrdiff_t    GSstart_k[3];
-  unsigned long long Ntotal;
   double       lower_k_cutoff, upper_k_cutoff, norm, BoxSize, CellSize;
   pfft_plan    forward_plan, reverse_plan;
 } grid_data;
@@ -201,7 +198,7 @@ typedef struct
     StartingzForPLC, LastzForPLC, InputSpectrum_UnitLength_in_cm, WDM_PartMass_in_kev, 
     BoundaryLayerFactor, Largest, MaxMemPerParticle, PLCAperture,
     PLCCenter[3], PLCAxis[3];
-  char RunFlag[BLENGTH],DataDir[BLENGTH],TabulatedEoSfile[BLENGTH],ParameterFile[BLENGTH],
+  char RunFlag[BLENGTH-50],DataDir[BLENGTH],TabulatedEoSfile[BLENGTH],ParameterFile[BLENGTH],
     OutputList[BLENGTH],FileWithInputSpectrum[BLENGTH];
   int GridSize[3],WriteRmax, WriteFmax, WriteVmax, 
     CatalogInAscii, DoNotWriteCatalogs, DoNotWriteHistories, WriteSnapshot, 
@@ -224,7 +221,7 @@ extern output_data outputs;
 
 typedef struct
 {
-  unsigned int Npart, Ngood, Nalloc, Nstored, PredNpeaks, maplength;  
+  unsigned int safe, Npart;
   int nbox_x,  nbox_y,  nbox_z_thisslice, nbox_z_allslices;
   int mybox_x, mybox_y, mybox_z;
   int Lgrid_x, Lgrid_y, Lgrid_z; 
@@ -233,14 +230,14 @@ typedef struct
   int stabl_x, stabl_y, stabl_z;
   int safe_x,  safe_y,  safe_z;
   int pbc_x,   pbc_y,   pbc_z;
+  double SafetyBorder, overhead;
 } subbox_data;
 extern subbox_data subbox;
 
 typedef struct
 {
-  double init, total, dens, fft, coll, vel, lpt, fmax, distr, sort, group, frag, io,
-    ell, invcoll, deriv, mem_transf, partial, set_subboxes, set_plc,
-    memory_allocation, fft_initialization
+  double init,total, dens, fft, coll, invcoll, ell, vel, lpt, fmax, distr, sort, group, frag, io,
+    deriv, mem_transf, partial, set_subboxes, set_plc, memory_allocation, fft_initialization
 #ifdef PLC
     ,plc
 #endif
@@ -253,13 +250,13 @@ extern int WindowFunctionType;
 typedef struct
 {
   int    Mass;
-  float Pos[3];
-  float Vel[3];
+  double Pos[3];
+  double Vel[3];
 #ifdef TWO_LPT
-  float Vel_2LPT[3];
+  double Vel_2LPT[3];
 #ifdef THREE_LPT
-  float Vel_3LPT_1[3];
-  float Vel_3LPT_2[3];
+  double Vel_3LPT_1[3];
+  double Vel_3LPT_2[3];
 #endif
 #endif
   int    ll, halo_app, mass_at_merger, merged_with, point, bottom, good;
@@ -299,8 +296,7 @@ extern plcgroup_data *plcgroups;
 
 extern char date_string[25];
 
-extern int *frag_pos,*indices,*indicesY,*sorted_pos,*group_ID,*linking_list;
-extern unsigned int *frag_map, *frag_map_update;
+extern int *indices,*group_ID,*linking_list;
 extern int NSlices,ThisSlice;
 
 /* fragmentation parameters */
@@ -326,7 +322,7 @@ typedef struct
   double zme, zpe, zap;
 }  histories_data;
 
-#define DELTAM 0.01 // LEVARE!!
+#define DELTAM 0.05
 
 typedef struct
 {
@@ -360,10 +356,11 @@ void dump_cvector(double*, int, int, ptrdiff_t *, ptrdiff_t *,  char *, int);
 void dump_rvector(double*, int, ptrdiff_t *, ptrdiff_t *,  char *, int);
 
 /* prototypes for functions defined in allocations.c */
-int set_main_memory(unsigned int);
 int allocate_main_memory(void);
 int deallocate_fft_vectors(int);
-int reallocate_memory_for_fragmentation();
+int reallocate_memory_for_fragmentation_1();
+int reallocate_memory_for_fragmentation_2(int);
+
 
 /* prototypes for functions defined in GenIC.c */
 int GenIC(int);
@@ -383,7 +380,6 @@ int write_density(int);
 /* prototypes in write_snapshot.c */
 int write_snapshot(int);
 int write_LPT_snapshot(double);
-int write_timeless_snapshot(void);
 
 /* prototypes for functions defined in cosmo.c */
 int initialize_cosmology();
@@ -436,14 +432,9 @@ int distribute(void);
 
 /* prototypes for functions defined in fragment.c */
 int fragment(void);
-int get_mapup_bit(unsigned int);
-int get_map_bit(int, int, int);
-void set_mapup_bit(int, int, int);
 
 /* prototypes for functions defined in build_groups.c */
 int build_groups(int);
-int quick_build_groups(int);
-int update_map(int *);
 
 #ifdef SCALE_DEPENDENT_GROWTH
 int read_power_table_from_CAMB(void);

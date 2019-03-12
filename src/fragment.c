@@ -328,8 +328,8 @@ int fragment()
 
       /* next slice */
       subbox.mybox_z += subbox.nbox_z_thisslice;
-      subbox.start_z = find_start(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,subbox.mybox_z);
-      subbox.Lgrid_z = find_length(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,subbox.mybox_z);
+      subbox.start_z = find_start( MyGrids[0].GSglobal[_z_], subbox.nbox_z_allslices, subbox.mybox_z);
+      subbox.Lgrid_z = find_length(MyGrids[0].GSglobal[_z_], subbox.nbox_z_allslices, subbox.mybox_z);
       subbox.stabl_z = subbox.start_z - subbox.safe_z;
 
     }

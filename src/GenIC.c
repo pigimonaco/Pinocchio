@@ -1,5 +1,5 @@
 /*****************************************************************
- *                        PINOCCHIO  V4.1                        *
+ *                        PINOCCHI0  V4.0                        *
  *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
  *****************************************************************
  
@@ -44,262 +44,325 @@
 
 #include "pinocchio.h"
 
-//#define DEBUG
+//#define DPRINT
 
-int GenIC(int ThisGrid)
-{
-  int i, j, k, ii, jj;
-  int Nmesh, Nsample, Local_nx, Local_x_start, VectorLength;
-  double Box, fac;
-  double kvec[3], kmag, kmag2, p_of_k;
-  double delta, phase, ampl;
-
-#ifdef DEBUG
-  FILE *numbers;
-  char filename[300];
+#ifdef DPRINT
+#define Dprintf(...) printf(__VA_ARGS__);
+#else
+#define Dprintf(...)
 #endif
 
 
-  Local_nx      = MyGrids[ThisGrid].GSlocal_k_y;
-  Local_x_start = MyGrids[ThisGrid].GSstart_k_y;
-  VectorLength  = MyGrids[ThisGrid].total_local_size_fft;
-  Nmesh         = MyGrids[ThisGrid].GSglobal_x;
-  Nsample       = MyGrids[ThisGrid].GSglobal_x;
-  Box           = MyGrids[ThisGrid].BoxSize;
+#define GRID MyGrids[ThisGrid]
+
+int GenIC(int ThisGrid)
+{
+  int           i, j, k;
+  int           Nmesh, Nsample, VectorLength;
+  int           local_n[3], local_start[3];
+  double        Box, fac;
+  unsigned int *SEEDTABLE;
+
+  SEEDTABLE = (unsigned int*) malloc( sizeof(unsigned int) * GRID.GSglobal[_x_] * GRID.GSglobal[_y_]);
+
+  
+  /* local_n[0]     = GRID.GSlocal_k[_y_]; */
+  /* local_start[0] = GRID.GSstart_k[_y_]; */
+  
+  /* local_n[1]     = GRID.GSlocal_k[_x_]; */
+  /* local_start[1] = GRID.GSstart_k[_x_]; */
+
+  local_n[0]     = GRID.GSlocal_k[_x_];
+  local_start[0] = GRID.GSstart_k[_x_];
+  
+  local_n[1]     = GRID.GSlocal_k[_y_];
+  local_start[1] = GRID.GSstart_k[_y_];
+
+  local_n[2]     = GRID.GSlocal_k[_z_];
+  local_start[2] = GRID.GSstart_k[_z_];
+  
+  VectorLength   = GRID.total_local_size_fft;
+  Nmesh          = GRID.GSglobal[_x_];
+  Nsample        = GRID.GSglobal[_x_];
+  Box            = GRID.BoxSize;
 
   fac = pow(1./Box,1.5);
-
+  
+  Dprintf(" Task %d: %d -> %d | %d -> %d | %d -> %d | %d %g | %g %g %g %g\n", ThisTask,
+	  local_start[0], local_start[0]+local_n[0],
+	  local_start[1], local_start[1]+local_n[1],
+	  local_start[2], local_start[2]+local_n[2],
+	  VectorLength, fac,
+	  PowerSpectrum(0.0001),
+	  PowerSpectrum(0.001),
+	  PowerSpectrum(0.01),
+	  PowerSpectrum(0.1));
+  
   gsl_rng_set(random_generator, params.RandomSeed);
 
   for(i = 0; i < Nmesh / 2; i++)
     {
       for(j = 0; j < i; j++)
-	seedtable[ThisGrid][i * Nmesh + j] = 0x7fffffff * gsl_rng_uniform(random_generator);
+	SEEDTABLE[i * Nmesh + j] = 0x7fffffff * gsl_rng_uniform(random_generator);
 
       for(j = 0; j < i + 1; j++)
-	seedtable[ThisGrid][j * Nmesh + i] = 0x7fffffff * gsl_rng_uniform(random_generator);
+	SEEDTABLE[j * Nmesh + i] = 0x7fffffff * gsl_rng_uniform(random_generator);
 
       for(j = 0; j < i; j++)
-	seedtable[ThisGrid][(Nmesh - 1 - i) * Nmesh + j] = 0x7fffffff * gsl_rng_uniform(random_generator);
+	SEEDTABLE[(Nmesh - 1 - i) * Nmesh + j] = 0x7fffffff * gsl_rng_uniform(random_generator);
 
       for(j = 0; j < i + 1; j++)
-	seedtable[ThisGrid][(Nmesh - 1 - j) * Nmesh + i] = 0x7fffffff * gsl_rng_uniform(random_generator);
+	SEEDTABLE[(Nmesh - 1 - j) * Nmesh + i] = 0x7fffffff * gsl_rng_uniform(random_generator);
 
       for(j = 0; j < i; j++)
-	seedtable[ThisGrid][i * Nmesh + (Nmesh - 1 - j)] = 0x7fffffff * gsl_rng_uniform(random_generator);
+	SEEDTABLE[i * Nmesh + (Nmesh - 1 - j)] = 0x7fffffff * gsl_rng_uniform(random_generator);
 
       for(j = 0; j < i + 1; j++)
-	seedtable[ThisGrid][j * Nmesh + (Nmesh - 1 - i)] = 0x7fffffff * gsl_rng_uniform(random_generator);
+	SEEDTABLE[j * Nmesh + (Nmesh - 1 - i)] = 0x7fffffff * gsl_rng_uniform(random_generator);
 
       for(j = 0; j < i; j++)
-	seedtable[ThisGrid][(Nmesh - 1 - i) * Nmesh + (Nmesh - 1 - j)] = 0x7fffffff * gsl_rng_uniform(random_generator);
+	SEEDTABLE[(Nmesh - 1 - i) * Nmesh + (Nmesh - 1 - j)] = 0x7fffffff * gsl_rng_uniform(random_generator);
 
       for(j = 0; j < i + 1; j++)
-	seedtable[ThisGrid][(Nmesh - 1 - j) * Nmesh + (Nmesh - 1 - i)] = 0x7fffffff * gsl_rng_uniform(random_generator);
+	SEEDTABLE[(Nmesh - 1 - j) * Nmesh + (Nmesh - 1 - i)] = 0x7fffffff * gsl_rng_uniform(random_generator);
     }
+  
+  gsl_rng_set(random_generator, params.RandomSeed);
 
-
-  /* the vector is initialized to zero */
+  // the vector is initialized to zero
   for (i = 0; i < VectorLength; i++)
     kdensity[ThisGrid][i]=0.;
 
-#ifdef DEBUG
-  sprintf(filename,"random_numbers_pin.%d",ThisTask);
-  numbers=fopen(filename,"w");
-#endif
 
-  /* this is the main loop on grid modes */
-  for(i = 0; i < Nmesh; i++)
+  int    ii, jj, kk, RR;
+  int    iii, jjj;
+  int    addr, addr_j, Nmesh_2, Nmesh_odd;
+  double sign;
+  double kvec[3];
+  double delta, phase, ampl;
+
+  double p_of_k, kmag, kmag2_i, kmag2_ij, kmag2_local;
+  
+  gsl_rng *k0_generator;
+  
+  Nmesh_2   = Nmesh / 2;
+  Nmesh_odd = (Nmesh % 2);  
+
+  // a second random generator, used on the plane k = 0
+  
+  k0_generator = gsl_rng_alloc(gsl_rng_ranlxd1);
+
+  
+  // this is the main loop on grid modes
+  for(i = 0; i < local_n[_x_]; i++)
     {
-      ii = Nmesh - i;
-      if(ii == Nmesh)
-	ii = 0;
-      if((i >= Local_x_start && i < (Local_x_start + Local_nx)) ||
-	 (ii >= Local_x_start && ii < (Local_x_start + Local_nx)))
+
+      // ii is the x grid coordinate
+      ii = local_start[_x_] + i;
+      if(ii == Nmesh_2)
+	continue;
+      
+      if(ii < Nmesh_2)
+	kvec[0] = ii * 2 * PI / Box;
+      else
+	kvec[0] = -(Nmesh - ii) * 2 * PI / Box;
+
+      kmag2_i = kvec[0] * kvec[0];
+      iii = ii;
+      
+      
+      for(j = 0; j < local_n[_y_]; j++)	    
 	{
-	  for(j = 0; j < Nmesh; j++)
+
+	  // jj is the y grid coordinate
+	  jj = local_start[_y_] + j;
+	  if(jj == Nmesh_2)
+	    continue;
+	  jjj = jj;
+	  
+	  if(jj < Nmesh_2)
+	    kvec[1] = jj * 2 * PI / Box;
+	  else
+	    kvec[1] = -(Nmesh - jj) * 2 * PI / Box;
+
+	  kmag2_ij = kmag2_i + kvec[1] * kvec[1];
+
+
+	  // initialize the random generator with the seed found in the
+	  // seedtable at the (i,j) coordinate in grid coordinates
+	  gsl_rng_set(random_generator, SEEDTABLE[ii * Nmesh + jj]);
+
+
+	  // since the chain of random numbers is subsequent, to
+	  // reproduce all the time the same sequence, this
+	  // process must generate all the random numbers on the
+	  // k column that are below its starting k coordinate
+	  if(local_start[_z_] > 0)
+	    for(RR = 0; RR < local_start[_z_]; RR++)
+	      {
+		phase = gsl_rng_uniform(random_generator);
+		do
+		  phase = gsl_rng_uniform(random_generator);
+		while(phase == 0);
+	      }
+
+	  // inner loop
+	  for(k = 0; (k < local_n[_z_]) && (k+local_start[_z_] < Nmesh_2); k++)
 	    {
-	      if(i < Nmesh / 2)
-		kvec[0] = i * 2 * PI / Box;
+	      // kk is the z grid coordinate
+	      kk = local_start[_z_] + k;
+
+	      // generate phase and amplitude
+	      phase = gsl_rng_uniform(random_generator) * 2 * PI;
+	      do
+		ampl = gsl_rng_uniform(random_generator);
+	      while(ampl == 0);	      	      
+
+	      // blind points on the cube
+	      if(ii == 0 && jj == 0 && kk == 0)
+		continue;
+	      if(kk == Nmesh_2)
+		continue;
+	      
+	      if(kk < Nmesh_2)
+		kvec[2] = kk * 2 * PI / Box;
 	      else
-		kvec[0] = -(Nmesh - i) * 2 * PI / Box;
+		kvec[2] = -(Nmesh - kk) * 2 * PI / Box;
 
-	      if(j < Nmesh / 2)
-		kvec[1] = j * 2 * PI / Box;
-	      else
-		kvec[1] = -(Nmesh - j) * 2 * PI / Box;
+	      kmag2_local = kmag2_ij + kvec[2] * kvec[2];
+	      kmag = sqrt(kmag2_local);
 
-	      gsl_rng_set(random_generator, seedtable[ThisGrid][i * Nmesh + j]);
+	      if(kmag * Box / (2 * PI) > NYQUIST * Nsample / 2)
+		continue;		  	      
 
-	      for(k = 0; k < Nmesh / 2; k++)
+	      p_of_k = PowerSpectrum(kmag);	      
+
+	      sign = 1.0;	      
+	      addr_j = j;	     
+
+	      // special simmetries on the plane k = 0
+	      if( kk == 0 )
 		{
-		  if(k < Nmesh / 2)
-		    kvec[2] = k * 2 * PI / Box;
-		  else
-		    kvec[2] = -(Nmesh - k) * 2 * PI / Box;
 
-		  phase = gsl_rng_uniform(random_generator) * 2 * PI;
-		  do
-		    ampl = gsl_rng_uniform(random_generator);
-		  while(ampl == 0);
-
-		  if(i == Nmesh / 2 || j == Nmesh / 2 || k == Nmesh / 2)
+		  // some points are left empty
+		  if( (ii == 0) && (jj == Nmesh_2 || jj == Nmesh_2 + Nmesh_odd) )
 		    continue;
-		  if(i == 0 && j == 0 && k == 0)
+		  if( (ii == Nmesh_2 + Nmesh_odd) )
 		    continue;
 
-		  kmag2 = kvec[0] * kvec[0] + kvec[1] * kvec[1] + kvec[2] * kvec[2];
-		  kmag = sqrt(kmag2);
-
-		  if(kmag * Box / (2 * PI) > NYQUIST * Nsample / 2)
-		    continue;
-
-		  p_of_k = PowerSpectrum(kmag);
-#ifndef NO_RANDOM_MODULES
-		  p_of_k *= -log(ampl);
-#endif
-		  delta = fac * sqrt(p_of_k);
-
-		  if(k > 0)
+		  // the helf-plane for ii > Nmesh_2 takes the seeds
+		  // from points in the other half-plane
+		  if( (ii > Nmesh_2) ||
+		      ( ii == 0 && jj > Nmesh/2) )
 		    {
-		      if(i >= Local_x_start && i < (Local_x_start + Local_nx))
-			{
+		      // simmetries on j
+		      jjj = Nmesh -jj;
+		      if(jjj == Nmesh)
+			jjj = 0;
 
-			  kdensity[ThisGrid][2*(((i - Local_x_start) * Nmesh + j) * (Nmesh / 2 + 1) + k)  ] =  delta * cos(phase);
-			  kdensity[ThisGrid][2*(((i - Local_x_start) * Nmesh + j) * (Nmesh / 2 + 1) + k)+1] =  delta * sin(phase);
-			  
-#ifdef DEBUG
-			  fprintf(numbers,"%6d %6d %6d %6d %12f %12f %20g %20g %12f %12f\n",i,ii,j,k,phase/2/PI,ampl,
-				  kdensity[ThisGrid][2*(((i - Local_x_start) * Nmesh + j) * (Nmesh / 2 + 1) + k)  ],
-				  kdensity[ThisGrid][2*(((i - Local_x_start) * Nmesh + j) * (Nmesh / 2 + 1) + k)+1], kmag, PowerSpectrum(kmag));
-#endif
+		      if(Nmesh_odd && jj == Nmesh_2+1)
+			{
+			  jjj = Nmesh_2+1;
+			  addr_j = Nmesh_2;
 			}
 
-		      /*  ORIGINAL
-			for(axes = 0; axes < 3; axes++)
-			{
-			cdisp[axes][((i - Local_x_start) * Nmesh + j) * (Nmesh / 2 + 1) + k].re =
-			-kvec[axes] / kmag2 * delta * sin(phase);
-			cdisp[axes][((i - Local_x_start) * Nmesh + j) * (Nmesh / 2 + 1) + k].im =
-			kvec[axes] / kmag2 * delta * cos(phase);
-			}
-		      */
+		      // simmetries on i
+		      if(ii > Nmesh_2)
+			iii = Nmesh - ii;
+		      
+		      sign = -1.0;
+
+		      // re-initialize the spare random generator to the right seed
+		      gsl_rng_set(k0_generator, SEEDTABLE[iii * Nmesh + jjj]);
+		      phase = gsl_rng_uniform(k0_generator) * 2 * PI;
+		      do
+			ampl = gsl_rng_uniform(k0_generator);
+		      while(ampl == 0);
 		    }
-		  else	/* k=0 plane needs special treatment */
-		    {
-		      if(i == 0)
-			{
-			  if(j >= Nmesh / 2)
-			    continue;
-			  else
-			    {
-			      if(i >= Local_x_start && i < (Local_x_start + Local_nx))
-				{
-				  jj = Nmesh - j;	/* note: j!=0 surely holds at this point */
-				  
-				  kdensity[ThisGrid][2*(((i - Local_x_start) * Nmesh + j) * (Nmesh / 2 + 1) + k)  ] = delta * cos(phase);
-				  kdensity[ThisGrid][2*(((i - Local_x_start) * Nmesh + j) * (Nmesh / 2 + 1) + k)+1] = delta * sin(phase);
-
-				  kdensity[ThisGrid][2*(((i - Local_x_start) * Nmesh + jj) * (Nmesh / 2 + 1) + k)  ] = delta * cos(phase);
-				  kdensity[ThisGrid][2*(((i - Local_x_start) * Nmesh + jj) * (Nmesh / 2 + 1) + k)+1] = -delta * sin(phase);
-#ifdef DEBUG
-				  fprintf(numbers,"%6d %6d %6d %6d %12f %12f %20g %20g %12f %12f\n",i,ii,j,k,phase/2/PI,ampl,
-					  kdensity[ThisGrid][2*(((i - Local_x_start) * Nmesh + j) * (Nmesh / 2 + 1) + k)  ],
-					  kdensity[ThisGrid][2*(((i - Local_x_start) * Nmesh + j) * (Nmesh / 2 + 1) + k)+1], kmag, PowerSpectrum(kmag));
-
-				  fprintf(numbers,"%6d %6d %6d %6d %12f %12f %20g %20g %12f %12f\n",i,ii,jj,k,phase/2/PI,ampl,
-					  kdensity[ThisGrid][2*(((i - Local_x_start) * Nmesh + jj) * (Nmesh / 2 + 1) + k)  ],
-					  kdensity[ThisGrid][2*(((i - Local_x_start) * Nmesh + jj) * (Nmesh / 2 + 1) + k)+1], kmag, PowerSpectrum(kmag));
-#endif
-
-				  /*  ORIGINAL
-				    for(axes = 0; axes < 3; axes++)
-				    {
-				    cdisp[axes][((i - Local_x_start) * Nmesh + j) * (Nmesh / 2 + 1) + k].re =
-				    -kvec[axes] / kmag2 * delta * sin(phase);
-				    cdisp[axes][((i - Local_x_start) * Nmesh + j) * (Nmesh / 2 + 1) + k].im =
-				    kvec[axes] / kmag2 * delta * cos(phase);
-					  
-				    cdisp[axes][((i - Local_x_start) * Nmesh + jj) * (Nmesh / 2 + 1) + k].re =
-				    -kvec[axes] / kmag2 * delta * sin(phase);
-				    cdisp[axes][((i - Local_x_start) * Nmesh + jj) * (Nmesh / 2 + 1) + k].im =
-				    -kvec[axes] / kmag2 * delta * cos(phase);
-				    }
-				  */
-				}
-			    }
-			}
-		      else	/* here comes i!=0 : conjugate can be on other processor! */
-			{
-			  if(i >= Nmesh / 2)
-			    continue;
-			  else
-			    {
-			      /* ii has already been assigned 
-			      ii = Nmesh - i;
-			      if(ii == Nmesh)
-				ii = 0;
-			      */
-			      jj = Nmesh - j;
-			      if(jj == Nmesh)
-				jj = 0;
-
-			      if(i >= Local_x_start && i < (Local_x_start + Local_nx))
-				{
-
-				  kdensity[ThisGrid][2*(((i - Local_x_start) * Nmesh + j) * (Nmesh / 2 + 1) + k)  ] = delta * cos(phase);
-				  kdensity[ThisGrid][2*(((i - Local_x_start) * Nmesh + j) * (Nmesh / 2 + 1) + k)+1] = delta * sin(phase);
-#ifdef DEBUG				  
-				  fprintf(numbers,"%6d %6d %6d %6d %12f %12f %20g %20g %12f %12f\n",i,ii,j,k,phase/2/PI,ampl,
-					  kdensity[ThisGrid][2*(((i - Local_x_start) * Nmesh + j) * (Nmesh / 2 + 1) + k)  ],
-					  kdensity[ThisGrid][2*(((i - Local_x_start) * Nmesh + j) * (Nmesh / 2 + 1) + k)+1], kmag, PowerSpectrum(kmag));
-#endif
-				}
-
-			      /*  ORIGINAL
-				for(axes = 0; axes < 3; axes++)
-				{
-				cdisp[axes][((i - Local_x_start) * Nmesh + j) * (Nmesh / 2 + 1) + k].re =
-				-kvec[axes] / kmag2 * delta * sin(phase);
-				cdisp[axes][((i - Local_x_start) * Nmesh + j) * (Nmesh / 2 + 1) + k].im =
-				kvec[axes] / kmag2 * delta * cos(phase);
-				}
-			      */
-
-			      if(ii >= Local_x_start && ii < (Local_x_start + Local_nx))
-				{
-				  
-				  kdensity[ThisGrid][2*(((ii - Local_x_start) * Nmesh + jj) * (Nmesh / 2 + 1) + k)  ] = delta * cos(phase);
-				  kdensity[ThisGrid][2*(((ii - Local_x_start) * Nmesh + jj) * (Nmesh / 2 + 1) + k)+1] = -delta * sin(phase);
-				  
-#ifdef DEBUG
-				  fprintf(numbers,"%6d %6d %6d %6d %12f %12f %20g %20g %12f %12f\n",ii,i,jj,k,phase/2/PI,ampl,
-					  kdensity[ThisGrid][2*(((ii - Local_x_start) * Nmesh + jj) * (Nmesh / 2 + 1) + k)  ],
-					  kdensity[ThisGrid][2*(((ii - Local_x_start) * Nmesh + jj) * (Nmesh / 2 + 1) + k)+1], kmag, PowerSpectrum(kmag));
-#endif
-				}
-
-			      /*  ORIGINAL
-				for(axes = 0; axes < 3; axes++)
-				{
-				cdisp[axes][((ii - Local_x_start) * Nmesh + jj) * (Nmesh / 2 + 1) +
-				k].re = -kvec[axes] / kmag2 * delta * sin(phase);
-				cdisp[axes][((ii - Local_x_start) * Nmesh + jj) * (Nmesh / 2 + 1) +
-				k].im = -kvec[axes] / kmag2 * delta * cos(phase);
-				}
-			      */
-			    }
-			}
-		    }
+		  Dprintf("\t (+) @ %d :: %d %d %d :: %u :: kmag: %g ph: %g A: %g D: %g P: %g PS: %g\n",
+		  	 ThisTask, ii, jj, kk, SEEDTABLE[iii*Nmesh + jjj],
+		  	 kmag, phase, ampl, delta, p_of_k, PowerSpectrum(kmag)); fflush(stdout);
 		}
+	      else
+		{
+		  Dprintf("\t (+) @ %d :: %d %d %d :: %u :: kmag: %g ph: %g A: %g D: %g P: %g PS: %g\n",
+			  ThisTask, ii, jj, kk, SEEDTABLE[ii * Nmesh + jj],
+			  kmag, phase, ampl, delta, p_of_k, PowerSpectrum(kmag)); fflush(stdout);
+		}
+
+#ifndef NO_RANDOM_MODULES
+	      p_of_k *= -log(ampl);
+#endif
+	      delta = fac * sqrt(p_of_k);
+
+	      // calculate the storing address in local coordinates
+	      addr = 2*((i * local_n[_y_] + addr_j) * local_n[_z_] + k);
+	      
+	      kdensity[ThisGrid][addr ] =  delta * cos(phase);
+	      kdensity[ThisGrid][addr + 1] =  sign * delta * sin(phase);
+
 	    }
+
+	  // since the chain of random numbers is subsequent, [..see above..]
+	  // generate all the random numbers on the
+	  // k column that are above its final k coordinate
+	  if(local_start[_z_]+local_n[_z_] < Nmesh_2)
+	    for(RR = local_start[_z_]+local_n[_z_]; RR <= Nmesh_2; RR++)
+	      {
+		phase = gsl_rng_uniform(random_generator);
+		do
+		  phase = gsl_rng_uniform(random_generator);
+		while(phase == 0);
+	      }	  
 	}
     }
 
+  gsl_rng_free(k0_generator);
+  free(SEEDTABLE);
+  
 #ifdef DEBUG
   fclose(numbers);
 #endif
 
+
+  int addr_;
+
+  FILE *file;
+  char filename[100];
+
+  sprintf(filename, "partial_%d", ThisTask);
+
+  for(ii = 0; ii < NTasks; ii++)
+    {
+      if(ThisTask == ii)
+	{
+	  file = fopen(filename, "w");
+	  for(i = 0; i < local_n[_x_]; i++)
+	    for(j = 0; j < local_n[_y_]; j++)
+	      for(k = 0; k < (local_n[_z_]-1); k++)
+		{
+		  addr = 2*( (i*local_n[_y_] + j)*local_n[_z_] + k);
+		  addr_ = ((i+local_start[_x_])*Nmesh + j+local_start[_y_])*(Nmesh_2+1) + k+local_start[_z_];
+		  
+		  /* fprintf(file, "%d %d %d %d @ %d - %g %g\n", addr_, */
+		  /* 	  i+local_start[_x_], */
+		  /* 	  j+local_start[_y_], */
+		  /* 	  k+local_start[_z_], */
+		  /* 	  ThisTask, kdensity[ThisGrid][addr], kdensity[ThisGrid][addr+1]); */
+		  fprintf(file, "%d - %g %g\n", addr_, kdensity[ThisGrid][addr], kdensity[ThisGrid][addr+1]);
+		}	      
+	  fflush(stdout);
+	  fclose(file);
+	}
+      MPI_Barrier(MPI_COMM_WORLD);
+    }
+  if(ThisTask == 0)
+    {
+      system("cat partial_* | sort -k1 -n > my.dkdensity");
+      system("rm -f partial_*");	  
+    }
+
+  
   /* This is needed to achieve proper normalization for pinocchio */
 
   fac=pow((double)Nmesh, 3.0);

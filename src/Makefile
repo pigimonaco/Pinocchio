@@ -27,27 +27,49 @@
 
 RUNDIR = ./
 
-EXEC = pinocchio.x
+EXEC     = pinocchio.x
+OPTIONS += -DASCII_WRITE
 OPTIONS += -DTWO_LPT
 OPTIONS += -DTHREE_LPT
 OPTIONS += -DPLC
-OPTIONS += -DROTATE_BOX
+#OPTIONS += -DROTATE_BOX
 #OPTIONS += -DWHITENOISE
 #OPTIONS += -DNO_RANDOM_MODULES
 #OPTIONS += -DNORADIATION
 #OPTIONS += -DSCALE_DEPENDENT_GROWTH
 
 
+#PROFILER="gperftools"
+
+ifdef PROFILER
+ifeq ($(PROFILER), "gperftools")
+OPTIONS += -DUSE_GPERFTOOLS
+endif
+endif
+
+BUILDTYPE="DEBUG"
+#BUILDTYPE="PRODUCTION""
+
 SYSTYPE="my_machine"
 
 
 ifeq ($(SYSTYPE),"my_machine")
 CC          =  mpicc
-CDEBUG      = -ggdb3 -Wall
-COPTIMIZED  = -O3 -Wno-unused-result
-FFTW_LIBR   = -L$(HOME)/lib -lfftw3_mpi -lfftw3
-FFTW_INCL   = -I/usr/local/include -I$(HOME)/include
-MPI_LIBR    = -lmpi
+
+ifeq ($(BUILDTYPE), "DEBUG")
+COPTS       = -ggdb3 -fPIC -march=native -Wall -fno-omit-frame-pointer -fsanitize=float-divide-by-zero -fsanitize=bounds -fsanitize=signed-integer-overflow -fsanitize=vla-bound -fsanitize=undefined -fsanitize=integer-divide-by-zero 
+EXEC_SUFFIX =.d
+else
+COPTS  = -O3 -Wno-unused-result -march=native -fopt-info-missed -fPIC
+EXEC_SUFFIX =.x
+#CPROFILE    = -fprofile-generate -ftest-coverage #--coverage -fPIC
+endif
+
+FFTW_LIBR   = -L/usr/lib -lfftw3_mpi -lfftw3
+FFTW_INCL   = -I/usr/local/include
+PFFT_LIBR   = -L/usr/lib -lpfft
+PFFT_INCL   = -I/usr/include
+MPI_LIBR    = 
 MPI_INCL    =
 GSL_LIBR    = -lgsl -lgslcblas -lm
 GSL_INCL    = -I/usr/include
@@ -55,16 +77,19 @@ endif
 
 
 # included libraries, shared libraries 
-INC =  $(FFTW_INCL)  $(MPI_INCL) $(GSL_INCL)
-LIB =  $(FFTW_LIBR)  $(MPI_LIBR) $(GSL_LIBR)
+INC =  $(FFTW_INCL)  $(PFFT_INCL) $(GSL_INCL)
+LIB =  $(FFTW_LIBR)  $(PFFT_LIBR)  $(GSL_LIBR)
 
+ifdef PROFILER
+ifeq ($(PROFILER), "gperftools")
+LIB += -lprofiler
+endif
+endif
 
-# compiler options : choose from CDEBUG or COPTIMIZED
-#COPTS = $(CDEBUG)
-COPTS = $(COPTIMIZED)
+EXEC = $(EXEC_BASE)$(EXEC_SUFFIX)
 
 # source files:
-OBJECTS = fmax.o variables.o initialization.o collapse_times.o fmax-fftw.o GenIC.o \
+OBJECTS = fmax.o variables.o initialization.o collapse_times.o fmax-pfft.o GenIC.o \
 	ReadParamfile.o ReadWhiteNoise.o write_fields.o allocations.o LPT.o fragment.o \
 	build_groups.o distribute.o write_halos.o write_snapshot.o cosmo.o
 

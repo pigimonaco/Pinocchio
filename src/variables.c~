@@ -78,8 +78,6 @@ group_data     *groups;
 
 char            date_string[25];
 
-int            *frag_pos,*indicesY,*sorted_pos;
-unsigned int   *frag_map,*frag_map_update;
 int            *indices,*group_ID,*linking_list;
 double          f_m, f_rm, espo, f_a, f_ra, f_200, sigmaD0;
 int             NSlices,ThisSlice;

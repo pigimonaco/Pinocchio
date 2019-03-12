@@ -368,13 +368,13 @@ int set_grids()
 
   MyGrids=(grid_data*)malloc(Ngrids * sizeof(grid_data));
 
-  MyGrids[0].GSglobal_x = params.GridSize[0];
-  MyGrids[0].GSglobal_y = params.GridSize[1];
-  MyGrids[0].GSglobal_z = params.GridSize[2];
+  MyGrids[0].GSglobal[_x_] = params.GridSize[0];
+  MyGrids[0].GSglobal[_y_] = params.GridSize[1];
+  MyGrids[0].GSglobal[_z_] = params.GridSize[2];
   
-  MyGrids[0].Ntotal = (unsigned long long)MyGrids[0].GSglobal_x * 
-    (unsigned long long)MyGrids[0].GSglobal_y * 
-    (unsigned long long)MyGrids[0].GSglobal_z;
+  MyGrids[0].Ntotal = (unsigned long long)MyGrids[0].GSglobal[_x_] * 
+    (unsigned long long)MyGrids[0].GSglobal[_y_] * 
+    (unsigned long long)MyGrids[0].GSglobal[_z_];
 
   MyGrids[0].BoxSize = params.BoxSize_htrue;
   MyGrids[0].lower_k_cutoff=0.;
@@ -397,7 +397,9 @@ int set_grids()
       first_derivatives[igrid]=(double**)malloc(3 * sizeof(double*));
       second_derivatives[igrid]=(double**)malloc(6 * sizeof(double*));
     }
-  seedtable=(unsigned int**)malloc(Ngrids * sizeof(unsigned int*));
+
+  // moved to GenIC
+  // seedtable=(unsigned int**)malloc(Ngrids * sizeof(unsigned int*));
  
   for (igrid=0; igrid<Ngrids; igrid++)
     if (set_one_grid(igrid))
@@ -455,9 +457,9 @@ int set_plc(void)
     {
       /* in this case the center is randomly placed and the direction points toward the main diagonal */
       gsl_rng_set(random_generator, params.RandomSeed);
-      plc.center[0]=gsl_rng_uniform(random_generator)*MyGrids[0].GSglobal_x;
-      plc.center[1]=gsl_rng_uniform(random_generator)*MyGrids[0].GSglobal_y;
-      plc.center[2]=gsl_rng_uniform(random_generator)*MyGrids[0].GSglobal_z;
+      plc.center[0]=gsl_rng_uniform(random_generator)*MyGrids[0].GSglobal[_x_];
+      plc.center[1]=gsl_rng_uniform(random_generator)*MyGrids[0].GSglobal[_y_];
+      plc.center[2]=gsl_rng_uniform(random_generator)*MyGrids[0].GSglobal[_z_];
       plc.zvers[0]=1.0;
       plc.zvers[1]=1.0;
       plc.zvers[2]=1.0;
@@ -503,9 +505,9 @@ int set_plc(void)
   Largest_r=ProperDistance(params.StartingzForPLC)/params.InterPartDist;
   Smallest_r=ProperDistance(params.LastzForPLC)/params.InterPartDist;
 
-  l[0]=(double)(MyGrids[0].GSglobal_x);
-  l[1]=(double)(MyGrids[0].GSglobal_y);
-  l[2]=(double)(MyGrids[0].GSglobal_z);
+  l[0]=(double)(MyGrids[0].GSglobal[_x_]);
+  l[1]=(double)(MyGrids[0].GSglobal[_y_]);
+  l[2]=(double)(MyGrids[0].GSglobal[_z_]);
 
   /* first, it counts the number of replications needed */
   plc.Nreplications=0;
@@ -822,9 +824,9 @@ int set_subboxes()
 	if (i*j*k==NTasks)
 	  {
 	    /* number of particles in the sub-box */
-	    N1 = find_length(MyGrids[0].GSglobal_x,i,0);
-	    N2 = find_length(MyGrids[0].GSglobal_y,j,0);
-	    N3 = find_length(MyGrids[0].GSglobal_z,k*NSlices,0);
+	    N1 = find_length(MyGrids[0].GSglobal[_x_],i,0);
+	    N2 = find_length(MyGrids[0].GSglobal[_y_],j,0);
+	    N3 = find_length(MyGrids[0].GSglobal[_z_],k*NSlices,0);
 
 	    this = (i>1? 2*(N2*N3) : 0) + 
 	      (j>1? 2*(N1*N3) : 0) +
@@ -858,9 +860,9 @@ int set_subboxes()
   subbox.mybox_y=NN1/subbox.nbox_z_thisslice;
   subbox.mybox_z=NN1-subbox.mybox_y*subbox.nbox_z_thisslice;
 
-  subbox.Lgrid_x = find_length(MyGrids[0].GSglobal_x,subbox.nbox_x,subbox.mybox_x);
-  subbox.Lgrid_y = find_length(MyGrids[0].GSglobal_y,subbox.nbox_y,subbox.mybox_y);
-  subbox.Lgrid_z = find_length(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,subbox.mybox_z);
+  subbox.Lgrid_x = find_length(MyGrids[0].GSglobal[_x_],subbox.nbox_x,subbox.mybox_x);
+  subbox.Lgrid_y = find_length(MyGrids[0].GSglobal[_y_],subbox.nbox_y,subbox.mybox_y);
+  subbox.Lgrid_z = find_length(MyGrids[0].GSglobal[_z_],subbox.nbox_z_allslices,subbox.mybox_z);
 
   subbox.pbc_x = (subbox.nbox_x==1);
   subbox.pbc_y = (subbox.nbox_y==1);
@@ -874,9 +876,9 @@ int set_subboxes()
   subbox.Lgwbl_y = subbox.Lgrid_y + 2*subbox.safe_y;
   subbox.Lgwbl_z = subbox.Lgrid_z + 2*subbox.safe_z;
 
-  subbox.start_x = find_start(MyGrids[0].GSglobal_x,subbox.nbox_x,subbox.mybox_x);
-  subbox.start_y = find_start(MyGrids[0].GSglobal_y,subbox.nbox_y,subbox.mybox_y);
-  subbox.start_z = find_start(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,subbox.mybox_z);
+  subbox.start_x = find_start(MyGrids[0].GSglobal[_x_],subbox.nbox_x,subbox.mybox_x);
+  subbox.start_y = find_start(MyGrids[0].GSglobal[_y_],subbox.nbox_y,subbox.mybox_y);
+  subbox.start_z = find_start(MyGrids[0].GSglobal[_z_],subbox.nbox_z_allslices,subbox.mybox_z);
 
   subbox.stabl_x = subbox.start_x - subbox.safe_x;
   subbox.stabl_y = subbox.start_y - subbox.safe_y;
@@ -949,8 +951,8 @@ int set_subboxes()
   else
     mf.hfactor=1.0;
   mf.hfactor4=pow(mf.hfactor,4.);
-  mf.vol=(double)MyGrids[0].GSglobal_x*(double)MyGrids[0].GSglobal_y
-    *(double)MyGrids[0].GSglobal_z*pow(params.InterPartDist,3.0);
+  mf.vol=(double)MyGrids[0].GSglobal[_x_]*(double)MyGrids[0].GSglobal[_y_]
+    *(double)MyGrids[0].GSglobal[_z_]*pow(params.InterPartDist,3.0);
   mf.mmin=log10(params.MinHaloMass*params.ParticleMass)-0.001*DELTAM;
   mf.mmax=log10(params.Largest)+3.0*DELTAM;
   mf.NBIN = (int)((mf.mmax-mf.mmin)/DELTAM) +1;
