@@ -956,9 +956,9 @@ int set_subboxes()
   subbox.pbc_y = (subbox.nbox_y==1);
   subbox.pbc_z = (subbox.nbox_z_allslices==1);
 
-  subbox.safe_x = (subbox.pbc_x ? 0 : subbox.Lgrid_x/2);
-  subbox.safe_y = (subbox.pbc_y ? 0 : subbox.Lgrid_y/2);
-  subbox.safe_z = (subbox.pbc_z ? 0 : subbox.Lgrid_z/2);
+  subbox.safe_x = (subbox.pbc_x ? 0 : (find_length(MyGrids[0].GSglobal_x,subbox.nbox_x,0)-1)/2);
+  subbox.safe_y = (subbox.pbc_y ? 0 : (find_length(MyGrids[0].GSglobal_y,subbox.nbox_y,0)-1)/2);
+  subbox.safe_z = (subbox.pbc_z ? 0 : (find_length(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,0)-1)/2);
 
   subbox.Lgwbl_x = subbox.Lgrid_x + 2*subbox.safe_x;
   subbox.Lgwbl_y = subbox.Lgrid_y + 2*subbox.safe_y;

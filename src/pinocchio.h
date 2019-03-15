@@ -170,11 +170,11 @@ extern int Ngrids;
 typedef struct
 {
   unsigned int total_local_size, total_local_size_fft, off;
-  ptrdiff_t    GSglobal[3];
-  ptrdiff_t    GSlocal[3];
-  ptrdiff_t    GSstart[3];
-  ptrdiff_t    GSlocal_k[3];
-  ptrdiff_t    GSstart_k[3];
+  unsigned int GSglobal[3];
+  unsigned int GSlocal[3];
+  unsigned int GSstart[3];
+  unsigned int GSlocal_k[3];
+  unsigned int GSstart_k[3];
   unsigned long long Ntotal;
   double       lower_k_cutoff, upper_k_cutoff, norm, BoxSize, CellSize;
   pfft_plan    forward_plan, reverse_plan;
@@ -221,18 +221,18 @@ typedef struct
 } output_data;
 extern output_data outputs;
 
-
+// QUI DOVREMO RENDERE mybox etc. VETTORI
 typedef struct
 {
   unsigned int Npart, Ngood, Nalloc, Nstored, PredNpeaks, maplength;  
-  int nbox_x,  nbox_y,  nbox_z_thisslice, nbox_z_allslices;
-  int mybox_x, mybox_y, mybox_z;
-  int Lgrid_x, Lgrid_y, Lgrid_z; 
-  int Lgwbl_x, Lgwbl_y, Lgwbl_z; 
-  int start_x, start_y, start_z;
-  int stabl_x, stabl_y, stabl_z;
-  int safe_x,  safe_y,  safe_z;
-  int pbc_x,   pbc_y,   pbc_z;
+  int nbox_x,  nbox_y,  nbox_z_thisslice, nbox_z_allslices;  // numero di subbox per dimensione
+  int mybox_x, mybox_y, mybox_z;   // i, j, k della box assegnata al task
+  int Lgrid_x, Lgrid_y, Lgrid_z;   // Lgrid della zona ben risolta
+  int Lgwbl_x, Lgwbl_y, Lgwbl_z;   // Lgrid inclusa la boundary layer / ghost region
+  int start_x, start_y, start_z;   // coordinata iniziale della box ben risolta
+  int stabl_x, stabl_y, stabl_z;   // coordinata iniziale della box, inclusa la b.l. / g.r.
+  int safe_x,  safe_y,  safe_z;    // boundary layer / ghost region
+  int pbc_x,   pbc_y,   pbc_z;     // PBCs yes/no
 } subbox_data;
 extern subbox_data subbox;
 
