@@ -144,7 +144,8 @@ int compute_fmax(void)
 	  cputmp=MPI_Wtime()-cputmp;
 	  if (!ThisTask)
 	    printf("[%s] Done first derivatives, cpu time = %f s\n",fdate(),cputmp);
-
+	  cputime.deriv += cputmp;
+	  
       /* 
 	 Part 4:
 	 Store velocities of collapsed particles
@@ -214,7 +215,7 @@ int compute_first_derivatives(double R, int ThisGrid)
 {
   /* computes second derivatives of the potential */
 
-  double time = 0;
+  double timetmp = 0;
   
   /* smoothing radius in grid units */
   Rsmooth = R / MyGrids[ThisGrid].CellSize;
@@ -225,19 +226,19 @@ int compute_first_derivatives(double R, int ThisGrid)
       if (!ThisTask)
 	printf("[%s] Computing 1st derivative: %d\n",fdate(),ia);
 
-      double timetmp = MPI_Wtime();
+      double tmp = MPI_Wtime();
       write_in_cvector(ThisGrid, kdensity[ThisGrid]);
-      time += MPI_Wtime() - timetmp;
+      timetmp += MPI_Wtime() - tmp;
       
       if (compute_derivative(ThisGrid,ia,0))
 	return 1;
 
-      timetmp = MPI_Wtime();
+      tmp = MPI_Wtime();
       write_from_rvector(ThisGrid, first_derivatives[ThisGrid][ia-1]);
-      time += MPI_Wtime() - timetmp;
+      timetmp += MPI_Wtime() - tmp;
     }
 
-  cputime.mem_transf += time;
+  cputime.mem_transf += timetmp;
   return 0;
 }
 
@@ -247,7 +248,7 @@ int compute_second_derivatives(double R, int ThisGrid)
 
   /* computes second derivatives of the potential */
 
-  double time = 0;
+  double timetmp = 0;
   
   /* smoothing radius in grid units */
   Rsmooth = R / MyGrids[ThisGrid].CellSize;
@@ -261,19 +262,19 @@ int compute_second_derivatives(double R, int ThisGrid)
 	if (!ThisTask)
 	  printf("[%s] Computing 2nd derivative: %d\n",fdate(),ider);
 
-	double timetmp = MPI_Wtime();
+	double tmp = MPI_Wtime();
 	write_in_cvector(ThisGrid, kdensity[ThisGrid]);
-	time += MPI_Wtime() - timetmp;
+	timetmp += MPI_Wtime() - tmp;
 
 	if (compute_derivative(ThisGrid,ia,ib))
 	  return 1;
 
-	timetmp = MPI_Wtime();
+	tmp = MPI_Wtime();
 	write_from_rvector(ThisGrid, second_derivatives[ThisGrid][ider-1]);
-	time += MPI_Wtime() - timetmp;
+	timetmp += MPI_Wtime() - tmp;
       }
 
-  cputime.mem_transf += time;
+  cputime.mem_transf += timetmp;
   return 0;
 }
 

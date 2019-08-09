@@ -25,60 +25,218 @@
 #
 
 
-RUNDIR = ./
+# ============================
+# build options
+# ============================
+#
 
-EXEC     = pinocchio.x
+#                                          the basename for the executable
+EXEC_BASE   = pinocchio
+
+#                                          compile with -g and sanitizers or with machine-specific opts
+#BUILDTYPE   = DEBUG                     
+BUILDTYPE   = PRODUCTION
+
+#USE_MPIP    = ON
+
+#                                          activate openmp regions in the code
+#USE_OPENMP  = ON
+
+#                                          use fftw threads pthreads
+#FFT_THREADS = PTHREADS
+#FFT_THREADS = OPENMP
+
+#                                          determines the machine on which to compile
+#SYSTYPE     = my_machine
+#SYSTYPE     = exabed
+#SYSTYPE     = hotcat
+SYSTYPE     = CASS
+
+#                                          activate a tracer
+#PROFILER    = gperftools                
+
+
+# ============================
+# code options
+# ============================
+#
 OPTIONS += -DASCII_WRITE
 OPTIONS += -DTWO_LPT
 OPTIONS += -DTHREE_LPT
-OPTIONS += -DPLC
+#OPTIONS += -DPLC
 #OPTIONS += -DROTATE_BOX
 #OPTIONS += -DWHITENOISE
 #OPTIONS += -DNO_RANDOM_MODULES
 #OPTIONS += -DNORADIATION
 #OPTIONS += -DSCALE_DEPENDENT_GROWTH
 
+OPTIONS += -DTEST_ONLY
 
-#PROFILER="gperftools"
 
-ifdef PROFILER
-ifeq ($(PROFILER), "gperftools")
+# ===========================
+# set variables, flags and libraries
+# ===========================
+#
+
+#                                             tracer
+#
+ifeq ($(PROFILER), gperftools)
 OPTIONS += -DUSE_GPERFTOOLS
 endif
+
+
+#                                             OpenMP
+#
+ifeq ($(USE_OPENMP), ON)
+EXEC_SUFFIX_OMP  =.omp
+OMP_FLAG         = -fopenmp
 endif
 
-BUILDTYPE="DEBUG"
-#BUILDTYPE="PRODUCTION""
+#                                             MpiP
+#
+ifeq ($(USE_MPIP), ON)
+EXEC_SUFFIX_MPIP  =.mpiP
+EXTRA_LIBS       += -L/scratch/Software/lib -lmpiP -lbfd -liberty -lunwind
+MPIP_CFLAG        = -g
+endif
 
-SYSTYPE="my_machine"
 
 
-ifeq ($(SYSTYPE),"my_machine")
+
+#                                             FFT threads
+#
+ifeq ($(FFT_THREADS),PTHREADS)
+FFTW_THREAD_LIB  = -lfftw3_threads
+THREAD_LIB       = -lm -lpthread
+FPIC             = -fPIC
+EXEC_SUFFIX_FFT  =.fftthreads
+OPTIONS         += -DUSE_FFT_THREADS
+else
+ifeq  ($(FFT_THREADS),OPENMP)
+FFTW_THREAD_LIB  = -lfftw3_omp
+THREAD_LIB       = -lm
+FPIC             = -fPIC
+ifneq ($(USE_OPENMP), ON)
+OMP_FLAG         = -fopenmp
+endif
+EXEC_SUFFIX_FFT   =.fftomp
+OPTIONS         += -DUSE_FFT_THREADS
+endif
+endif
+
+
+#                                             build type
+#
+ifeq ($(BUILDTYPE), DEBUG)
+EXEC_SUFFIX_T =.d
+else
+EXEC_SUFFIX_T =.x
+endif
+
+EXEC = $(EXEC_BASE)$(EXEC_SUFFIX_MPIP)$(EXEC_SUFFIX_OMP)$(EXEC_SUFFIX_FFT)$(EXEC_SUFFIX_T)
+
+# ============================
+# compile options
+# ============================
+#
+
+x86_DBG = -ggdb3 -fPIC -march=native -Wall -fno-omit-frame-pointer -fsanitize=float-divide-by-zero -fsanitize=bounds -fsanitize=signed-integer-overflow -fsanitize=vla-bound -fsanitize=undefined -fsanitize=integer-divide-by-zero
+ARM_DBG = -ggdb3 -fPIC -march=native -Wall -fno-omit-frame-pointer -fsanitize=float-divide-by-zero -fsanitize=bounds -fsanitize=signed-integer-overflow -fsanitize=vla-bound -fsanitize=undefined -fsanitize=integer-divide-by-zero
+
+x86_OPT = -O3 -Wno-unused-result -march=native -fomit-frame-pointer -fstrict-aliasing ${MPIP_CFLAG}
+ARM_OPT = -O3 -Wno-unused-result -march=native -fomit-frame-pointer -fstrict-aliasing ${MPIP_CFLAG}
+
+#CPROFILE    = -fprofile-generate -ftest-coverage #--coverage -fPIC
+
+# [ my_machine ] ==========================  
+ifeq ($(SYSTYPE),my_machine)
 CC          =  mpicc
 
-ifeq ($(BUILDTYPE), "DEBUG")
-COPTS       = -ggdb3 -fPIC -march=native -Wall -fno-omit-frame-pointer -fsanitize=float-divide-by-zero -fsanitize=bounds -fsanitize=signed-integer-overflow -fsanitize=vla-bound -fsanitize=undefined -fsanitize=integer-divide-by-zero 
-EXEC_SUFFIX =.d
+ifeq ($(BUILDTYPE), DEBUG)
+COPTS         = $(OMP_FLAG) $(x86_DBG) $(FPIC)
 else
-COPTS  = -O3 -Wno-unused-result -march=native -fopt-info-missed -fPIC
-EXEC_SUFFIX =.x
-#CPROFILE    = -fprofile-generate -ftest-coverage #--coverage -fPIC
+COPTS         = $(OMP_FLAG) $(x86_OPT) -fPIC $(FPIC) #-fopt-info-missed
 endif
 
-FFTW_LIBR   = -L/usr/lib -lfftw3_mpi -lfftw3
-FFTW_INCL   = -I/usr/local/include
+FFTW_LIBR   = -L/usr/lib  -lfftw3_mpi $(FFTW_THREAD_LIB) -lfftw3 $(THREAD_LIB)
+FFTW_INCL   = -I/usr/include
 PFFT_LIBR   = -L/usr/lib -lpfft
 PFFT_INCL   = -I/usr/include
-MPI_LIBR    = 
+MPI_LIBR    = -lmpi
 MPI_INCL    =
 GSL_LIBR    = -lgsl -lgslcblas -lm
 GSL_INCL    = -I/usr/include
 endif
 
 
+# [ exabed ] ==========================  
+ifeq ($(SYSTYPE),exabed)
+CC          =  mpicc
+
+ifeq ($(BUILDTYPE), DEBUG)
+COPTS         = $(OMP_FLAG) $(ARM_DBG) $(FPIC)
+else
+COPTS         = $(OMP_FLAG) $(ARM_OPT) -fPIC $(FPIC) #-fopt-info-missed
+endif
+
+FFTW_LIBR   = -L$(EBROOTFFTW)/lib -lfftw3_mpi $(FFTW_THREAD_LIB) -lfftw3 $(THREAD_LIB)
+FFTW_INCL   = -I$(EBROOTFFTW)/include
+PFFT_LIBR   = -L/home/inaf/lib -lnew_pfft
+PFFT_INCL   = -I/home/inaf/include
+MPI_LIBR    =
+MPI_INCL    =
+GSL_LIBR    = -L$(EBROOTGSL)/lib -lgsl -lgslcblas -lm
+GSL_INCL    = -I$(EBROOTGSL)/include
+endif
+
+
+# [ hotcat ] ==========================  
+ifeq ($(SYSTYPE),hotcat)
+CC          =  mpicc
+
+ifeq ($(BUILDTYPE), DEBUG)
+COPTS         = $(OMP_FLAG) $(x86_DBG) $(FPIC)
+else
+COPTS         = $(OMP_FLAG) $(x86_OPT) -fPIC $(FPIC) #-fopt-info-missed
+endif
+
+
+FFTW_LIBR   = -L$(FFTW_LIB)  -lfftw3_mpi $(FFTW_THREAD_LIB) -lfftw3 $(THREAD_LIB)
+FFTW_INCL   = -I$(FFTW_INC)
+PFFT_LIBR   = -L$(PFFT_LIB) -lpfft
+PFFT_INCL   = -I$(PFFT_INC)
+MPI_LIBR    = -lmpi
+MPI_INCL    =
+GSL_LIBR    = -L$(GSL_LIB) -lgsl -lgslcblas -lm
+GSL_INCL    = -I$(GSL_INC)
+endif
+
+
+# [ CASS ] ==========================  
+ifeq ($(SYSTYPE),CASS)
+CC          =  mpicc
+
+ifeq ($(BUILDTYPE), DEBUG)
+COPTS         = $(OMP_FLAG) $(ARM_DBG) $(FPIC)
+else
+COPTS         = $(OMP_FLAG) $(ARM_OPT) -fPIC $(FPIC) #-fopt-info-missed
+endif
+
+FFTW_LIBR   = -L/u/luca/lib -lfftw3_mpi $(FFTW_THREAD_LIB) -lfftw3
+FFTW_INCL   = -I/u/luca/include
+PFFT_LIBR   = -L/u/luca -lpfft
+PFFT_INCL   = -I/u/luca
+MPI_LIBR    = -lmpi
+MPI_INCL    =
+GSL_LIBR    = -L/usr/lib -lgsl -lgslcblas
+GSL_INCL    = -I/usr/include
+
+endif
+
+
 # included libraries, shared libraries 
-INC =  $(FFTW_INCL)  $(PFFT_INCL) $(GSL_INCL)
-LIB =  $(FFTW_LIBR)  $(PFFT_LIBR)  $(GSL_LIBR)
+INC =  $(FFTW_INCL) $(PFFT_INCL) $(MPI_INCL) $(GSL_INCL)
+LIB =  $(EXTRA_LIBS) -lm $(PFFT_LIBR) $(FFTW_LIBR) $(MPI_LIBR) $(GSL_LIBR) 
 
 ifdef PROFILER
 ifeq ($(PROFILER), "gperftools")
@@ -86,10 +244,11 @@ LIB += -lprofiler
 endif
 endif
 
-EXEC = $(EXEC_BASE)$(EXEC_SUFFIX)
 
+
+# ==========================
 # source files:
-OBJECTS = fmax.o variables.o initialization.o collapse_times.o fmax-pfft.o GenIC.o \
+OBJECTS = fmax.o variables.o initialization.o collapse_times.o fmax-pfft.o GenIC.o GenIC_large.o \
 	ReadParamfile.o ReadWhiteNoise.o write_fields.o allocations.o LPT.o fragment.o \
 	build_groups.o distribute.o write_halos.o write_snapshot.o cosmo.o
 
@@ -104,12 +263,12 @@ endif
 
 
 pinocchio: $(OBJECTS) pinocchio.o Makefile
-	$(CC) $(INC) $(COPTS) -o $(EXEC) pinocchio.o $(OBJECTS) $(LIB)
+	$(CC) -fuse-ld=gold $(INC) $(COPTS) -o $(EXEC) pinocchio.o $(OBJECTS) $(LIB)
 
 memorytest: $(OBJECTS) memorytest.o Makefile
 	$(CC) $(INC) $(COPTS) -o memorytest memorytest.o $(OBJECTS) $(LIB)
 
 clean:
-	\rm -f *.o *~ $(EXEC) memorytest
+	rm -f *.o *~ $(EXEC) memorytest
 
 

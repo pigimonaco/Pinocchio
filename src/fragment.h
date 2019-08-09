@@ -70,8 +70,6 @@ void update(pos_data *, pos_data *);
 int write_catalog(int);
 int write_histories(void);
 int compute_mf(int);
-int find_location(int, int, int);
 #ifdef PLC
 int write_PLC();
 #endif
-

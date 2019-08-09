@@ -279,6 +279,12 @@ int read_parameter_file()
       strcpy(tag[nt], "LargePlane");
       addr[nt] = &(internal.large_plane);
       id[nt++] = LOGICAL;
+
+#ifdef USE_FFT_THREADS      
+      strcpy(tag[nt], "NThreads");
+      addr[nt] = &(internal.nthreads);
+      id[nt++] = INT;
+#endif      
       
       for (j=0; j<nt; j++)     /* All logical tags are FALSE by default */
 	if (id[j]==LOGICAL)

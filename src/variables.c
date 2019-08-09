@@ -27,6 +27,7 @@
 #include "pinocchio.h"
 
 int ThisTask,NTasks;
+int num_omp_th = 1;
 
 //int            pfft_flags_c2r, pfft_flags_r2c;
 MPI_Comm        FFT_Comm;
@@ -78,8 +79,6 @@ group_data     *groups;
 
 char            date_string[25];
 
-int            *frag_pos,*indicesY,*sorted_pos;
-unsigned int   *frag_map,*frag_map_update;
 int            *indices,*group_ID,*linking_list;
 double          f_m, f_rm, espo, f_a, f_ra, f_200, sigmaD0;
 int             NSlices,ThisSlice;

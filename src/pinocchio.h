@@ -40,10 +40,17 @@
 #include <gsl/gsl_spline.h>
 #include <fftw3-mpi.h>
 #include <pfft.h>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 #ifdef USE_GPERFTOOLS
 #include <gperftools/profiler.h>
 #endif
+
+
+#if !(defined(__aarch64__) || defined(__arm__))
 #include <immintrin.h>
+#endif
 
 #define ALIGN 32
 
@@ -60,8 +67,6 @@
 #if defined(THREE_LPT) && !defined(TWO_LPT)
 #define TWO_LPT
 #endif
-
-#define UINTLEN 32   // 8*sizeof(unsigned int)
 
 #define _x_ 0
 #define _y_ 1
@@ -81,6 +86,7 @@
 #define SWAP_INT( A, B ) (A) ^= (B), (B) ^= (A), (A) ^= (B);
 
 extern int ThisTask,NTasks;
+extern int num_omp_th;
 
 // pfft-related variables
 // extern int pfft_flags_c2r, pfft_flags_r2c;
@@ -92,14 +98,14 @@ typedef double dvec __attribute__ ((vector_size (DVEC_SIZE*sizeof(double))));
 typedef long int ivec __attribute__ ((vector_size (DVEC_SIZE*sizeof(long int))));
 typedef union
 {
-  dvec    V;
+  dvec   V;
   double v[DVEC_SIZE];
 } dvec_u;
 
 typedef union
 {
   ivec V;
-  int v[DVEC_SIZE];
+  int  v[DVEC_SIZE];
 } ivec_u;
 
 typedef struct
@@ -115,6 +121,7 @@ typedef struct
   int dump_seedplane;                        // logical
   int dump_kdensity;                         // logical
   int large_plane;
+  int nthreads;
   
 } internal_data;
 extern internal_data internal;
@@ -124,13 +131,15 @@ typedef unsigned long long int UL;
 
 typedef struct
 {
-  double Fmax;
-  float Vmax[3], zacc;
-  int   Rmax;
+  int Rmax;
+  double Fmax, Vmax[3];
 #ifdef TWO_LPT
-  float Vmax_2LPT[3];
+  double Vmax_2LPT[3];
 #ifdef THREE_LPT
-  float Vmax_3LPT_1[3], Vmax_3LPT_2[3];
+  double Vmax_3LPT_1[3],Vmax_3LPT_2[3];
+#if ALIGN > 0
+  char padd[12];
+#endif
 #endif
 #endif
 } product_data __attribute__((aligned (ALIGN)));
@@ -169,13 +178,13 @@ extern smoothing_data Smoothing;
 extern int Ngrids;
 typedef struct
 {
-  unsigned int total_local_size, total_local_size_fft, off;
-  unsigned int GSglobal[3];
-  unsigned int GSlocal[3];
-  unsigned int GSstart[3];
-  unsigned int GSlocal_k[3];
-  unsigned int GSstart_k[3];
-  unsigned long long Ntotal;
+  unsigned int total_local_size, total_local_size_fft;
+  unsigned int off;
+  ptrdiff_t    GSglobal[3];
+  ptrdiff_t    GSlocal[3];
+  ptrdiff_t    GSstart[3];
+  ptrdiff_t    GSlocal_k[3];
+  ptrdiff_t    GSstart_k[3];
   double       lower_k_cutoff, upper_k_cutoff, norm, BoxSize, CellSize;
   pfft_plan    forward_plan, reverse_plan;
 } grid_data;
@@ -201,7 +210,7 @@ typedef struct
     StartingzForPLC, LastzForPLC, InputSpectrum_UnitLength_in_cm, WDM_PartMass_in_kev, 
     BoundaryLayerFactor, Largest, MaxMemPerParticle, PLCAperture,
     PLCCenter[3], PLCAxis[3];
-  char RunFlag[BLENGTH],DataDir[BLENGTH],TabulatedEoSfile[BLENGTH],ParameterFile[BLENGTH],
+  char RunFlag[BLENGTH-50],DataDir[BLENGTH],TabulatedEoSfile[BLENGTH],ParameterFile[BLENGTH],
     OutputList[BLENGTH],FileWithInputSpectrum[BLENGTH];
   int GridSize[3],WriteRmax, WriteFmax, WriteVmax, 
     CatalogInAscii, DoNotWriteCatalogs, DoNotWriteHistories, WriteSnapshot, 
@@ -221,26 +230,26 @@ typedef struct
 } output_data;
 extern output_data outputs;
 
-// QUI DOVREMO RENDERE mybox etc. VETTORI
+
 typedef struct
 {
-  unsigned int Npart, Ngood, Nalloc, Nstored, PredNpeaks, maplength;  
-  int nbox_x,  nbox_y,  nbox_z_thisslice, nbox_z_allslices;  // numero di subbox per dimensione
-  int mybox_x, mybox_y, mybox_z;   // i, j, k della box assegnata al task
-  int Lgrid_x, Lgrid_y, Lgrid_z;   // Lgrid della zona ben risolta
-  int Lgwbl_x, Lgwbl_y, Lgwbl_z;   // Lgrid inclusa la boundary layer / ghost region
-  int start_x, start_y, start_z;   // coordinata iniziale della box ben risolta
-  int stabl_x, stabl_y, stabl_z;   // coordinata iniziale della box, inclusa la b.l. / g.r.
-  int safe_x,  safe_y,  safe_z;    // boundary layer / ghost region
-  int pbc_x,   pbc_y,   pbc_z;     // PBCs yes/no
+  unsigned int safe, Npart;
+  int nbox_x,  nbox_y,  nbox_z_thisslice, nbox_z_allslices;
+  int mybox_x, mybox_y, mybox_z;
+  int Lgrid_x, Lgrid_y, Lgrid_z; 
+  int Lgwbl_x, Lgwbl_y, Lgwbl_z; 
+  int start_x, start_y, start_z;
+  int stabl_x, stabl_y, stabl_z;
+  int safe_x,  safe_y,  safe_z;
+  int pbc_x,   pbc_y,   pbc_z;
+  double SafetyBorder, overhead;
 } subbox_data;
 extern subbox_data subbox;
 
 typedef struct
 {
-  double init, total, dens, fft, coll, vel, lpt, fmax, distr, sort, group, frag, io,
-    ell, invcoll, deriv, mem_transf, partial, set_subboxes, set_plc,
-    memory_allocation, fft_initialization
+  double init,total, dens, fft, coll, invcoll, ell, vel, lpt, fmax, distr, sort, group, frag, io,
+    deriv, mem_transf, partial, set_subboxes, set_plc, memory_allocation, fft_initialization
 #ifdef PLC
     ,plc
 #endif
@@ -253,13 +262,13 @@ extern int WindowFunctionType;
 typedef struct
 {
   int    Mass;
-  float Pos[3];
-  float Vel[3];
+  double Pos[3];
+  double Vel[3];
 #ifdef TWO_LPT
-  float Vel_2LPT[3];
+  double Vel_2LPT[3];
 #ifdef THREE_LPT
-  float Vel_3LPT_1[3];
-  float Vel_3LPT_2[3];
+  double Vel_3LPT_1[3];
+  double Vel_3LPT_2[3];
 #endif
 #endif
   int    ll, halo_app, mass_at_merger, merged_with, point, bottom, good;
@@ -299,8 +308,7 @@ extern plcgroup_data *plcgroups;
 
 extern char date_string[25];
 
-extern int *frag_pos,*indices,*indicesY,*sorted_pos,*group_ID,*linking_list;
-extern unsigned int *frag_map, *frag_map_update;
+extern int *indices,*group_ID,*linking_list;
 extern int NSlices,ThisSlice;
 
 /* fragmentation parameters */
@@ -326,7 +334,7 @@ typedef struct
   double zme, zpe, zap;
 }  histories_data;
 
-#define DELTAM 0.01 // LEVARE!!
+#define DELTAM 0.05
 
 typedef struct
 {
@@ -360,10 +368,11 @@ void dump_cvector(double*, int, int, ptrdiff_t *, ptrdiff_t *,  char *, int);
 void dump_rvector(double*, int, ptrdiff_t *, ptrdiff_t *,  char *, int);
 
 /* prototypes for functions defined in allocations.c */
-int set_main_memory(unsigned int);
 int allocate_main_memory(void);
 int deallocate_fft_vectors(int);
-int reallocate_memory_for_fragmentation();
+int reallocate_memory_for_fragmentation_1();
+int reallocate_memory_for_fragmentation_2(int);
+
 
 /* prototypes for functions defined in GenIC.c */
 int GenIC(int);
@@ -383,7 +392,6 @@ int write_density(int);
 /* prototypes in write_snapshot.c */
 int write_snapshot(int);
 int write_LPT_snapshot(double);
-int write_timeless_snapshot(void);
 
 /* prototypes for functions defined in cosmo.c */
 int initialize_cosmology();
@@ -436,14 +444,9 @@ int distribute(void);
 
 /* prototypes for functions defined in fragment.c */
 int fragment(void);
-int get_mapup_bit(unsigned int);
-int get_map_bit(int, int, int);
-void set_mapup_bit(int, int, int);
 
 /* prototypes for functions defined in build_groups.c */
 int build_groups(int);
-int quick_build_groups(int);
-int update_map(int *);
 
 #ifdef SCALE_DEPENDENT_GROWTH
 int read_power_table_from_CAMB(void);

@@ -34,27 +34,41 @@ int main(int argc, char **argv, char **envp)
   double time;
   int ThisGrid;
 
+
 #ifdef USE_GPERFTOOLS
   ProfilerStart("pinocchio_gprofile.log");
 #endif
   
   /* Initialize MPI */
-  MPI_Init(&argc, &argv);
+  int got_level;
+  MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &got_level);
   MPI_Comm_rank(MPI_COMM_WORLD, &ThisTask);
   MPI_Comm_size(MPI_COMM_WORLD, &NTasks);
 
-  /* Initialize pfft */
-  pfft_init();
-
-  /* Inititalize fftw */
-  fftw_mpi_init();
 
   /* timing of the code */
   cputime.total=MPI_Wtime();
 
+#ifdef _OPENMP
+#pragma omp parallel
+  {
+#pragma omp master
+    num_omp_th = omp_get_num_threads();
+  }
+#endif
+  
   if (!ThisTask)
     {
       printf("[%s] This is pinocchio V4.1, running on %d MPI tasks\n\n",fdate(),NTasks);
+
+#ifdef _OPENMP
+      printf( "Using %d OpenMP threads\n", num_omp_th );
+#endif
+
+#ifdef USE_FFT_THREADS
+      printf( "Using threaded-FFTs\n");
+#endif
+      
 #ifdef TWO_LPT
 #ifndef THREE_LPT
       printf("This version uses 2LPT displacements\n");
@@ -96,7 +110,7 @@ int main(int argc, char **argv, char **envp)
 #endif
 
     }
-
+  
   /* checks that the parameter file is given in the command line */
   if (argc<2)
     {
@@ -270,10 +284,11 @@ int main(int argc, char **argv, char **envp)
 #endif
 	
       if (!ThisTask)
-	printf("Pinocchio done!\n");
-
-      if (!ThisTask)
-	write_cputimes();
+	{
+	  printf("Pinocchio done!\n");
+	  cputime.total = MPI_Wtime() - cputime.total;
+	  write_cputimes();
+	}
 
       MPI_Finalize();
 
@@ -291,10 +306,13 @@ int main(int argc, char **argv, char **envp)
   fflush(stdout);
   MPI_Barrier(MPI_COMM_WORLD);
 
-#ifdef TEST_ONLY  
-  dprintf(VMSG, 0, "Test end point reached. Au revoir.\n");
+#ifdef TEST_ONLY
+  cputime.total = MPI_Wtime() - cputime.total;
   if(ThisTask == 0)
-    write_cputimes();
+    {
+      dprintf(VMSG, 0, "Test end point reached. Au revoir.\n");  
+      write_cputimes();
+    }
   MPI_Finalize();
   exit(0);
 #endif  
@@ -335,7 +353,7 @@ void write_cputimes()
 {
   printf("Total:            %14.6f\n", cputime.total);
   printf("Initialization:   %14.6f (%5.2f%%)\n", cputime.init, 100.*cputime.init/cputime.total);
-  printf("  Density in FS:  %14.6f (%5.2f%%)\n", cputime.dens, 100.*cputime.dens/cputime.total);
+  printf("  Density in PS:  %14.6f (%5.2f%%)\n", cputime.dens, 100.*cputime.dens/cputime.total);
   printf("fmax:             %14.6f (%5.2f%%)\n", cputime.fmax, 100.*cputime.fmax /cputime.total);
 #ifdef TWO_LPT
   printf("  LPT:            %14.6f (%5.2f%%)\n", cputime.lpt,  100.*cputime.lpt  /cputime.total);

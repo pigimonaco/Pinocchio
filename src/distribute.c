@@ -1,5 +1,5 @@
 /*****************************************************************
- *                        PINOCCHI0  V4.1                        *
+ *                        PINOCCHI0  V4.0                        *
  *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
  *****************************************************************
  
@@ -28,49 +28,24 @@
 
 //#define VERBOSE
 
-/* typedef struct */
-/* { */
-/*   int task,box_x,box_y,box_z,bz,gz,flag,check;  // flag si puo` levare... */
-/* } comm_struct; */
+typedef struct
+{
+  int task,box_x,box_y,box_z,bz,gz,flag,check;  // flag si puo` levare...
+} comm_struct;
 
-/* static int largest_size; */
-/* static product_data *sub_plane; */
-/* static int frag_offset; */
+static int largest_size;
+static product_data *sub_plane;
 
-/* int find_task(int, int, int, int, int *, int *, int *); */
-/* int send_data(comm_struct *); */
-/* int recv_data(comm_struct *); */
-/* int keep_data(comm_struct *); */
+int find_task(int, int, int, int, int *, int *, int *);
+int send_data(comm_struct *);
+int recv_data(comm_struct *);
+int keep_data(comm_struct *);
 
-int prepare_distribute(void)
+int distribute(void)
 {
   /*
   Distributes products from planes to sub-volumes, including boundary layers
   */
-
-
-  vec3i DomainDec[2];
-
-  region_type  myDomain[2];
-  vec3i        myExtent[3];
-
-  vec3i  ghost_region_size;
-
-
-  DomainDec[1][_x_]=subbox.nbox_x;
-  DomainDec[1][_y_]=subbox.nbox_y;
-  DomainDec[1][_z_]=subbox.nbox_z;
-
-  
-  ghost_region_size[_x_]=subbox.safe_x;
-  ghost_region_size[_y_]=subbox.safe_y;
-  ghost_region_size[_z_]=subbox.safe_z;
-
-  // USARE L'INFORMAZIONE 
-
-
-
-
 
   int global_z, *belongs_local, *belongs_global;
   int i1,i2,i3,main_task,second_task,sender,box_z,second_z;
@@ -82,9 +57,6 @@ int prepare_distribute(void)
   fflush(stdout);
   MPI_Barrier(MPI_COMM_WORLD);
 
-  // AGGIUNTO
-  frag_offset=subbox.Nstored;
-  
 #ifdef VERBOSE
   printf("\n");
   printf("task %d, plan of sub-boxes:  %d %d %d - %d %d %d/%d - %d %d %d - %d %d %d - %d %d %d - %d %d %d - %d %d %d\n",
@@ -387,9 +359,7 @@ int prepare_distribute(void)
 	}
     }
 
-  /* updates the number of stored particles */
-  subbox.Nstored=frag_offset;
-  
+
   /* check that all wanted communications have been performed */
   for (i=0; i<count_keep; i++)
     if (!comm_keep[i].check) 
@@ -413,15 +383,7 @@ int prepare_distribute(void)
   fflush(stdout);
   MPI_Barrier(MPI_COMM_WORLD);
 
-  if (subbox.Nstored <= subbox.Nalloc)
-    return 0;
-  else
-    {
-      printf("ERROR in Task %d: it stored more particles than allocated, %d > %d\n",
-	     ThisTask,subbox.Nstored,subbox.Nalloc);
-      printf("Please increase MaxMemPerParticle and start again\n");
-      return 1;
-    }
+  return 0;
 }
 
 
@@ -584,16 +546,11 @@ int recv_data(comm_struct *comm_data)
       return 1;
     }
 
-  
-  // CAMBIATO
   /* copying information onto the frag structure */
   offset = comm_data->bz * size;
   for (i=0; i<size; i++)
-    if (get_mapup_bit((unsigned int)(i+offset)) && sub_plane[i].Fmax>=outputs.Flast)
-      {
-	frag_pos[frag_offset]=i+offset;
-	*(frag + frag_offset++) = *(sub_plane+i);
-      }
+    *(frag + i + offset) = *(sub_plane+i);
+  
   /* done */
   return 0;
 }
@@ -618,13 +575,8 @@ int keep_data(comm_struct *comm_data)
 	  if (k1<0) k1+=MyGrids[0].GSlocal[_x_];
 	  if (k1>=MyGrids[0].GSlocal[_x_]) k1-=MyGrids[0].GSlocal[_x_];
 
-	  if (get_mapup_bit((unsigned int)(j1 + j2*subbox.Lgwbl_x + offrag)) && products[k1 + MyGrids[0].GSlocal[_x_] * k2 + offmax].Fmax>=outputs.Flast)
-	    {
-	      // CAMBIATO
-	      frag_pos[frag_offset]=j1 + j2*subbox.Lgwbl_x + offrag;
-	      *(frag + frag_offset++) =
-		*(products + k1 + MyGrids[0].GSlocal[_x_] * k2 + offmax);
-	    }	  
+	  *(frag + j1 + j2*subbox.Lgwbl_x + offrag) =
+	    *(products + k1 + MyGrids[0].GSlocal[_x_] * k2 + offmax);
 	}
     }
 

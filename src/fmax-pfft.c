@@ -61,11 +61,15 @@ int cubes_order(const void *A, const void *B)
   float a = *(starts[*(int*)A]);
   float b = *(starts[*(int*)B]);
 
+  return (a - b);
+
+  /*
   if( a > b)
     return 1;
   if(a < b)
     return -1;
   return 0;
+  */
 }
 
 
@@ -91,7 +95,7 @@ int set_one_grid(int ThisGrid)
 					   GRID.GSlocal_k, GRID.GSstart_k);
 
   
-  dprintf(VMSG, ThisTask, "[set grid %02d] task %d %ld "
+  dprintf(VDIAG, ThisTask, "[set grid %02d] task %d %ld "
 	  "i: %ld %ld %ld - i start: %ld %ld %ld - "
 	  "o: %ld %ld %ld - o start: %ld %ld %ld\n",
 	  ThisGrid, ThisTask, alloc_local,
@@ -104,7 +108,7 @@ int set_one_grid(int ThisGrid)
   GRID.total_local_size_fft = 2 * alloc_local;
   GRID.total_local_size     = GRID.GSlocal[_x_] * GRID.GSlocal[_y_] * GRID.GSlocal[_z_];  
   
-  
+  MyGrids[0].off = 0;  
   // order the sub-blocks by row-major order (i, j, k), k first, then j, then i
 
   /* int           i; */
@@ -150,6 +154,10 @@ int initialize_fft()
       pfft_flags = 0;
       if(params.use_transposed_fft)
 	pfft_flags |= PFFT_TRANSPOSED_OUT;
+#ifdef USE_FFT_THREADS
+      fftw_plan_with_nthreads(internal.nthreads);
+      pfft_plan_with_nthreads(internal.nthreads);
+#endif
       GRID.forward_plan = pfft_plan_dft_r2c_3d(DIM, rvector_fft[ThisGrid], cvector_fft[ThisGrid],
 					       FFT_Comm, PFFT_FORWARD, pfft_flags);
 
@@ -163,7 +171,10 @@ int initialize_fft()
       pfft_flags = 0;
       if(params.use_transposed_fft)
 	pfft_flags |= PFFT_TRANSPOSED_IN;
-	    
+#ifdef USE_FFT_THREADS
+      fftw_plan_with_nthreads(internal.nthreads);      
+      pfft_plan_with_nthreads(internal.nthreads);
+#endif
       GRID.reverse_plan = pfft_plan_dft_c2r_3d(DIM, cvector_fft[ThisGrid], rvector_fft[ThisGrid], 
 					       FFT_Comm, PFFT_BACKWARD, pfft_flags);
     }
@@ -405,16 +416,18 @@ double greens_function(double *diff_comp, double k_squared, int first_derivative
 
 void write_in_cvector(int ThisGrid, double * restrict vector)
 {
-  int i;
   dvec * restrict target = (dvec*)cvector_fft[ThisGrid];
   dvec * restrict source = (dvec*)vector;
   int mysize = GRID.total_local_size_fft/DVEC_SIZE;
 
+#if !defined(_OPENMP)  
 #pragma GCC ivdep
-  for ( i = 0; i < mysize; i++ )
+#endif
+#pragma omp for schedule(simd:static)
+  for ( int i = 0; i < mysize; i++ )
     *(target + i) = *(source + i);
 
-  for (i = mysize*DVEC_SIZE; i < GRID.total_local_size_fft; i++ )
+  for (int i = mysize*DVEC_SIZE; i < GRID.total_local_size_fft; i++ )
     *((double*)cvector_fft[ThisGrid] + i) = *(vector+i);
 
   // non-vector code   
@@ -428,17 +441,19 @@ void write_in_cvector(int ThisGrid, double * restrict vector)
 
 void write_from_cvector(int ThisGrid, double * restrict vector)
 {
-  int i;
   dvec * restrict source = (dvec*)cvector_fft[ThisGrid];
   dvec * restrict target = (dvec*)vector;
 
   int mysize = GRID.total_local_size_fft/DVEC_SIZE;
-  
+
+#if !defined(_OPENMP)
 #pragma GCC ivdep
-  for ( i = 0; i < mysize; i++ )
+#endif
+#pragma omp for schedule(simd:static)  
+  for ( int i = 0; i < mysize; i++ )
     *(target + i) = *(source + i);
 
-  for (i = mysize*DVEC_SIZE; i < GRID.total_local_size_fft; i++ )
+  for (int i = mysize*DVEC_SIZE; i < GRID.total_local_size_fft; i++ )
     *(vector + i) = *((double*)cvector_fft[ThisGrid] + i);
 
   // non-vector code   
@@ -451,16 +466,18 @@ void write_from_cvector(int ThisGrid, double * restrict vector)
 
 void write_in_rvector(int ThisGrid, double * restrict vector)
 {
-  int i;
   dvec * restrict target = (dvec*)rvector_fft[ThisGrid];
   dvec * restrict source = (dvec*) vector;
   int mysize = GRID.total_local_size / DVEC_SIZE;
 
+#if !defined(_OPENMP)
 #pragma GCC ivdep
-  for( i = 0; i < mysize; i++ )
+#endif  
+#pragma omp for schedule(simd:static)  
+  for( int i = 0; i < mysize; i++ )
     *(target + i) = *(source + i);
   
-  for( i = mysize*DVEC_SIZE ; i < GRID.total_local_size; i++ )
+  for( int i = mysize*DVEC_SIZE ; i < GRID.total_local_size; i++ )
     *((double*)rvector_fft[ThisGrid] + i) = *(vector + i);
 
   // non-vector code   
@@ -472,17 +489,18 @@ void write_in_rvector(int ThisGrid, double * restrict vector)
 
 void write_from_rvector(int ThisGrid, double * restrict vector)
 {
-  int i;
-
   dvec * restrict source = (dvec*)rvector_fft[ThisGrid];
   dvec * restrict target = (dvec*)vector;
   int mysize = GRID.total_local_size / DVEC_SIZE;
 
+#if !defined(_OPENMP)
 #pragma GCC ivdep
-  for( i = 0; i < mysize; i++ )
+#endif
+#pragma omp for schedule(simd:static)  
+  for( int i = 0; i < mysize; i++ )
     *(target + i) = *(source + i);
 
-  for( i = mysize*DVEC_SIZE; i < GRID.total_local_size; i++ )
+  for( int i = mysize*DVEC_SIZE; i < GRID.total_local_size; i++ )
     *(vector + i) = *((double*)rvector_fft[ThisGrid] + i);
 
   // non-vector code 
@@ -494,7 +512,7 @@ void write_from_rvector(int ThisGrid, double * restrict vector)
 
 
 
-void dump_cvector(double *vector, int T, int Nmesh, ptrdiff_t *local_n, ptrdiff_t *local_start,  char *filename, int ThisGrid)
+void dump_cvector(double * restrict vector, int T, int Nmesh, ptrdiff_t * restrict local_n, ptrdiff_t * restrict local_start,  char *filename, int ThisGrid)
 // this routine dump in a unique files the 3d complex-space cube
 // the quantity of each "particle" (i.e. cell) is written with its unique ordinal number in x,y,z
 //   order
@@ -603,7 +621,7 @@ void dump_cvector(double *vector, int T, int Nmesh, ptrdiff_t *local_n, ptrdiff_
 }
 
 
-void dump_rvector(double *vector, int Nmesh, ptrdiff_t *local_n, ptrdiff_t *local_start,  char *filename, int ThisGrid)
+void dump_rvector(double * restrict vector, int Nmesh, ptrdiff_t * restrict local_n, ptrdiff_t * restrict local_start,  char *filename, int ThisGrid)
 // this routine dump in a unique files the 3d complex-space cube
 // the quantity of each "particle" (i.e. cell) is written with its unique ordinal number in x,y,z
 //   order
