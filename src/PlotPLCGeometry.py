@@ -43,7 +43,6 @@ def plot_dist(C,L,V,r,ax):
 
 def plot_cone(V,D1,A,ax,rstart=0.0,rstop=1.0,Nr=5,Nphi=10):
 
-
     deltar=(rstop-rstart)/np.float(Nr)
 
     D = D1/np.linalg.norm(D1)
@@ -56,38 +55,55 @@ def plot_cone(V,D1,A,ax,rstart=0.0,rstop=1.0,Nr=5,Nphi=10):
     p /= np.linalg.norm(p)
     q = np.cross(D,p)
 
-    for iphi in range(Nphi):
+    AA=min(A,np.pi)
+    if A<180.:
+        for iphi in range(Nphi):
 
-        phi1 = iphi * 2.0*np.pi / np.float(Nphi)
-        phi2 = (iphi+1) * 2.0*np.pi / np.float(Nphi)
+            phi1 = iphi * 2.0*np.pi / np.float(Nphi)
+            phi2 = (iphi+1) * 2.0*np.pi / np.float(Nphi)
 
-        for ir in range(Nr):
+            for ir in range(Nr):
 
-            r1=ir*deltar+rstart
-            r2=(ir+1)*deltar+rstart
+                r1=ir*deltar+rstart
+                r2=(ir+1)*deltar+rstart
 
-            rad1=r1*np.sin(A)
-            rad2=r2*np.sin(A)
+                rad1=r1*np.sin(AA)
+                rad2=r2*np.sin(AA)
 
-            X=np.array([[V[0]+r1*np.cos(A)*D[0]+rad1*(p[0]*np.cos(phi1)+q[0]*np.sin(phi1)),
-                         V[0]+r2*np.cos(A)*D[0]+rad2*(p[0]*np.cos(phi1)+q[0]*np.sin(phi1))],
-                        [V[0]+r1*np.cos(A)*D[0]+rad1*(p[0]*np.cos(phi2)+q[0]*np.sin(phi2)),
-                         V[0]+r2*np.cos(A)*D[0]+rad2*(p[0]*np.cos(phi2)+q[0]*np.sin(phi2))]])
-            Y=np.array([[V[1]+r1*np.cos(A)*D[1]+rad1*(p[1]*np.cos(phi1)+q[1]*np.sin(phi1)),
-                         V[1]+r2*np.cos(A)*D[1]+rad2*(p[1]*np.cos(phi1)+q[1]*np.sin(phi1))],
-                        [V[1]+r1*np.cos(A)*D[1]+rad1*(p[1]*np.cos(phi2)+q[1]*np.sin(phi2)),
-                         V[1]+r2*np.cos(A)*D[1]+rad2*(p[1]*np.cos(phi2)+q[1]*np.sin(phi2))]])
-            Z=np.array([[V[2]+r1*np.cos(A)*D[2]+rad1*(p[2]*np.cos(phi1)+q[2]*np.sin(phi1)),
-                         V[2]+r2*np.cos(A)*D[2]+rad2*(p[2]*np.cos(phi1)+q[2]*np.sin(phi1))],
-                        [V[2]+r1*np.cos(A)*D[2]+rad1*(p[2]*np.cos(phi2)+q[2]*np.sin(phi2)),
-                         V[2]+r2*np.cos(A)*D[2]+rad2*(p[2]*np.cos(phi2)+q[2]*np.sin(phi2))]])
+                X=np.array([[V[0]+r1*np.cos(AA)*D[0]+rad1*(p[0]*np.cos(phi1)+q[0]*np.sin(phi1)),
+                             V[0]+r2*np.cos(AA)*D[0]+rad2*(p[0]*np.cos(phi1)+q[0]*np.sin(phi1))],
+                            [V[0]+r1*np.cos(AA)*D[0]+rad1*(p[0]*np.cos(phi2)+q[0]*np.sin(phi2)),
+                             V[0]+r2*np.cos(AA)*D[0]+rad2*(p[0]*np.cos(phi2)+q[0]*np.sin(phi2))]])
+                Y=np.array([[V[1]+r1*np.cos(AA)*D[1]+rad1*(p[1]*np.cos(phi1)+q[1]*np.sin(phi1)),
+                             V[1]+r2*np.cos(AA)*D[1]+rad2*(p[1]*np.cos(phi1)+q[1]*np.sin(phi1))],
+                            [V[1]+r1*np.cos(AA)*D[1]+rad1*(p[1]*np.cos(phi2)+q[1]*np.sin(phi2)),
+                             V[1]+r2*np.cos(AA)*D[1]+rad2*(p[1]*np.cos(phi2)+q[1]*np.sin(phi2))]])
+                Z=np.array([[V[2]+r1*np.cos(AA)*D[2]+rad1*(p[2]*np.cos(phi1)+q[2]*np.sin(phi1)),
+                             V[2]+r2*np.cos(AA)*D[2]+rad2*(p[2]*np.cos(phi1)+q[2]*np.sin(phi1))],
+                            [V[2]+r1*np.cos(AA)*D[2]+rad1*(p[2]*np.cos(phi2)+q[2]*np.sin(phi2)),
+                             V[2]+r2*np.cos(AA)*D[2]+rad2*(p[2]*np.cos(phi2)+q[2]*np.sin(phi2))]])
 
-            ax.plot_surface(X,Y,Z, color='r', alpha=0.2)
+                ax.plot_surface(X,Y,Z, color='r', alpha=0.2)
 
     ax.plot([V[0],V[0]+rstop*D[0]],[V[1],V[1]+rstop*D[1]],[V[2],V[2]+rstop*D[2]],lw=3,color='k')
 
+    Ncap=max(int(1.5*Nphi*AA/np.pi)+1,5)
+    a=np.complex(0,Nphi+1)
+    b=np.complex(0,Ncap)
+    u, v = np.mgrid[0:2*np.pi:a, 0:AA:b]
 
-file=open("pinocchio.prova.geometry.out","r")
+    x=V[0]+rstop*(np.cos(v)*D[0]+np.sin(v)*(p[0]*np.cos(u)+q[0]*np.sin(u)))
+    y=V[1]+rstop*(np.cos(v)*D[1]+np.sin(v)*(p[1]*np.cos(u)+q[1]*np.sin(u)))
+    z=V[2]+rstop*(np.cos(v)*D[2]+np.sin(v)*(p[2]*np.cos(u)+q[2]*np.sin(u)))
+    ax.plot_wireframe(x, y, z, color="r")
+    x=V[0]+rstart*(np.cos(v)*D[0]+np.sin(v)*(p[0]*np.cos(u)+q[0]*np.sin(u)))
+    y=V[1]+rstart*(np.cos(v)*D[1]+np.sin(v)*(p[1]*np.cos(u)+q[1]*np.sin(u)))
+    z=V[2]+rstart*(np.cos(v)*D[2]+np.sin(v)*(p[2]*np.cos(u)+q[2]*np.sin(u)))
+    ax.plot_wireframe(x, y, z, color="b")
+
+
+
+file=open("pinocchio.cdm.geometry.out","r")
 line=file.readline()
 Ncubes=np.int(line.split()[3])
 line=file.readline()
@@ -136,10 +152,10 @@ rlargest=np.max(rmax)
 
 fig = plt.figure()
 ax = fig.gca(projection='3d')
-#ax.set_aspect("equal")
-ax.set_xlim([-L[0],rlargest])
-ax.set_ylim([-3*L[1],3*L[1]])
-ax.set_zlim([-3*L[2],3*L[2]])
+ax.set_aspect("equal")
+ax.set_xlim([-rlargest,rlargest])
+ax.set_ylim([-rlargest,rlargest])
+ax.set_zlim([-rlargest,rlargest])
 ax.set_xlabel('X')
 ax.set_ylabel('Y')
 ax.set_zlabel('Z')
@@ -151,7 +167,7 @@ for i in range(Ncubes):
     # plot_dist(replication[i]*L,L,V,rmax[i],ax)
 
 # draw cone
-plot_cone(V,D,A,ax,rstart=rstart,rstop=rstop,Nr=10)
+plot_cone(V,D,A,ax,rstart=rstart,rstop=rstop,Nr=10,Nphi=50)
 
 plt.show()
 

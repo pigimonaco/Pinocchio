@@ -337,8 +337,8 @@ int build_groups(int Npeaks)
 
 		      /* loop on replications */
 		      for (irep=0; irep<plc.Nreplications; irep++)
-			if (frag[indices[iz]].Fmax < plc.repls[irep].F1 &&
-			    frag[indices[iz]].Fmax > plc.repls[irep].F2)
+			if (!(frag[indices[iz]].Fmax > plc.repls[irep].F1 || 
+			      groups[thisgroup].Flast < plc.repls[irep].F2))
 			  {
 			    replicate[0]=plc.repls[irep].i;
 			    replicate[1]=plc.repls[irep].j;
@@ -354,11 +354,11 @@ int build_groups(int Npeaks)
 			    else if (bb>0.)
 			      {
 				/* if it is outside the PLC then check whether it has just passed */
-				aa=condition_PLC(groups[neigh[ig1]].Flast);
+				aa=condition_PLC(groups[thisgroup].Flast);
 				if (aa<0.0)
 				  {
 				    /* in this case the group has passed through the PLC since last time */
-				    if ( (Fplc=find_brent(groups[neigh[ig1]].Flast,frag[indices[iz]].Fmax)) == -99.00)
+				    if ( (Fplc=find_brent(groups[thisgroup].Flast,frag[indices[iz]].Fmax)) == -99.00)
 				      return 1;
 				    if (store_PLC(Fplc))
 				      return 1;
@@ -681,8 +681,7 @@ int build_groups(int Npeaks)
 
 		  /* loop on replications */
 		  for (irep=0; irep<plc.Nreplications; irep++)
-		    /* if (frag[indices[iz]].Fmax < plc.repls[irep].F1 && */
-		    /* 	frag[indices[iz]].Fmax > plc.repls[irep].F2) */
+		    if (groups[ig1].Flast > plc.repls[irep].F2)
 		      {
 			replicate[0]=plc.repls[irep].i;
 			replicate[1]=plc.repls[irep].j;

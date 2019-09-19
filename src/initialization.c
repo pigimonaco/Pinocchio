@@ -405,6 +405,7 @@ int set_grids()
 
 
 #ifdef PLC
+#define NSAFE 2.0
 
 double myz;
 int cone_and_cube_intersect(double *, double *, double *, double *, double , double *, double *, int *);
@@ -413,7 +414,7 @@ double maxF(double *, double *, double *, double *, double *);
 int set_plc(void)
 {
   int NAll,ir,jr,kr,ic,this,intersection,axis;
-  double Largest_r,Smallest_r,smallestr,largestr,x[3],l[3],z,d,mod;
+  double Largest_r,Smallest_r,smallestr,largestr,x[3],l[3],z,d,mod,displ_variance,tdis;
   FILE *fout;
   char filename[BLENGTH];
 
@@ -499,6 +500,12 @@ int set_plc(void)
   Largest_r=ProperDistance(params.StartingzForPLC)/params.InterPartDist;
   Smallest_r=ProperDistance(params.LastzForPLC)/params.InterPartDist;
 
+  /* this is needed to compute the typical displacement */
+  displ_variance = sqrt( DisplVariance(params.InterPartDist) ) / params.InterPartDist;
+  Smallest_r -= NSAFE * GrowingMode(params.LastzForPLC) * displ_variance;
+  Smallest_r = (Smallest_r>0 ? Smallest_r : 0.);
+  Largest_r += NSAFE * GrowingMode(params.StartingzForPLC) * displ_variance;
+
   l[0]=(double)(MyGrids[0].GSglobal_x);
   l[1]=(double)(MyGrids[0].GSglobal_y);
   l[2]=(double)(MyGrids[0].GSglobal_z);
@@ -565,13 +572,17 @@ int set_plc(void)
   /* fourth it transforms distances to redshifts */
   for (z=100.; z>=0.0; z-=0.01)
     {
-      d=ProperDistance(z)/params.InterPartDist;
+      /* NSAFE times the typical displacement at z */
+      tdis = NSAFE * GrowingMode(z) * displ_variance;
+
+      /* proper distance at redshift z */
+      d = ProperDistance(z)/params.InterPartDist;
       for (this=0; this<plc.Nreplications; this++)
 	{
-	  if (plc.repls[this].F1<=0.0 && d<-plc.repls[this].F1)
+	  if (plc.repls[this].F1<=0.0 && d<-plc.repls[this].F1+tdis)
 	    plc.repls[this].F1=z+0.01+1.0;
-	  if (plc.repls[this].F2<=0.0 && d<-plc.repls[this].F2)
-	    plc.repls[this].F2=z-0.01+1.0;
+	  if (plc.repls[this].F2<=0.0 && d<-plc.repls[this].F2-tdis)
+	    plc.repls[this].F2=z+1.0;
 	}
     }
   for (this=0; this<plc.Nreplications; this++)
@@ -652,18 +663,21 @@ int cone_and_cube_intersect(double *Oc, double *L, double *V, double *D, double 
   int i, j, k, ivec[3], dim, dim1, dim2;
   double r, x, F, Fmax, costh, proj, U[3], P[3];
 
-  /* This routine returns 1 if the cone with vertex V, axis direction D and semi-aperture theta (deg)
-     intersects the cube starting from point Oc and with edges of lenght L aligned with the axes.
-     It returns 0 if the two solids do not intersect.
-     It also computes the smallest and largest distances of the cube from the cone vertex V.
+  /* This routine returns >=1 if the cone with vertex V, axis
+     direction D and semi-aperture theta (deg) intersects the cube
+     (parallelepiped) starting from point Oc and with edges of lenght
+     L aligned with the axes.  It returns 0 if the two solids do not
+     intersect.  It also computes the smallest and largest distances
+     of the cube from the cone vertex V. The bits of the integer axis
+     will encode the cube faces that are intersected by the cone axis.
    */
 
 
-  /* Computation of rmin and rmax */
+  /* Initialization of rmin and rmax */
   *rmin=1.e32;
   *rmax=0.0;
 
-  /* max distance from vertices */
+  /* max distance is computed using the cube vertices */
   for (i=0;i<2;i++)
     for (j=0;j<2;j++)
       for (k=0;k<2;k++)
@@ -690,11 +704,11 @@ int cone_and_cube_intersect(double *Oc, double *L, double *V, double *D, double 
 	r=proj*proj;                        /* the normal component always contributes */
 	if (V[dim1]<Oc[dim1])               /* only of their projection is outside the face */
 	  r+=pow(V[dim1]-Oc[dim1],2.0);
-	else if (V[dim1]>Oc[dim1]+L[dim1])
+	else if (V[dim1]>=Oc[dim1]+L[dim1])
 	  r+=pow(V[dim1]-Oc[dim1]-L[dim1],2.0);
 	if (V[dim2]<Oc[dim2])
 	  r+=pow(V[dim2]-Oc[dim2],2.0);
-	else if (V[dim2]>Oc[dim2]+L[dim2])
+	else if (V[dim2]>=Oc[dim2]+L[dim2])
 	  r+=pow(V[dim2]-Oc[dim2]-L[dim2],2.0);
 	r=sqrt(r);
 	if (r<*rmin)
@@ -703,25 +717,24 @@ int cone_and_cube_intersect(double *Oc, double *L, double *V, double *D, double 
 	/* axis intersection */
 	if ( (x=proj/D[dim]) > 0.0 &&
 	     V[dim1] + x*D[dim1] >= Oc[dim1] &&
-	     V[dim1] + x*D[dim1] <= Oc[dim1] + L[dim1] &&
+	     V[dim1] + x*D[dim1] < Oc[dim1] + L[dim1] &&
 	     V[dim2] + x*D[dim2] >= Oc[dim2] &&
-	     V[dim2] + x*D[dim2] <= Oc[dim2] + L[dim2] )
+	     V[dim2] + x*D[dim2] < Oc[dim2] + L[dim2] )
 	  *axis+=1<<(dim+i*3);
       }
 
-  /* step 1: if the whole sky is required, only rmin and rmax are needed */
-  if (theta>=180.)
-    return 1;
-
-  /* step 2: if the vertex V is inside the cube and axis>0 then they intersect */
-  if (( *axis &&
-	V[0]>=Oc[0] && V[0]<=Oc[0]+L[0] &&
-	V[1]>=Oc[1] && V[1]<=Oc[1]+L[1] &&
-	V[2]>=Oc[2] && V[2]<=Oc[2]+L[2] ) )
+  /* step 1: if the vertex V is inside the cube then they intersect */
+  if (( V[0]>=Oc[0] && V[0]<Oc[0]+L[0] &&
+	V[1]>=Oc[1] && V[1]<Oc[1]+L[1] &&
+	V[2]>=Oc[2] && V[2]<Oc[2]+L[2] ) )
     {
       *rmin = 0.0;  /* in this case rmin is unrelated to the cube boundary */
-      return 2;
+      return 1;
     }
+
+  /* step 2: if the whole sky is required, only rmin and rmax are needed */
+  if (theta>=180.)
+      return 2;
 
   /* step 3: if the axis intersects one face then there is an intersection */
   if (*axis)

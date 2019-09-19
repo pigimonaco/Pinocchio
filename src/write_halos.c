@@ -665,7 +665,6 @@ int write_PLC()
 			       plcgroups[i].x[1]*plcgroups[i].v[1]+
 			       plcgroups[i].x[2]*plcgroups[i].v[2])/plcgroups[i].rhor;
               writethis.obsz=plcgroups[i].z+writethis.v_los/SPEEDOFLIGHT*(1.0+plcgroups[i].z);
-
 #ifdef FORTRAN
 	      idummy=sizeof(struct towrite);
 	      fwrite(&idummy,sizeof(int),1,file);
@@ -1069,13 +1068,6 @@ int write_histories(void)
 
 	  if (nbranch_all)
 	    {
-	      if (nbranch_all * sizeof(histories_data) > subbox.Npart/10*sizeof(histories_data)) // LEVARE
-		{
-		  printf("ERROR ASSURDO on task %d: write_histories, non basta lo spazio per mycat (recv)\n",ThisTask);
-		  fflush(stdout);
-		  return 1;
-		}
-
 	      MPI_Recv(mycat, nbranch_all*sizeof(histories_data), MPI_CHAR, itask, 0, MPI_COMM_WORLD, &status);
 
 	      /* writes the catalog that has just received */
