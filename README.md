@@ -1,5 +1,7 @@
 # Pinocchio
 
+PLEASE USE ONLY THE MASTER BRANCH! other branches are under development and are unstable.
+
 PINOCCHIO is a fast code to generate catalogues of cosmological dark matter halos with known mass, position, velocity and merger history.
 
 It is able to reproduce, with very good accuracy, the hierarchical formation of dark matter halos from a realization of an initial (linear) density perturbation field, given on a 3D grid.
