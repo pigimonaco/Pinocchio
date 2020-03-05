@@ -138,6 +138,12 @@ int set_parameters()
     * pow(params.InterPartDist,3.);
   strcpy(params.DataDir,"Data/");
 
+#ifdef SCALE_DEPENDENT
+  params.k_for_GM = 1./params.InterPartDist; // TROVARE COSTANTE OTTIMALE
+#else
+  params.k_for_GM = 0.0;
+#endif
+
   if (!params.NumFiles)
     params.NumFiles=1;
 
@@ -275,8 +281,8 @@ int set_smoothing()
 #ifdef SCALE_DEPENDENT_GROWTH
   SDGM.flag=-1;   /* here we want to use the standard, scale-independent growing mode */
 #endif
-  
-  var_min    = pow(1.686/NSIGMA / GrowingMode(outputs.zlast),2.0);
+
+  var_min    = pow(1.686/NSIGMA / GrowingMode(outputs.zlast,0.),2.0);
   /* rmax       = Radius(var_min); */
   rmin       = params.InterPartDist/6.;
   var_max    = MassVariance(rmin);
@@ -491,21 +497,21 @@ int set_plc(void)
     }
 
   /* initialization to compute the number of realizations */
-  NAll=(int)(ProperDistance(params.StartingzForPLC)/MyGrids[0].BoxSize)+2;
+  NAll=(int)(ComovingDistance(params.StartingzForPLC)/MyGrids[0].BoxSize)+2;
   plc.Fstart = 1.+params.StartingzForPLC;
   plc.Fstop  = 1.+params.LastzForPLC;
   /* if F is the inverse collapse time: */
   /* plc.Fstart = 1./GrowingMode(params.StartingzForPLC); */
   /* plc.Fstop  = 1./GrowingMode(params.LastzForPLC); */
 
-  Largest_r=ProperDistance(params.StartingzForPLC)/params.InterPartDist;
-  Smallest_r=ProperDistance(params.LastzForPLC)/params.InterPartDist;
+  Largest_r=ComovingDistance(params.StartingzForPLC)/params.InterPartDist;
+  Smallest_r=ComovingDistance(params.LastzForPLC)/params.InterPartDist;
 
   /* this is needed to compute the typical displacement */
   displ_variance = sqrt( DisplVariance(params.InterPartDist) ) / params.InterPartDist;
-  Smallest_r -= NSAFE * GrowingMode(params.LastzForPLC) * displ_variance;
+  Smallest_r -= NSAFE * GrowingMode(params.LastzForPLC,0.) * displ_variance;
   Smallest_r = (Smallest_r>0 ? Smallest_r : 0.);
-  Largest_r += NSAFE * GrowingMode(params.StartingzForPLC) * displ_variance;
+  Largest_r += NSAFE * GrowingMode(params.StartingzForPLC,0.) * displ_variance;
 
   l[0]=(double)(MyGrids[0].GSglobal_x);
   l[1]=(double)(MyGrids[0].GSglobal_y);
@@ -574,10 +580,10 @@ int set_plc(void)
   for (z=100.; z>=0.0; z-=0.01)
     {
       /* NSAFE times the typical displacement at z */
-      tdis = NSAFE * GrowingMode(z) * displ_variance;
+      tdis = NSAFE * GrowingMode(z,0.) * displ_variance;
 
-      /* proper distance at redshift z */
-      d = ProperDistance(z)/params.InterPartDist;
+      /* comoving distance at redshift z */
+      d = ComovingDistance(z)/params.InterPartDist;
       for (this=0; this<plc.Nreplications; this++)
 	{
 	  if (plc.repls[this].F1<=0.0 && d<-plc.repls[this].F1+tdis)
@@ -612,9 +618,9 @@ int set_plc(void)
       if (params.PLCProvideConeData)
 	printf("(NB: rotation has been applied to the provided coordinates)\n");
 #endif
-      printf("The proper distance at the starting redshift, z=%f, is: %f Mpc\n",
+      printf("The comoving distance at the starting redshift, z=%f, is: %f Mpc\n",
 	     params.StartingzForPLC, Largest_r*params.InterPartDist);
-      printf("The proper distance at the stopping redshift, z=%f, is: %f Mpc\n",
+      printf("The comoving distance at the stopping redshift, z=%f, is: %f Mpc\n",
 	     params.LastzForPLC, Smallest_r*params.InterPartDist);
       printf("The reconstruction will be done for %f < z < %f\n",params.LastzForPLC,params.StartingzForPLC);
       printf("The corresponding F values are: Fstart=%f, Fstop=%f\n",plc.Fstart,plc.Fstop);
@@ -804,7 +810,7 @@ int set_subboxes()
 #endif
 
   /* typical displacement at zlast */
-  tdis = GrowingMode(outputs.zlast) * sqrt( DisplVariance(params.InterPartDist) );
+  tdis = GrowingMode(outputs.zlast,0.) * sqrt( DisplVariance(params.InterPartDist) );
 
   /* mass of the largest halo expected in the box */
   params.Largest=1.e18;
@@ -826,7 +832,7 @@ int set_subboxes()
     {
       printf("\n");
       printf("Determination of the boundary layer\n");
-      printf("   growing mode at z=%f: %f\n",outputs.zlast, GrowingMode( outputs.zlast ));
+      printf("   growing mode at z=%f: %f\n",outputs.zlast, GrowingMode( outputs.zlast, 0. ));
       printf("   largest halo expected in this box at z=%f: %e Msun\n",
 	     outputs.zlast, params.Largest);
       printf("   its Lagrangian size: %f Mpc\n",size);

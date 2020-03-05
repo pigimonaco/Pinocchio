@@ -79,9 +79,18 @@ int NSlices,ThisSlice;
 #ifdef SCALE_DEPENDENT_GROWTH
 SDGM_data SDGM;
 #endif
+#ifdef SCALE_DEPENDENT
+ScaleDep_data ScaleDep;
+#endif
 
 gsl_integration_workspace * workspace;
 gsl_rng *random_generator;
 
 mf_data mf;
 
+gsl_spline **SPLINE;
+gsl_interp_accel **ACCEL;
+
+#ifdef MOD_GRAV_FR
+double H_over_c;
+#endif

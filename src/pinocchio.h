@@ -36,13 +36,14 @@
 #include <gsl/gsl_randist.h>
 #include <gsl/gsl_roots.h>
 #include <gsl/gsl_integration.h>
-#include <gsl/gsl_odeiv.h>
+#include <gsl/gsl_odeiv2.h>
 #include <gsl/gsl_spline.h>
 #include <fftw3-mpi.h>
 
 #define NYQUIST 1.
 #define PI      3.14159265358979323846 
-#define BLENGTH 300
+#define BLENGTH 200
+#define SBLENGTH 100
 #define GBYTE 1073741824.0
 #define MBYTE 1048576.0
 #define alloc_verbose 0
@@ -54,37 +55,41 @@
 #define TWO_LPT
 #endif
 
+#if defined(KEEP_DENSITY) && defined(THREE_LPT)
+#error KEEP_DENSITY and THREE_LPT should not be used together
+#endif
+
 extern int ThisTask,NTasks;
+
+#ifdef DOUBLE_PRECISION_PRODUCTS
+typedef double PRODFLOAT;
+#else
+typedef float PRODFLOAT;
+#endif
 
 typedef struct
 {
   int Rmax;
-  double Fmax;
-
-#ifdef DOUBLE_PRECISION_VELOCITIES 
-
-  double Vmax[3];
+  PRODFLOAT Fmax,Vel[3];
 #ifdef TWO_LPT
-  double Vmax_2LPT[3];
+  PRODFLOAT Vel_2LPT[3];
 #ifdef THREE_LPT
-  double Vmax_3LPT_1[3],Vmax_3LPT_2[3];
+  PRODFLOAT Vel_3LPT_1[3],Vel_3LPT_2[3];
 #endif
 #endif
 
-#else
-
-  float Vmax[3];
+#ifdef KEEP_DENSITY
+  PRODFLOAT Vel_after[3];
 #ifdef TWO_LPT
-  float Vmax_2LPT[3];
+  PRODFLOAT Vel_2LPT_after[3];
 #ifdef THREE_LPT
-  float Vmax_3LPT_1[3],Vmax_3LPT_2[3];
+  PRODFLOAT Vel_3LPT_1_after[3],Vel_3LPT_2_after[3];
 #endif
 #endif
-
 #endif
 
 #ifdef TIMELESS_SNAPSHOT
-  float zacc;
+  PRODFLOAT zacc;
 #endif
 } product_data;
 
@@ -142,9 +147,18 @@ typedef struct
 {
   double ReferenceRedshift;
   int ReferenceOutput,Nkbins, NCAMB, ReferenceScale;
-  char MatterFile[BLENGTH], TransferFile[BLENGTH], RunName[BLENGTH], RedshiftsFile[BLENGTH];
+  char MatterFile[BLENGTH], TransferFile[BLENGTH], RunName[SBLENGTH], RedshiftsFile[BLENGTH];
   double *Logk, *LogPkref, D2ref, *Scalef, *RefGM;
 } camb_data;
+#endif
+
+#ifdef SCALE_DEPENDENT
+typedef struct
+{
+  int order;
+  double redshift;
+} ScaleDep_data;
+extern ScaleDep_data ScaleDep;
 #endif
 
 typedef struct
@@ -152,9 +166,9 @@ typedef struct
   double Omega0, OmegaLambda, Hubble100, Sigma8, OmegaBaryon, DEw0, DEwa, 
     PrimordialIndex, InterPartDist, BoxSize, BoxSize_htrue, BoxSize_h100, ParticleMass, 
     StartingzForPLC, LastzForPLC, InputSpectrum_UnitLength_in_cm, WDM_PartMass_in_kev, 
-    BoundaryLayerFactor, Largest, MaxMemPerParticle, PLCAperture,
+    BoundaryLayerFactor, Largest, MaxMemPerParticle, k_for_GM, PLCAperture,
     PLCCenter[3], PLCAxis[3];
-  char RunFlag[BLENGTH],DataDir[BLENGTH],TabulatedEoSfile[BLENGTH],ParameterFile[BLENGTH],
+  char RunFlag[SBLENGTH],DataDir[SBLENGTH],TabulatedEoSfile[BLENGTH],ParameterFile[BLENGTH],
     OutputList[BLENGTH],FileWithInputSpectrum[BLENGTH];
   int GridSize[3],WriteRmax, WriteFmax, WriteVmax, 
     CatalogInAscii, DoNotWriteCatalogs, DoNotWriteHistories, WriteSnapshot, WriteTimelessSnapshot,
@@ -209,6 +223,15 @@ typedef struct
   double Vel_2LPT[3];
 #ifdef THREE_LPT
   double Vel_3LPT_1[3], Vel_3LPT_2[3];
+#endif
+#endif
+#ifdef KEEP_DENSITY
+  double Vel_after[3];
+#ifdef TWO_LPT
+  double Vel_2LPT_after[3];
+#ifdef THREE_LPT
+  double Vel_3LPT_1_after[3], Vel_3LPT_2_after[3];
+#endif
 #endif
 #endif
   int ll, halo_app, mass_at_merger, merged_with, point, bottom, good;
@@ -285,9 +308,21 @@ typedef struct
 } mf_data;
 extern mf_data mf;
 
+/* splines for interpolations */
+extern gsl_spline **SPLINE;
+extern gsl_interp_accel **ACCEL;
+
+#ifdef MOD_GRAV_FR
+extern double H_over_c;
+#endif
+
 /* prototypes for functions defined in collapse_times.c */
 int compute_collapse_times(int);
 int compute_velocities(int);
+#ifdef TABULATED_CT
+int initialize_collapse_times(int);
+int reset_collapse_times(int);
+#endif
 
 /* prototypes for functions defined in fmax-fftw.c */
 int set_one_grid(int);
@@ -321,6 +356,7 @@ int set_grids(void);
 /* prototypes in write_fields.c */
 int write_fields(void);
 int write_density(int);
+int write_product(int, char*);
 
 /* prototypes in write_snapshot.c */
 int write_snapshot(int);
@@ -332,23 +368,24 @@ int write_timeless_snapshot(void);
 /* prototypes for functions defined in cosmo.c */
 int initialize_cosmology();
 int initialize_MassVariance();
-double Omega(double);
+double OmegaMatter(double);
+double OmegaLambda(double);
 double Hubble(double);
 double Hubble_Gyr(double);
-double fomega(double);
-double fomega_2LPT(double);
-double fomega_3LPT_2(double);
-double fomega_3LPT_1(double);
+double fomega(double,double);
+double fomega_2LPT(double,double);
+double fomega_3LPT_2(double,double);
+double fomega_3LPT_1(double,double);
 double CosmicTime(double);
 double InverseCosmicTime(double);
-double GrowingMode(double);
-double GrowingMode_2LPT(double);
-double GrowingMode_3LPT_1(double);
-double GrowingMode_3LPT_2(double);
+double GrowingMode(double,double);
+double GrowingMode_2LPT(double,double);
+double GrowingMode_3LPT_1(double,double);
+double GrowingMode_3LPT_2(double,double);
 double InverseGrowingMode(double);
-double ProperDistance(double);
-double InverseProperDistance(double);
-double dProperDistance_dz(double);
+double ComovingDistance(double);
+double InverseComovingDistance(double);
+double dComovingDistance_dz(double);
 double PowerSpectrum(double);
 double MassVariance(double);
 double dMassVariance_dr(double);
@@ -356,11 +393,11 @@ double DisplVariance(double);
 double Radius(double);
 double SizeForMass(double);
 double MassForSize(double);
-double TypicalCollapsingMass(double);
 double dOmega_dVariance(double, double);
 double AnalyticMassFunction(double, double);
 double WindowFunction(double);
 double my_spline_eval(gsl_spline *, double, gsl_interp_accel *);
+int jac(double, const double [], double *, double [], void *);
 
 /* prototypes for functions defined in ReadParamFile.c */
 int read_parameter_file();
@@ -382,7 +419,7 @@ int distribute(void);
 int fragment(void);
 
 /* prototypes for functions defined in build_groups.c */
-int build_groups(int);
+int build_groups(int,double);
 
 #ifdef SCALE_DEPENDENT_GROWTH
 int read_power_table_from_CAMB(void);

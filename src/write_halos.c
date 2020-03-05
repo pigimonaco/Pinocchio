@@ -46,7 +46,7 @@ int compute_mf(int iout)
   /* presently, the analytic mass function does not deal with scale-dependent growing mode */
   SDGM.flag=-1;
 #endif
-  D=GrowingMode(outputs.z[iout]);
+  D=GrowingMode(outputs.z[iout],0.);
 
   /* sets counters to zero */
   for (i=0; i<mf.NBIN; i++)

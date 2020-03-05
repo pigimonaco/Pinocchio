@@ -25,9 +25,12 @@
 */
 
 #include "pinocchio.h"
+#include "def_splines.h"
 
-#define NVAR 5
-#define NBIN 210
+
+#define NVAR (1+NkBINS*8)
+#define NBINS 210
+#define NBB 10
 #ifdef NORADIATION
 #define OMEGARAD_H2 ((double)0.0)
 #else
@@ -35,24 +38,20 @@
 #endif
 #define TOLERANCE ((double)1.e-4)
 #define UnitLength_in_cm ((double)3.085678e24)
-#define ShapeGamma ((double)0.21)
 #define HUBBLETIME_GYR ((double)3.085678e24/(double)1.e7/(double)3.1558150e16)
 #define DELTA_C ((double)1.686)
 //#define FOMEGA_GAMMA 0.554
-//#define OUTPUT_GM
 
-static int WhichSpectrum, NPowerTable=0, NtabEoS=0;;
+static int Today;
+static int WhichSpectrum, NPowerTable=0, NtabEoS=0;
 static double PkNorm, MatterDensity, OmegaK, OmegaRad;
 
 /* declaration of gsl quantities */
 gsl_function Function;
 
-static gsl_spline *splineGrow=0x0, *splineGrow2=0x0,*splineGrow31=0x0,*splineGrow32=0x0, *splineTime=0x0, 
-  *splineEoS=0x0, *splinePk=0x0, *splineVar=0x0, *splineInvGrow=0x0, 
-  *splineInvTime=0x0, *splineDist=0x0, *splineInvDist=0x0, *splinedrdz=0x0, 
-  *splineRadius=0x0, *splinefO=0x0, *splinefO2=0x0,*splinefO31=0x0,*splinefO32=0x0, *splinedldr=0x0, 
-  *splineIntEoS=0x0, *splineDVar=0x0;
-static gsl_interp_accel *accel=0x0, *accelPk=0x0, *accelEoS=0x0;
+#ifdef SCALE_DEPENDENT
+double kmin,kmax;
+#endif
 
 #ifdef SCALE_DEPENDENT_GROWTH
 static gsl_spline *splineGrowCAMB=0x0, *splineInvGrowCAMB=0x0;
@@ -60,13 +59,13 @@ static gsl_interp_accel *accelCAMB=0x0;
 #endif
 
 int system_of_ODEs(double, const double [], double*, void* );
-int jac(double, const double [], double *, double [], void *);
 int read_TabulatedEoS(void);
 int initialize_PowerSpectrum(void);
 int normalize_PowerSpectrum(void);
+int read_Pk_from_file(void);
 double IntegrandForEoS(double, void*);
 double DE_EquationOfState(double);
-double IntegrandProperDistance(double, void*);
+double IntegrandComovingDistance(double, void*);
 double ComputeMassVariance(double);
 double ComputeDisplVariance(double);
 
@@ -80,121 +79,145 @@ int initialize_cosmology()
 
   /*
     Computes the following functions:
-    Scale factor, growth first and second order LPT, cosmic time, proper distance
-    on a grid of values to be interpolated
+    Scale factor, growth first, second and third-order LPT, cosmic time, 
+    comoving and diameter distance on a grid of values to be interpolated
   */
 
   double ode_param;
-  double y[NVAR], x1, x2, hh, h1, norm, k, result, error, SqrtOmegaK;
-  int status=GSL_SUCCESS, i, i1, i2;
+  double y[NVAR], x1, x2, hh, norm, result, error, SqrtOmegaK, R0, k;
+  int status=GSL_SUCCESS, i, j;
+#ifdef SCALE_DEPENDENT
+  int ik;
+#endif
   char filename[BLENGTH];
   FILE *fd;
-  double log_amin=-4.,log_amax=0.2, dloga;
+  double log_amin=-4.,dloga=-log_amin/(double)(NBINS-NBB);
 
-  double *scalef, *cosmtime, *grow1, *grow2, *IntEoS, *prdist, *prdistneg, *dprdist,
-    *fomegav, *fomega2v, *grow31, *grow32, *fomega31v, *fomega32v;
+  double *scalef, *cosmtime, *grow1, *grow2, *IntEoS, *comvdist, *diamdist,
+    *fomega1, *fomega2, *grow31, *grow32, *fomega31, *fomega32;
 
-  const gsl_odeiv_step_type *T = gsl_odeiv_step_rkf45;
-  gsl_odeiv_step *ode_s = gsl_odeiv_step_alloc(T,NVAR);
-  gsl_odeiv_control *ode_c = gsl_odeiv_control_standard_new(1.0e-8, 1.0e-8, 1.0, 1.0);
-  gsl_odeiv_evolve *ode_e = gsl_odeiv_evolve_alloc(NVAR);
-  gsl_odeiv_system ode_sys = {system_of_ODEs, jac, NVAR, (void*)&ode_param};
+  const gsl_odeiv2_step_type *T = gsl_odeiv2_step_rkf45;
+  gsl_odeiv2_step *ode_s = gsl_odeiv2_step_alloc(T,NVAR);
+  gsl_odeiv2_control *ode_c = gsl_odeiv2_control_standard_new(1.0e-8, 1.0e-8, 1.0, 1.0);
+  gsl_odeiv2_evolve *ode_e = gsl_odeiv2_evolve_alloc(NVAR);
+  gsl_odeiv2_system ode_sys = {system_of_ODEs, jac, NVAR, (void*)&ode_param};
 
-  gsl_spline *spline=0x0;
-
-  dloga=(log_amax-log_amin)/(double)NBIN;
-
+#ifdef MOD_GRAV_FR
+  H_over_c = 100. / SPEEDOFLIGHT;
+#endif
   OmegaRad = OMEGARAD_H2 / params.Hubble100 / params.Hubble100;
   OmegaK = 1.0-params.Omega0 - params.OmegaLambda - OmegaRad;
   SqrtOmegaK = sqrt(fabs(OmegaK));
   MatterDensity = 2.775499745e11 * params.Hubble100 * params.Hubble100 * params.Omega0;
-  if (params.DEw0==-1 && params.DEwa==0 && strcmp(params.TabulatedEoSfile,"no"))
+  if (params.DEw0==-1 && params.DEwa==0 && !strcmp(params.TabulatedEoSfile,"no"))
     params.simpleLambda=1;
   else
     params.simpleLambda=0;
 
-  /* allocation of splines */
-  splineGrow    = gsl_spline_alloc (gsl_interp_cspline, NBIN);
-  splineInvGrow = gsl_spline_alloc (gsl_interp_cspline, NBIN);
-  splineGrow2   = gsl_spline_alloc (gsl_interp_cspline, NBIN);
-  splineGrow31  = gsl_spline_alloc (gsl_interp_cspline, NBIN);
-  splineGrow32  = gsl_spline_alloc (gsl_interp_cspline, NBIN);
-  splinefO      = gsl_spline_alloc (gsl_interp_cspline, NBIN);
-  splinefO2     = gsl_spline_alloc (gsl_interp_cspline, NBIN);
-  splinefO31    = gsl_spline_alloc (gsl_interp_cspline, NBIN);
-  splinefO32    = gsl_spline_alloc (gsl_interp_cspline, NBIN);
-  if (!params.simpleLambda) 
-    splineIntEoS  = gsl_spline_alloc (gsl_interp_cspline, NBIN);
-  splineTime    = gsl_spline_alloc (gsl_interp_cspline, NBIN);
-  splineInvTime = gsl_spline_alloc (gsl_interp_cspline, NBIN);
-  splineDist    = gsl_spline_alloc (gsl_interp_cspline, NBIN);
-  splineInvDist = gsl_spline_alloc (gsl_interp_cspline, NBIN);
-  splinedrdz    = gsl_spline_alloc (gsl_interp_cspline, NBIN);
-  splineVar     = gsl_spline_alloc (gsl_interp_cspline, NBIN);
-  splineDVar    = gsl_spline_alloc (gsl_interp_cspline, NBIN);
-  splineRadius  = gsl_spline_alloc (gsl_interp_cspline, NBIN);
-  splinedldr    = gsl_spline_alloc (gsl_interp_cspline, NBIN);
-  accel         = gsl_interp_accel_alloc ();
+  /* allocation of (most) splines */
+  SPLINE = (gsl_spline **)calloc(NSPLINES, sizeof(gsl_spline *));
+  for (i=0; i<NSPLINES-3; i++)
+    if (i!=SP_COMVDIST && i!=SP_DIAMDIST)
+      SPLINE[i] = gsl_spline_alloc (gsl_interp_cspline, NBINS);
+    else
+      SPLINE[i] = gsl_spline_alloc (gsl_interp_cspline, NBINS-NBB);
+  ACCEL = (gsl_interp_accel **)calloc(NSPLINES, sizeof(gsl_interp_accel *));
+  for (i=0; i<NSPLINES; i++)
+    ACCEL[i] = gsl_interp_accel_alloc();
 
-  /* read the tabulated Equation of State of the dark energy */
-  if (strcmp(params.TabulatedEoSfile,"no"))
-    if (read_TabulatedEoS())
+  /* if needed, read the tabulated power spectrum
+     and initialize its spline */
+  if (strcmp(params.FileWithInputSpectrum,"no"))
+    if (read_Pk_from_file())
       return 1;
 
-  /* allocation of vectors for interpolation */
-  scalef     = (double*)malloc(NBIN * sizeof(double));
-  cosmtime   = (double*)malloc(NBIN * sizeof(double));
-  grow1      = (double*)malloc(NBIN * sizeof(double));
-  grow2      = (double*)malloc(NBIN * sizeof(double));
-  grow31     = (double*)malloc(NBIN * sizeof(double));
-  grow32     = (double*)malloc(NBIN * sizeof(double));
-  prdist     = (double*)malloc(NBIN * sizeof(double));
-  prdistneg  = (double*)malloc(NBIN * sizeof(double));
-  dprdist    = (double*)malloc(NBIN * sizeof(double));
-  fomegav    = (double*)malloc(NBIN * sizeof(double));
-  fomega2v   = (double*)malloc(NBIN * sizeof(double));
-  fomega31v  = (double*)malloc(NBIN * sizeof(double));
-  fomega32v  = (double*)malloc(NBIN * sizeof(double));
-  if (!params.simpleLambda)
-    IntEoS  = (double*)malloc(NBIN * sizeof(double));
-
-
-  /* compute the integrand for the DE EoS if necessary */
+  /* if needed, read the tabulated Equation of State of the dark energy 
+     and initialize its spline, then compute the integrand for the DE EoS */
   if (!params.simpleLambda)
     {
+      if (strcmp(params.TabulatedEoSfile,"no"))
+	{
+	  if (read_TabulatedEoS())  /* this allocates and initializes the spline */
+	    return 1;
+	}
+      else
+	NtabEoS=0;
+
+      SPLINE[SP_INTEOS] = gsl_spline_alloc(gsl_interp_cspline, NBINS);
+
+      scalef  = (double*)malloc(NBINS * sizeof(double));
+      IntEoS  = (double*)malloc(NBINS * sizeof(double));
       Function.function = &IntegrandForEoS;
-      for (i=0; i<NBIN; i++)
+      for (i=0; i<NBINS; i++)
 	{
 	  x2=pow(10., log_amin + (i+1)*dloga);
 	  gsl_integration_qags(&Function, x2, 1.0, 0.0, TOLERANCE, NWINT, workspace, &result, &error);
 	  scalef[i] = log_amin + (i+1)*dloga;
 	  IntEoS[i] = result;
 	}
-      gsl_spline_init(splineIntEoS, scalef, IntEoS, NBIN);
+      
+      gsl_spline_init(SPLINE[SP_INTEOS], scalef, IntEoS, NBINS);
+
+      free(IntEoS);
+      free(scalef);
     }
 
+
+#ifdef SCALE_DEPENDENT
+  kmin=pow(10.,LOGKMIN);
+  kmax=pow(10.,LOGKMIN+(NkBINS-1)*DELTALOGK);
+#endif
+
+
+  /* allocation of vectors for interpolation */
+  scalef    = (double*)malloc(NBINS * sizeof(double));
+  cosmtime  = (double*)malloc(NBINS * sizeof(double));
+  comvdist  = (double*)malloc((NBINS-NBB) * sizeof(double));
+  diamdist  = (double*)malloc((NBINS-NBB)* sizeof(double));
+  grow1     = (double*)malloc(NBINS * NkBINS * sizeof(double));
+  grow2     = (double*)malloc(NBINS * NkBINS * sizeof(double));
+  grow31    = (double*)malloc(NBINS * NkBINS * sizeof(double));
+  grow32    = (double*)malloc(NBINS * NkBINS * sizeof(double));
+  fomega1   = (double*)malloc(NBINS * NkBINS * sizeof(double));
+  fomega2   = (double*)malloc(NBINS * NkBINS * sizeof(double));
+  fomega31  = (double*)malloc(NBINS * NkBINS * sizeof(double));
+  fomega32  = (double*)malloc(NBINS * NkBINS * sizeof(double));
+
+
   /* ICs for the runge-kutta integration */
-  x1=1.e-6;                   /*  initial value of scale factor a */
-  y[0]=1.0;                   /*  initial value of dD/da */
-  y[1]=x1;                    /*  initial value of D(a) */
-  y[2]=2.0/3.0*pow(x1,1.5);   /*  initial value of t(a)*Hubble0 */
-  y[3]=-6./7.*x1;             /*  initial value of the dD2/da */
-  y[4]=-3./7.*x1*x1;          /*  intial value of D2(a) */
-  h1=1.e-6;                   /*  initial guess of time-step */
-  hh=h1;
+  x1   = pow(10., log_amin -2.);   /*  initial value of scale factor a */
+  y[0] = 2. / 3. * pow(x1, 1.5);   /*  initial value of t(a)*Hubble0   */
+
+  /* this is valid for scale-independent and scale-dependent functions */
+  for (j=0; j<NkBINS; j++) {
+    y[1+j*8] = 1.0;                  /*  initial value of dD1/da   */
+    y[2+j*8] = x1;                   /*  initial value of D1(a)    */
+    y[3+j*8] = -6./7. * x1;          /*  initial value of dD2/da   */
+    y[4+j*8] = -3./7. * x1*x1;       /*  initial value of D2(a)    */
+    y[5+j*8] = -x1*x1;               /*  initial value of dD^3a/da */
+    y[6+j*8] = -1./3. * x1*x1*x1;    /*  initial value of D^3a     */
+    y[7+j*8] = 10./7. * x1*x1;       /*  initial value of dD^3b/da */
+    y[8+j*8] = 10./21. * x1*x1*x1;   /*  initial value of D^3b     */
+  }
+
+  hh=x1/10.;                       /*  initial guess of time-step */
 
   /* this function will be integrated within the loop */
-  Function.function = &IntegrandProperDistance;
+  Function.function = &IntegrandComovingDistance;
 
-  /* loop on bins for calling the ODE integrator */
-  for (i=0; i<NBIN; i++)
+  /***********************************************/
+  /* ODE integration of time-dependent functions */
+  /***********************************************/
+  for (i=0, Today=0; i<NBINS; i++)
     {
       x2=pow(10., log_amin + i*dloga);
+      if (fabs(log_amin + i*dloga)<dloga/10.)
+	x2=1.0;
 
       /* integration of ODE system */
       while (x1<x2 && status==GSL_SUCCESS)
 	{
-	  status=gsl_odeiv_evolve_apply(ode_e, ode_c, ode_s, &ode_sys, &x1, x2, &hh, y);
+	  status=gsl_odeiv2_evolve_apply(ode_e, ode_c, ode_s, &ode_sys, &x1, x2, &hh, y);
 	  if (status!=GSL_SUCCESS)
 	    {
 	      printf("ERROR on task %d: integration of cosmological quantities failed\n",ThisTask);
@@ -204,103 +227,119 @@ int initialize_cosmology()
 	}
 
       scalef[i]   = x2;
-      cosmtime[i] = y[2]*HUBBLETIME_GYR/params.Hubble100;
-      grow1[i]    = y[1];
-      grow2[i]    = -y[4];
+      cosmtime[i] = log10(y[0]*HUBBLETIME_GYR/params.Hubble100);
+      if (!Today && x2>=1.)
+	Today=i;
 
-      /* calculation of proper distance (Mpc) for a generic cosmology (i.e. flat, open or closed) 
+      for (j=0; j<NkBINS; j++) /* First-order growth rate */
+	grow1[i+j*NBINS]  = y[2+j*8];
+      for (j=0; j<NkBINS; j++) /* Second-order growth rate */
+	grow2[i+j*NBINS]  = -y[4+j*8];
+      for (j=0; j<NkBINS; j++) /* Third-order first growth rate */
+	grow31[i+j*NBINS] = -y[6+j*8] / 3.;
+      for (j=0; j<NkBINS; j++) /* Third-order second growth rate */
+	grow32[i+j*NBINS] = y[8+j*8] / 4.;
+
+      for (j=0; j<NkBINS; j++) /* First-order f(Omega) */
+	fomega1[i+j*NBINS]  = x2 * y[1+j*8] / y[2+j*8];
+      for (j=0; j<NkBINS; j++) /* Second-order f(Omega) */
+	fomega2[i+j*NBINS]  = x2 * y[3+j*8] / y[4+j*8];
+      for (j=0; j<NkBINS; j++) /* Third-order first f(Omega) */
+	fomega31[i+j*NBINS] = x2 * y[5+j*8] / y[6+j*8];
+      for (j=0; j<NkBINS; j++) /* Third-order second f(Omega) */
+	fomega32[i+j*NBINS] = x2 * y[7+j*8] / y[8+j*8];
+
+      /* calculation of comoving distance (Mpc) for a generic cosmology (i.e. flat, open or closed) 
 	 and generic equation of state for the DE component  */
+      if (i<NBINS-NBB)
+	{
+	  gsl_integration_qags(&Function, 0.0, 1./x2-1., 0.0, TOLERANCE, NWINT, workspace, &result, &error);
+	  comvdist[i] = SPEEDOFLIGHT*result;
+	  if (fabs(OmegaK) < 1.e-4)
+	    diamdist[i] = x2 * comvdist[i];
+	  else if (OmegaK <0)
+	    {
+	      R0 = SPEEDOFLIGHT/params.Hubble100/100. / SqrtOmegaK;
+	      diamdist[i] = x2 * R0 * sin(comvdist[i]/R0);
+	    }
+	  else
+	    {
+	      R0 = SPEEDOFLIGHT/params.Hubble100/100. / SqrtOmegaK;
+	      diamdist[i] = x2 * R0 * sinh(comvdist[i]/R0);
+	    }
+	}
 
-      gsl_integration_qags(&Function, 0.0, 1./x2-1., 0.0, TOLERANCE, NWINT, workspace, &result, &error);
+      if (!params.simpleLambda)
+	gsl_integration_qags(&Function, x2, 1.0, 0.0, TOLERANCE, NWINT, workspace, &IntEoS[i], &error);
 
-      if (fabs(OmegaK) < 1.e-4)
-	prdist[i] = SPEEDOFLIGHT*result/(params.Hubble100*100.);
-
-      else if(OmegaK <0)
-	prdist[i] = SPEEDOFLIGHT/(params.Hubble100*100.)/SqrtOmegaK*sin(SqrtOmegaK*result);
-
-      else
-        prdist[i]=SPEEDOFLIGHT/(params.Hubble100*100.)/SqrtOmegaK*sinh(SqrtOmegaK*result);
-
+      /* closing the loop on integrations */
       x1=x2;
-
     }
 
   /* normalization of the first- and second- order growth rate */
-  spline = gsl_spline_alloc (gsl_interp_cspline, NBIN);
-  gsl_spline_init(spline, scalef, grow1, NBIN);
-  norm=my_spline_eval(spline, 1.00, accel);
-  for (i=0; i<NBIN; i++)
+  /* this is valid for LambdaCDM; for scale-dependent growth due to modified gravity, 
+     the power spectrum is given as the LambdaCDM P(k) extrapolated at z=0, but this
+     is valid only at high redshift; this normalization is still correct 
+     when the k=0 growth rate (identical to LambdaCDM) is used at all scales */
+  norm =  grow1[Today];
+  for (i=0; i<NBINS*NkBINS; i++)
     {
-      grow1[i] = grow1[i] / norm;
-      grow2[i] = grow2[i] / norm/norm;
-      grow31[i] = grow1[i]*grow1[i]*grow1[i]*pow(params.Omega0,-4./275.)/9.; //the "-" will be set later
-      grow32[i] = grow1[i]*grow1[i]*grow1[i]*pow(params.Omega0,-269./17875.)*5./42.;
-    }
-  gsl_spline_free(spline);
-
-  /* f(Omega) at first and second order */
-  for (i=0; i<NBIN; i++)
-    {
-      i1=(i>0 ? i-1 : 0);
-      i2=(i<NBIN-1 ? i+1 : NBIN-1);
-      fomegav[i] = (grow1[i2]-grow1[i1]) / (scalef[i2]-scalef[i1]) * scalef[i] / grow1[i];
-      fomega2v[i]= (grow2[i2]-grow2[i1]) / (scalef[i2]-scalef[i1]) * scalef[i] / grow2[i];
-      fomega31v[i] = (grow31[i2]-grow31[i1]) / (scalef[i2]-scalef[i1]) * scalef[i] / grow31[i];
-      fomega32v[i]= (grow32[i2]-grow32[i1]) / (scalef[i2]-scalef[i1]) * scalef[i] / grow32[i];
-    }
-
-  /* derivative of proper distance */
-  for (i=0; i<NBIN; i++)
-    {
-      prdistneg[i]=-prdist[i];
-      i1=(i>0 ? i-1 : 0);
-      i2=(i<NBIN-1 ? i+1 : NBIN-1);
-      dprdist[i]=(prdist[i2]-prdist[i1])/(1./scalef[i2]-1./scalef[i1]);
+      grow1[i] /= norm;
+      grow2[i] /= norm * norm;
+      grow31[i] /= norm * norm * norm;
+      grow32[i] /= norm * norm * norm;
     }
 
   /* these quantities will be interpolated logarithmically */
-  for (i=0; i<NBIN; i++)
-    {
-      scalef[i]   = log10(scalef[i]  );
-      cosmtime[i] = log10(cosmtime[i]);
-      grow1[i]    = log10(grow1[i]   );
-      grow2[i]    = log10(grow2[i]   );
-      grow31[i]    = log10(grow31[i]   );
-      grow32[i]    = log10(grow32[i]   );
-    }
+  for (i=0; i<NBINS; i++)
+    scalef[i]   = log10(scalef[i]);
+
+  for (j=0; j<NkBINS; j++) /* First-order growth rate */
+    for (i=0; i<NBINS; i++)
+      {
+	grow1[i+j*NBINS]  = log10(grow1[i+j*NBINS]);
+	grow2[i+j*NBINS]  = log10(grow2[i+j*NBINS]);
+	grow31[i+j*NBINS] = log10(grow31[i+j*NBINS]);
+	grow32[i+j*NBINS] = log10(grow32[i+j*NBINS]);
+      }
 
   /* initialization of spline interpolations of time-dependent quantities */
-  gsl_spline_init(splineGrow, scalef, grow1, NBIN);
-  gsl_spline_init(splineInvGrow, grow1, scalef, NBIN);
-  gsl_spline_init(splineGrow2, scalef, grow2, NBIN);
-  gsl_spline_init(splineGrow31, scalef, grow31, NBIN);
-  gsl_spline_init(splineGrow32, scalef, grow32, NBIN);
-  gsl_spline_init(splinefO, scalef, fomegav, NBIN);
-  gsl_spline_init(splinefO2, scalef, fomega2v, NBIN);
-  gsl_spline_init(splinefO31, scalef, fomega31v, NBIN);
-  gsl_spline_init(splinefO32, scalef, fomega32v, NBIN);
-  gsl_spline_init(splineTime, scalef, cosmtime, NBIN);
-  gsl_spline_init(splineInvTime, cosmtime, scalef, NBIN);
-  gsl_spline_init(splineDist, scalef, prdist, NBIN);
-  gsl_spline_init(splineInvDist, prdistneg, scalef, NBIN);
-  gsl_spline_init(splinedrdz, scalef, dprdist, NBIN);
+  gsl_spline_init(SPLINE[SP_TIME], scalef, cosmtime, NBINS);
+  gsl_spline_init(SPLINE[SP_INVTIME], cosmtime, scalef, NBINS);
+  gsl_spline_init(SPLINE[SP_COMVDIST], scalef, comvdist, NBINS-NBB);
+  gsl_spline_init(SPLINE[SP_DIAMDIST], scalef, diamdist, NBINS-NBB);
+#ifdef ELL_CLASSIC
+  gsl_spline_init(SPLINE[SP_INVGROW], grow1, scalef, NBINS);  // ????
+#endif
 
+  for (j=0; j<NkBINS; j++)
+    {
+      gsl_spline_init(SPLINE[SP_GROW1+j],  scalef, grow1+j*NBINS,  NBINS);
+      gsl_spline_init(SPLINE[SP_GROW2+j],  scalef, grow2+j*NBINS,  NBINS);
+      gsl_spline_init(SPLINE[SP_GROW31+j], scalef, grow31+j*NBINS, NBINS);
+      gsl_spline_init(SPLINE[SP_GROW32+j], scalef, grow32+j*NBINS, NBINS);
+
+      gsl_spline_init(SPLINE[SP_FOMEGA1+j],  scalef, fomega1+j*NBINS,  NBINS);
+      gsl_spline_init(SPLINE[SP_FOMEGA2+j],  scalef, fomega2+j*NBINS,  NBINS);
+      gsl_spline_init(SPLINE[SP_FOMEGA31+j], scalef, fomega31+j*NBINS, NBINS);
+      gsl_spline_init(SPLINE[SP_FOMEGA32+j], scalef, fomega32+j*NBINS, NBINS);
+    }
 
   /* deallocation of vectors for interpolation */
+  free(fomega32);
+  free(fomega31);
+  free(fomega2);
+  free(fomega1);
+  free(grow32);
+  free(grow31);
+  free(grow2);
+  free(grow1);
   if (!params.simpleLambda)
-    free(IntEoS  );
-  free(fomega2v);
-  free(fomegav );
-  free(dprdist );
-  free(prdistneg);
-  free(prdist  );
-  free(grow2   );
-  free(grow1   );
-  free(grow32  );
-  free(grow31  );
+    free(IntEoS);
+  free(diamdist);
+  free(comvdist);
   free(cosmtime);
-  free(scalef  );
+  free(scalef);
 
   /* initialization of power spectrum */
   if (initialize_PowerSpectrum())
@@ -325,90 +364,252 @@ int initialize_cosmology()
       fprintf(fd,"# TIME-DEPENDENT QUANTITIES\n");
       fprintf(fd,"# 1: scale factor\n");
       fprintf(fd,"# 2: cosmic time (Gyr)\n");
-      fprintf(fd,"# 3: growth factor\n");
-      fprintf(fd,"# 4: 2nd-order growth factor\n");
-      fprintf(fd,"# 5: dark energy EOS\n");
-      fprintf(fd,"# 6: proper distance (true Mpc)\n");
-      fprintf(fd,"# 7: d/dz of proper distance (true Mpc)\n");
+      fprintf(fd,"# 3: comoving distance (Mpc)\n");
+      fprintf(fd,"# 4: diameter distance (Mpc)\n");
+      fprintf(fd,"# 5: Omega matter\n");
+      fprintf(fd,"# 6: dark energy EOS\n");
+      fprintf(fd,"# 7: linear growth rate\n");
+      fprintf(fd,"# 8: 2nd-order growth rate\n");
+      fprintf(fd,"# 9: first 3rd-order growth rate\n");
+      fprintf(fd,"#10: second 3rd-order growth rate\n");
+      fprintf(fd,"#11: linear d ln D/d ln a\n");
+      fprintf(fd,"#12: 2nd-order d ln D/d ln a\n");
+      fprintf(fd,"#13: first 3rd-order d ln D/d ln a\n");
+      fprintf(fd,"#14: second 3rd-order d ln D/d ln a\n");
       fprintf(fd,"# SCALE-DEPENDENT QUANTITIES\n");
-      fprintf(fd,"# 8: scale (true Mpc)\n");
-      fprintf(fd,"# 9: mass variance\n");
-      fprintf(fd,"#10: d Log sigma^2 / d Log R\n");
-      fprintf(fd,"#11: k (true Mpc^-1)\n");
-      fprintf(fd,"#12: P(k)\n");
+      fprintf(fd,"#15: smoothing scale (Mpc)\n");
+      fprintf(fd,"#16: mass variance\n");
+      fprintf(fd,"#17: variance of displacements\n");
+      fprintf(fd,"#18: d Log sigma^2 / d Log R\n");
+      fprintf(fd,"# POWER SPECTRUM\n");
+      fprintf(fd,"#19: k (true Mpc^-1)\n");
+      fprintf(fd,"#20: P(k)\n");
       fprintf(fd,"#\n");
-      for (i=0; i<NBIN; i++)
+
+      for (i=0; i<NBINS; i++)
 	{
-	  k=pow(10.,-4.0+(double)i/(double)NBIN*6.0);
-	  fprintf(fd," %lg %lg %lg %lg %lg %lg %lg %lg %lg %lg %lg %lg  %lg %lg\n",
-		  pow(10.,splineGrow->x[i]),
-		  pow(10.,splineTime->y[i]),
-		  pow(10.,splineGrow->y[i]),
-		  -pow(10.,splineGrow2->y[i]),
-		  (!params.simpleLambda ? -1 : splineEoS->y[i]),
-		  splineDist->y[i],
-		  splinedrdz->y[i],
-		  pow(10.,splineVar->x[i]),
-		  pow(10.,splineVar->y[i]),
-		  pow(10.,splinedldr->y[i]),
-		  k,PowerSpectrum(k),
-		  pow(10.,splineDVar->x[i]),pow(10.,splineDVar->y[i]));
+	  k=pow(10.,-4.0+(double)i/(double)NBINS*6.0);
+	  fprintf(fd," %12lg %12lg %12lg %12lg %12lg %12lg %12lg %12lg %12lg %12lg %12lg %12lg %12lg %12lg   %12lg %12lg %12lg %12lg   %12lg %12lg\n",
+		  pow(10.,SPLINE[SP_TIME]->x[i]),
+		  pow(10.,SPLINE[SP_TIME]->y[i]),
+		  (i<NBINS-NBB ? SPLINE[SP_COMVDIST]->y[i] : 0.0),
+		  (i<NBINS-NBB ? SPLINE[SP_DIAMDIST]->y[i] : 0.0),
+		  OmegaMatter(1./pow(10.,SPLINE[SP_TIME]->x[i])-1.0),
+		  (!params.simpleLambda ? -1 : (NtabEoS? SPLINE[SP_EOS]->y[i] : DE_EquationOfState(pow(10.,SPLINE[SP_TIME]->x[i])))),
+		  pow(10.,SPLINE[SP_GROW1]->y[i]),
+		  pow(10.,SPLINE[SP_GROW2]->y[i]),
+		  pow(10.,SPLINE[SP_GROW31]->y[i]),
+		  pow(10.,SPLINE[SP_GROW32]->y[i]),
+		  SPLINE[SP_FOMEGA1]->y[i],
+		  SPLINE[SP_FOMEGA2]->y[i],
+		  SPLINE[SP_FOMEGA31]->y[i],
+		  SPLINE[SP_FOMEGA32]->y[i],
+		  pow(10.,SPLINE[SP_MASSVAR]->x[i]),
+		  pow(10.,SPLINE[SP_MASSVAR]->y[i]),
+		  pow(10.,SPLINE[SP_DISPVAR]->y[i]),
+		  SPLINE[SP_DVARDR]->y[i],
+		  k, PowerSpectrum(k));
 	  }
       fclose(fd);
+#ifdef SCALE_DEPENDENT
+      strcpy(filename,"pinocchio.");
+      strcat(filename,params.RunFlag);
+      strcat(filename,".scaledep.out");
+
+      fd=fopen(filename,"w");
+
+      fprintf(fd,"# Scale-dependent growth rates\n");
+      fprintf(fd,"# Scales considered: ");
+      for (ik=0; ik<NkBINS; ik++)
+	{
+	  if (!ik)
+	    k=0.0;
+	  else
+	    k = pow(10., LOGKMIN + ik*DELTALOGK);
+	  if (ik==NkBINS-1)
+	    fprintf(fd,"%d) k=%8.5f\n",ik+1,k);
+	  else
+	    fprintf(fd,"%d) k=%8.5f, ",ik+1,k);
+	}
+
+      fprintf(fd,"# 1: scale factor\n");
+      fprintf(fd,"# %d-%d: linear growth rate\n",                     2,  NkBINS+1);
+      fprintf(fd,"# %d-%d: 2nd-order growth rate\n",           NkBINS+2,2*NkBINS+1);
+      fprintf(fd,"# %d-%d: first 3rd-order growth rate\n",   2*NkBINS+2,3*NkBINS+1);
+      fprintf(fd,"# %d-%d: second 3rd-order growth rate\n",  3*NkBINS+2,4*NkBINS+1);
+      fprintf(fd,"# %d-%d: linear d ln D/d ln a\n",          4*NkBINS+2,5*NkBINS+1);
+      fprintf(fd,"# %d-%d: 2nd-order d ln D/d ln a\n",       5*NkBINS+2,6*NkBINS+1);
+      fprintf(fd,"# %d-%d: first 3rd-order d ln D/d ln a\n", 6*NkBINS+2,7*NkBINS+1);
+      fprintf(fd,"# %d-%d: second 3rd-order d ln D/d ln a\n",7*NkBINS+2,8*NkBINS+1);
+      fprintf(fd,"#\n");
+
+      for (i=0; i<NBINS; i++)
+	{
+	  fprintf(fd," %12lg",pow(10.,SPLINE[SP_TIME]->x[i]));
+	  for (ik=0; ik<NkBINS; ik++)
+	    fprintf(fd," %12lg",pow(10.,SPLINE[SP_GROW1+ik]->y[i]));
+	  fprintf(fd,"   ");
+	  for (ik=0; ik<NkBINS; ik++)
+	    fprintf(fd," %12lg",pow(10.,SPLINE[SP_GROW2+ik]->y[i]));
+	  fprintf(fd,"   ");
+	  for (ik=0; ik<NkBINS; ik++)
+	    fprintf(fd," %12lg",pow(10.,SPLINE[SP_GROW31+ik]->y[i]));
+	  fprintf(fd,"   ");
+	  for (ik=0; ik<NkBINS; ik++)
+	    fprintf(fd," %12lg",pow(10.,SPLINE[SP_GROW32+ik]->y[i]));
+	  fprintf(fd,"   ");
+	  for (ik=0; ik<NkBINS; ik++)
+	    fprintf(fd," %12lg",pow(10.,SPLINE[SP_FOMEGA1+ik]->y[i]));
+	  fprintf(fd,"   ");
+	  for (ik=0; ik<NkBINS; ik++)
+	    fprintf(fd," %12lg",pow(10.,SPLINE[SP_FOMEGA2+ik]->y[i]));
+	  fprintf(fd,"   ");
+	  for (ik=0; ik<NkBINS; ik++)
+	    fprintf(fd," %12lg",pow(10.,SPLINE[SP_FOMEGA31+ik]->y[i]));
+	  fprintf(fd,"   ");
+	  for (ik=0; ik<NkBINS; ik++)
+	    fprintf(fd," %12lg",pow(10.,SPLINE[SP_FOMEGA32+ik]->y[i]));
+	  fprintf(fd,"\n");
+	}
+      fclose(fd);
+#endif
     }  
 
   return 0;
 }
 
+#ifdef MOD_GRAV_FR
+/* scale-dependent functions for 2LPT term */
+
+double mu(double a, double k) {
+  double B1, B2, emme;
+  B1   = params.Omega0 / pow(a, 3.) + 4. * params.OmegaLambda;
+  B2   = params.Omega0 + 4. * params.OmegaLambda;
+  emme = 0.5 * H_over_c * H_over_c * pow(B1, 3.) / (B2 * B2 * FR0); 
+  return 1. + k * k / 3. / (k * k + a * a * emme);
+}
+
+#endif
+
 
 int system_of_ODEs(double x, const double y[], double *dydx, void *param)
 {
   
-  double a1, b1, Esq, eqds;
+  double a1, b1, Esq, de_eos, de_Esq, de_a1;
 
-  /* NB: qui si potrebbe compattare tutto in un'unico caso */
-
+  /*
+    0 : cosmic time t
+    then loop over k bins:
+    1 : dD(1) / da
+    2 : D(1)
+    3 : dD(2) / da
+    4 : D(2)
+    5 : dD(3a) / da
+    6 : D(3a)
+    7 : dD(3b) / da
+    8 : D(3b)
+  */
 
   if (params.simpleLambda) 
     {
-      Esq = params.Omega0/pow(x,3.0)
-        + OmegaK/(x*x)
-        + params.OmegaLambda
-	+ OmegaRad/pow(x,4.0);
-      a1   = -(3./x + 1./2.*((- 3.*params.Omega0/pow(x,4.0)
-			      - 2*OmegaK/pow(x,3.0)
-			      - 4*OmegaRad/pow(x,5.0))/Esq));
-      b1   = 3./2.*params.Omega0/(Esq*pow(x,5.0));
+      de_Esq = 1.;
+      de_a1  = 0.;
     }
   else
-    /* in this case Dark Energy is not a simple cosmological constant */
     {
-      eqds=my_spline_eval(splineIntEoS, log10(x), accel);
-
-      Esq = params.Omega0/pow(x,3.0)
-	+ OmegaK/(x*x)
-	+ params.OmegaLambda/pow(x,3.0) * exp(3.*eqds)
-	+ OmegaRad/pow(x,4.0);
-      a1   = -(3./x+1./2.*((- 3.*params.Omega0/pow(x,4.0)
-			    - 2*OmegaK/pow(x,3.0)
-			    - 4*OmegaRad/pow(x,5.0)
-			    - 3*((1+DE_EquationOfState(x))/pow(x,4))
-			    * params.OmegaLambda*exp(3*eqds))/Esq));
-      b1   = 3./2.*params.Omega0/(Esq*pow(x,5.0));
+      /* in this case Dark Energy Equation of State is not constant */
+      de_eos = my_spline_eval(SPLINE[SP_INTEOS], log10(x), ACCEL[SP_INTEOS]);
+      de_Esq = exp(3.*de_eos)/pow(x,3.0);
+      de_a1 = - 3*((1+DE_EquationOfState(x))/pow(x,4)) * params.OmegaLambda*exp(3*de_eos);
     }
 
-#ifndef FOMEGA_GAMMA
-  dydx[0] = a1*y[0]+b1*y[1];
-  dydx[1] = y[0];
-#else
-  dydx[0] = 0.;
-  dydx[1] =  (pow(params.Omega0/pow(x,3.0)/Esq,FOMEGA_GAMMA))/x * y[1];
-#endif
-  dydx[2] = 1.0/x/sqrt(Esq);
-  dydx[3] = a1*y[3]+b1*y[4]-b1*y[1]*y[1];
-  dydx[4] = y[3];
+  Esq = params.Omega0/pow(x,3.0)    /* adimensional Hubble factor squared */
+    + OmegaK/(x*x)
+    + OmegaRad/pow(x,4.0)
+    + params.OmegaLambda * de_Esq;
+
+  /* coefficients in the growth rate equations */
+  a1   = -(3./x + 0.5 *((- 3.*params.Omega0/pow(x,4.0)
+			 - 2*OmegaK/pow(x,3.0)
+			 - 4*OmegaRad/pow(x,5.0)
+			 + de_a1)/Esq));
+  b1   = 1.5 *params.Omega0/(Esq*pow(x,5.0));
+
+
+  /* cosmic time */
+  dydx[0] = 1.0/x/sqrt(Esq);
+
+#ifdef FOMEGA_GAMMA
+  /* this is a toy model: D(t) is the one obtained by forcing 
+     the gamma RSD parameter to a certain value. 
+     Higher orders are obtained with Bouchet's fits */
+
+  dydx[1] = 0.;
+  dydx[2] =  (pow(params.Omega0/pow(x,3.0)/Esq,FOMEGA_GAMMA))/x * y[1];
+
+  for (i=3; i<9; i++)
+    dydx[i]=0.;
 
   return GSL_SUCCESS;
+#endif
+
+#if !defined(SCALE_DEPENDENT) && !defined(MOD_GRAV_FR)
+
+  dydx[1] = a1*y[1] + b1*y[2];                                           /* d^2 D1/ dt^2 */
+  dydx[2] = y[1];                                                        /* d D1/ dt */
+  dydx[3] = a1*y[3] + b1*y[4] - b1*y[2]*y[2];                            /* d^2 D2/ dt^2 */
+  dydx[4] = y[3];                                                        /* d D2/ dt */
+  dydx[5] = a1*y[5] + b1*y[6] - 2.*b1*y[2]*y[2]*y[2];                    /* d^2 D31/ dt^2 */
+  dydx[6] = y[5];                                                        /* d D31/ dt */
+  dydx[7] = a1*y[7] + b1*y[8] - 2.*b1*y[2]*y[4] + 2.*b1*y[2]*y[2]*y[2];  /* d^2 D32/ dt^2 */
+  dydx[8] = y[7];                                                        /* d D32/ dt */
+
+  return GSL_SUCCESS;
+
+#endif
+
+#ifdef MOD_GRAV_FR
+
+  /* equations for D2(k,a) as in Moretti et al. (2019) */
+
+  double B1,B2,kkk,PI1,PI2,M2;
+  B1  = params.Omega0 + 4. * params.OmegaLambda;
+  B2  = params.Omega0 / pow(x, 3.) + 4. * params.OmegaLambda;
+
+  for (int ik=0; ik<NkBINS; ik++)
+    {
+      if (!ik)
+	kkk=0.0;
+      else
+	kkk = pow(10., LOGKMIN + ik*DELTALOGK);
+      PI1 = kkk * kkk / x / x      + 0.5 * H_over_c * H_over_c * pow(B2, 3.) / (B1 * B1 * FR0);
+      PI2 = kkk * kkk / x / x / 2. + 0.5 * H_over_c * H_over_c + pow(B2, 3.) / (B1 * B1 * FR0);
+      M2  = params.Omega0 * H_over_c * H_over_c * kkk * kkk 
+	* (1.5 * H_over_c / FR0) * (1.5 * H_over_c / FR0)
+	* pow(B2, 5.) / pow(B1, 4.) / (9. * pow(x, 5.));
+      
+      dydx[1 + 8*ik] = a1 * y[1 + 8*ik] + mu(x, kkk) * b1 * y[2 + 8*ik];
+      dydx[2 + 8*ik] = y[1 + 8*ik];
+      dydx[3 + 8*ik] = a1 * y[3 + 8*ik] + mu(x, kkk) * b1 * y[4 + 8*ik]
+	- (mu(x, kkk) - M2 / PI1 / PI2 / PI2) * b1 * y[2 + 8*ik] * y[2 + 8*ik] ; 
+      dydx[4 + 8*ik] = y[3 + 8*ik];
+      
+      /* third-order growth is not used, it is set to the LCDM one */
+      dydx[5 + 8*ik] = a1*y[5 + 8*ik] + b1*y[6 + 8*ik]
+	- 2.*b1*y[2 + 8*ik]*y[2 + 8*ik]*y[2 + 8*ik];              /* d^2 D31/ dt^2 */
+      dydx[6 + 8*ik] = y[5 + 8*ik];                               /* d D31/ dt */
+      dydx[7 + 8*ik] = a1*y[7 + 8*ik] + b1*y[8 + 8*ik] 
+	- 2.*b1*y[2 + 8*ik]*y[4 + 8*ik] 
+	+ 2.*b1*y[2 + 8*ik]*y[2 + 8*ik]*y[2 + 8*ik];              /* d^2 D32/ dt^2 */
+      dydx[8 + 8*ik] = y[7 + 8*ik];                               /* d D32/ dt */
+
+    }
+
+  return GSL_SUCCESS;
+
+#endif
+
+  return GSL_FAILURE;
 }
 
 
@@ -418,10 +619,10 @@ int jac( double t, const double y[], double *dfdy, double dfdt[], void *params)
   return GSL_FAILURE;
 }
 
-/* integrand for the computation of proper distance */
-double IntegrandProperDistance(double z, void *param)
+/* integrand for the computation of comoving distance */
+double IntegrandComovingDistance(double z, void *param)
 {
-  return 1./Hubble(z)*params.Hubble100*100.;
+  return 1./Hubble(z);
 }
 
 /***********************************/
@@ -471,8 +672,7 @@ int read_TabulatedEoS(void)
   /* Task 0 communicates the number of lines to all tasks */
   MPI_Bcast(&NtabEoS, sizeof(int), MPI_BYTE, 0, MPI_COMM_WORLD);
 
-  accelEoS = gsl_interp_accel_alloc();
-  splineEoS = gsl_spline_alloc(gsl_interp_cspline, NtabEoS);
+  SPLINE[SP_EOS] = gsl_spline_alloc(gsl_interp_cspline, NtabEoS);
 
   scalef = (double*)malloc(NtabEoS * sizeof(double));
   EoS    = (double*)malloc(NtabEoS * sizeof(double));
@@ -497,7 +697,7 @@ int read_TabulatedEoS(void)
   MPI_Bcast(scalef, NtabEoS*sizeof(double), MPI_BYTE, 0, MPI_COMM_WORLD);
   MPI_Bcast(EoS,    NtabEoS*sizeof(double), MPI_BYTE, 0, MPI_COMM_WORLD);
 
-  gsl_spline_init(splineEoS, scalef, EoS, NtabEoS);
+  gsl_spline_init(SPLINE[SP_EOS], scalef, EoS, NtabEoS);
 
   free(EoS);
   free(scalef);
@@ -511,7 +711,7 @@ double DE_EquationOfState(double a)
   if (!NtabEoS)
     return params.DEw0+(1-a)*params.DEwa;
   else
-    return my_spline_eval(splineEoS, log10(a), accelEoS);
+    return my_spline_eval(SPLINE[SP_EOS], log10(a), ACCEL[SP_EOS]);
 }
 
 double IntegrandForEoS(double a, void *param)
@@ -526,7 +726,6 @@ double IntegrandForEoS(double a, void *param)
 /**************************/
 
 /* Part of this code is taken from N-GenIC (see GenIC.c) */
-int read_Pk_table(void);
 double PowerSpec_Tabulated(double);
 double PowerSpec_Efstathiou(double);
 double PowerSpec_EH(double);
@@ -552,8 +751,12 @@ double PowerSpectrum(double k)
       power = PowerSpec_Tabulated(k);
       break;
 
-    default:
+    case 3:
       power = PowerSpec_Efstathiou(k);
+      break;
+
+    default:
+      power = 0.0;
       break;
     }
 
@@ -584,72 +787,76 @@ double PowerSpectrum(double k)
 int initialize_PowerSpectrum(void)
 {
 
-#ifndef SCALE_DEPENDENT_GROWTH
+//#ifndef SCALE_DEPENDENT
   if (!strcmp(params.FileWithInputSpectrum,"no"))
     WhichSpectrum=1;
   else
     WhichSpectrum=2;
 
-  if (strcmp(params.FileWithInputSpectrum,"no"))
-    if (read_Pk_table())
-      return 1;
-#else
-  double *logk,*Pk;
-  int i;
+//#else
 
-  WhichSpectrum=2;
-  params.Sigma8=0.0;
+  /* if (!strcmp(params.camb.MatterFile,"no")) */
+  /*   WhichSpectrum=4; */
+  /* else */
+  /*   WhichSpectrum=5; */
+//#endif
 
-  /* the interpolation is already loaded, the spline is initialized here  */
-  NPowerTable=params.camb.Nkbins;
+/*   double *logk,*Pk; */
+/*   int i; */
 
-  accelPk = gsl_interp_accel_alloc();
-  splinePk = gsl_spline_alloc(gsl_interp_cspline, NPowerTable);
-  logk = (double*)malloc(NPowerTable * sizeof(double));
-  Pk   = (double*)malloc(NPowerTable * sizeof(double));
+/*   WhichSpectrum=2; */
+/*   params.Sigma8=0.0; */
 
-  for (i=0; i<NPowerTable; i++)
-    {
-      logk[i] = log10(exp(params.camb.Logk[i]));
-      Pk  [i] = log10(exp(params.camb.LogPkref[i])) + 3.*logk[i];
-    }
+/*   /\* the interpolation is already loaded, the spline is initialized here  *\/ */
+/*   NPowerTable=params.camb.Nkbins; */
 
-  gsl_spline_init(splinePk, logk, Pk, NPowerTable);
+/*   accelPk = gsl_interp_accel_alloc(); */
+/*   splinePk = gsl_spline_alloc(gsl_interp_cspline, NPowerTable); */
+/*   logk = (double*)malloc(NPowerTable * sizeof(double)); */
+/*   Pk   = (double*)malloc(NPowerTable * sizeof(double)); */
 
-  free(Pk);
-  free(logk);
+/*   for (i=0; i<NPowerTable; i++) */
+/*     { */
+/*       logk[i] = log10(exp(params.camb.Logk[i])); */
+/*       Pk  [i] = log10(exp(params.camb.LogPkref[i])) + 3.*logk[i]; */
+/*     } */
 
-  /* it re-initializes the linear growing mode */
-  accelCAMB = gsl_interp_accel_alloc();
-  splineGrowCAMB = gsl_spline_alloc (gsl_interp_cspline, params.camb.NCAMB);
-  gsl_spline_init(splineGrowCAMB, params.camb.Scalef, params.camb.RefGM, params.camb.NCAMB);
-  splineInvGrowCAMB = gsl_spline_alloc (gsl_interp_cspline, params.camb.NCAMB);
-  gsl_spline_init(splineInvGrowCAMB, params.camb.RefGM, params.camb.Scalef, params.camb.NCAMB);
+/*   gsl_spline_init(splinePk, logk, Pk, NPowerTable); */
 
-#ifdef OUTPUT_GM
-  if (!ThisTask)
-    {
-      FILE *fd;
-      fd=fopen("TwoGrowingModes","w");
-      fprintf(fd,"# 1: scale factor\n# 2: D as computed from equations\n# 3: from CAMB\n");
-      double a=params.camb.Scalef[0]/1.05;
-      do
-	{
-	  a*=1.05;
-	  if (a>1)
-	    a=1.0;
-	  fprintf(fd," %g %g %g\n",
-		  a,
-		  pow(10.,my_spline_eval(splineGrow, log10(a), accel)),
-		  exp(my_spline_eval(splineGrowCAMB, a, accelCAMB))
-		  );
-	}
-      while (a<1.0);
-      fclose(fd);
-    }
-#endif
+/*   free(Pk); */
+/*   free(logk); */
 
-#endif
+/*   /\* it re-initializes the linear growing mode *\/ */
+/*   accelCAMB = gsl_interp_accel_alloc(); */
+/*   splineGrowCAMB = gsl_spline_alloc (gsl_interp_cspline, params.camb.NCAMB); */
+/*   gsl_spline_init(splineGrowCAMB, params.camb.Scalef, params.camb.RefGM, params.camb.NCAMB); */
+/*   splineInvGrowCAMB = gsl_spline_alloc (gsl_interp_cspline, params.camb.NCAMB); */
+/*   gsl_spline_init(splineInvGrowCAMB, params.camb.RefGM, params.camb.Scalef, params.camb.NCAMB); */
+
+/* #ifdef OUTPUT_GM */
+/*   if (!ThisTask) */
+/*     { */
+/*       FILE *fd; */
+/*       fd=fopen("TwoGrowingModes","w"); */
+/*       fprintf(fd,"# 1: scale factor\n# 2: D as computed from equations\n# 3: from CAMB\n"); */
+/*       double a=params.camb.Scalef[0]/1.05; */
+/*       do */
+/* 	{ */
+/* 	  a*=1.05; */
+/* 	  if (a>1) */
+/* 	    a=1.0; */
+/* 	  fprintf(fd," %g %g %g\n", */
+/* 		  a, */
+/* 		  pow(10.,my_spline_eval(splineGrow, log10(a), accel)), */
+/* 		  exp(my_spline_eval(splineGrowCAMB, a, accelCAMB)) */
+/* 		  ); */
+/* 	} */
+/*       while (a<1.0); */
+/*       fclose(fd); */
+/*     } */
+/* #endif */
+
+//#endif
 
   if (normalize_PowerSpectrum())
     return 1;
@@ -685,7 +892,7 @@ int normalize_PowerSpectrum(void)
 }
 
 
-int read_Pk_table(void)
+int read_Pk_from_file(void)
 {
   /* This is adapted from N-GenIC */
 
@@ -731,8 +938,7 @@ int read_Pk_table(void)
   /* Task 0 communicates the number of lines to all tasks */
   MPI_Bcast(&NPowerTable, sizeof(int), MPI_BYTE, 0, MPI_COMM_WORLD);
 
-  accelPk = gsl_interp_accel_alloc();
-  splinePk = gsl_spline_alloc(gsl_interp_cspline, NPowerTable);
+  SPLINE[SP_PK] = gsl_spline_alloc(gsl_interp_cspline, NPowerTable);
 
   logk = (double*)malloc(NPowerTable * sizeof(double));
   Pk   = (double*)malloc(NPowerTable * sizeof(double));
@@ -786,7 +992,7 @@ int read_Pk_table(void)
   MPI_Bcast(Pk,   NPowerTable*sizeof(double), MPI_BYTE, 0, MPI_COMM_WORLD);
   MPI_Bcast(logk, NPowerTable*sizeof(double), MPI_BYTE, 0, MPI_COMM_WORLD);
 
-  gsl_spline_init(splinePk, logk, Pk, NPowerTable);
+  gsl_spline_init(SPLINE[SP_PK], logk, Pk, NPowerTable);
 
   free(Pk);
   free(logk);
@@ -796,9 +1002,10 @@ int read_Pk_table(void)
 
 double PowerSpec_Tabulated(double k)
 {
-  return pow(10.,my_spline_eval(splinePk, log10(k), accelPk))/k/k/k;
+  return pow(10.,my_spline_eval(SPLINE[SP_PK], log10(k), ACCEL[SP_PK]))/k/k/k;
 }
 
+#define ShapeGamma ((double)0.21)
 double PowerSpec_Efstathiou(double k)
 {
   return pow(k,params.PrimordialIndex) / pow(1 + pow(6.4 / ShapeGamma * k + pow(3.0 / ShapeGamma * k, 1.5) + pow(1.7 / ShapeGamma,2.0) * k * k, 1.13), 2 / 1.13);
@@ -827,7 +1034,7 @@ double transf_EH(double fk)
   zeq = 2.5e4*Oh2/pow(Teta_27,4.0);
   Req = 31.5*Ob2/(pow(Teta_27,4.0)*0.001*zeq);
   keq = 7.46e-2*Oh2/Teta_27/Teta_27;
-  s   = 1.633*log((sqrt(1.+Rd)+sqrt(Rd+Req))/(1+sqrt(Req)))/(keq*sqrt(Req)); // 2sqrt(6)/3=1.633
+  s   = 1.633*log((sqrt(1.+Rd)+sqrt(Rd+Req))/(1+sqrt(Req)))/(keq*sqrt(Req)); /* 2sqrt(6)/3=1.633 */
   ks  = fk*s;
   q   = fk*Teta_27*Teta_27/Oh2;
   alc = pow(pow(46.9*Oh2,0.670)*(1.+pow(32.1*Oh2,-0.532)),-OB/params.Omega0) *
@@ -871,49 +1078,49 @@ int initialize_MassVariance(void)
   int i;
   double r;
   double rmin=-6.0, dr=0.04;   /* NB: rmax=2.0 */
-  double *rv, *lamv, *dldr, *lamvneg, *displv;
+  double *rv, *massvar, *dmvdr, *massvarneg, *displv;
 
-  rv        = (double*)malloc(NBIN * sizeof(double));
-  lamv      = (double*)malloc(NBIN * sizeof(double));
-  dldr      = (double*)malloc(NBIN * sizeof(double));
-  lamvneg   = (double*)malloc(NBIN * sizeof(double));
-  displv    = (double*)malloc(NBIN * sizeof(double));
+  rv         = (double*)malloc(NBINS * sizeof(double));
+  massvar    = (double*)malloc(NBINS * sizeof(double));
+  dmvdr      = (double*)malloc(NBINS * sizeof(double));
+  massvarneg = (double*)malloc(NBINS * sizeof(double));
+  displv     = (double*)malloc(NBINS * sizeof(double));
 
-  for (i=NBIN-1; i>=0; i--)
+  for (i=NBINS-1; i>=0; i--)
     {
       rv[i]=(rmin+i*dr);
       r=pow(10.,rv[i]);
-      lamv[i]=log10(ComputeMassVariance(r));
+      massvar[i]=log10(ComputeMassVariance(r));
       /* To allow interpolation of reverse function, 
 	 the variance must increase with decreasing radius */
-      if (i<NBIN-1 && lamv[i]-lamv[i+1]<1.e-6)
-	lamv[i]=lamv[i+1]+1.e-6;   
+      if (i<NBINS-1 && massvar[i]-massvar[i+1]<1.e-6)
+	massvar[i]=massvar[i+1]+1.e-6;
 
-      lamvneg[i]=-lamv[i];
+      massvarneg[i]=-massvar[i];
       displv[i]=log10(ComputeDisplVariance(r));
     }
 
-  for (i=0; i<NBIN; i++)
+  for (i=0; i<NBINS; i++)
     {
       if (i==0)
-        dldr[i]=(lamv[i+1]-lamv[i])/(rv[i+1]-rv[i]);
-      else if (i==NBIN-1)
-        dldr[i]=(lamv[i]-lamv[i-1])/(rv[i]-rv[i-1]);
+        dmvdr[i]=(massvar[i+1]-massvar[i])/(rv[i+1]-rv[i]);
+      else if (i==NBINS-1)
+        dmvdr[i]=(massvar[i]-massvar[i-1])/(rv[i]-rv[i-1]);
       else
-        dldr[i]=(lamv[i+1]-lamv[i-1])/(rv[i+1]-rv[i-1]);
+        dmvdr[i]=(massvar[i+1]-massvar[i-1])/(rv[i+1]-rv[i-1]);
     }
 
   /* initialization of splines for interpolation */
-  gsl_spline_init(splineVar, rv, lamv, NBIN);
-  gsl_spline_init(splineRadius, lamvneg, rv, NBIN);
-  gsl_spline_init(splinedldr, rv, dldr, NBIN);
-  gsl_spline_init(splineDVar, rv, displv, NBIN);
+  gsl_spline_init(SPLINE[SP_MASSVAR], rv, massvar, NBINS);
+  gsl_spline_init(SPLINE[SP_RADIUS],  massvarneg, rv, NBINS);
+  gsl_spline_init(SPLINE[SP_DVARDR],  rv, dmvdr, NBINS);
+  gsl_spline_init(SPLINE[SP_DISPVAR], rv, displv, NBINS);
 
-  free(displv  );
-  free(lamvneg );
-  free(dldr    );
-  free(lamv    );
-  free(rv      );
+  free(displv    );
+  free(massvarneg);
+  free(dmvdr     );
+  free(massvar   );
+  free(rv        );
 
   return 0;
 }
@@ -932,7 +1139,7 @@ double ComputeMassVariance(double R)
 double IntegrandForMassVariance(double logk, void *param)
 {
   double w, k;
-  k=exp(logk);
+  k = exp(logk);
   w = WindowFunction(k * ThisRadius);
   return PowerSpectrum(k) * w*w * k*k*k / (2.*PI*PI);
 }
@@ -998,23 +1205,23 @@ double WindowFunction(double kr)
 
 double MassVariance(double R)
 {
-  return pow(10.,my_spline_eval(splineVar, log10(R), accel));
+  return pow(10.,my_spline_eval(SPLINE[SP_MASSVAR], log10(R), ACCEL[SP_MASSVAR]));
 }
 
 
 double dMassVariance_dr(double R)
 {
-  return my_spline_eval(splinedldr, log10(R), accel);
+  return my_spline_eval(SPLINE[SP_DVARDR], log10(R), ACCEL[SP_DVARDR]);
 }
 
 double DisplVariance(double R)
 {
-  return pow(10.,my_spline_eval(splineDVar, log10(R), accel));
+  return pow(10.,my_spline_eval(SPLINE[SP_DISPVAR], log10(R), ACCEL[SP_DISPVAR]));
 }
 
 double Radius(double Var)
 {
-  return pow(10.,my_spline_eval(splineRadius, -log10(Var), accel));
+  return pow(10.,my_spline_eval(SPLINE[SP_RADIUS], -log10(Var), ACCEL[SP_RADIUS]));
 }
 
 
@@ -1022,7 +1229,7 @@ double Radius(double Var)
 /* COSMOLOGICAL FUNCTIONS SECTION */
 /**********************************/
 
-double Omega(double z)
+double OmegaMatter(double z)
 {
   /* Cosmological mass density parameter as a function of redshift
      DIMENSIONLESS */
@@ -1030,19 +1237,27 @@ double Omega(double z)
   return params.Omega0 * pow(1.+z,3.) * pow(Hubble(z)/100./params.Hubble100, -2);
 }
 
+double OmegaLambda(double z)
+{
+  /* Cosmological mass density parameter as a function of redshift
+     DIMENSIONLESS */
+
+  return params.OmegaLambda * pow(Hubble(z)/100./params.Hubble100, -2);
+}
+
 
 double Hubble(double z)
 {
   /* Hubble parameter as a function of redshift
      DIMENSION: km/s/Mpc  */
-  double Esq,eqds;
+  double Esq,de_eos;
 
   if (params.simpleLambda)
     Esq = params.Omega0*pow(1.+z,3.)+OmegaK*pow(1.+z,2.)+params.OmegaLambda;
   else
     {
-      eqds=my_spline_eval(splineIntEoS, -log10(1.+z), accel);
-      Esq = params.Omega0*pow(1.+z,3.)+OmegaK*pow(1.+z,2.)+params.OmegaLambda*pow(1.+z,3.) * exp(3.*eqds);
+      de_eos=my_spline_eval(SPLINE[SP_INTEOS], -log10(1.+z), ACCEL[SP_INTEOS]);
+      Esq = params.Omega0*pow(1.+z,3.)+OmegaK*pow(1.+z,2.)+params.OmegaLambda*pow(1.+z,3.) * exp(3.*de_eos);
     }
 
   return 100.*params.Hubble100*sqrt(Esq);
@@ -1058,175 +1273,119 @@ double Hubble_Gyr(double z)
 }
 
 
-double fomega(double z)
+double InterpolateGrowth(double z, double k, int pointer)
+{
+  /* This function interpolates the table for all scale-dependent growth functions */
+
+#ifdef SCALE_DEPENDENT
+  int kk;
+  double dk;
+  if (k<kmin)
+    return my_spline_eval(SPLINE[pointer], -log10(1.+z), ACCEL[pointer]);
+  else if (k>kmax)
+    return my_spline_eval(SPLINE[pointer+NkBINS-1], -log10(1.+z), ACCEL[pointer+NkBINS-1]);
+  else
+    {
+      dk = (log10(k)-LOGKMIN)/DELTALOGK;
+      kk=(int)dk;
+      dk-=kk;
+
+      return dk * my_spline_eval(SPLINE[pointer+kk+1], -log10(1.+z), ACCEL[pointer+kk+1]) +
+	 (1-dk) * my_spline_eval(SPLINE[pointer+kk  ], -log10(1.+z), ACCEL[pointer+kk  ]);
+    }
+#else
+  /* scale-independent case, just return the interpolation */
+
+  return my_spline_eval(SPLINE[pointer], -log10(1.+z), ACCEL[pointer]);
+#endif
+
+}
+
+
+double fomega(double z, double k)
 {
   /* Peebles' f(Omega) function, dlogD/dloga
      DIMENSIONLESS */
 
-#ifndef SCALE_DEPENDENT_GROWTH
-  return my_spline_eval(splinefO, -log10(1.+z), accel);
-#else
-  /* This is the implementation of scale-dependent growing mode */
-  switch (SDGM.flag)
-    {
-    case -1:
-      return my_spline_eval(splinefO, -log10(1.+z), accel);
-      break;
-    case 0:
-    case 1:
-      return VelfOmega(z);
-      break;
-    default:
-      return 0;
-      break;
-    }
-#endif
+  return InterpolateGrowth(z,k,SP_FOMEGA1);
 }
 
-double fomega_2LPT(double z)
+
+double fomega_2LPT(double z, double k)
 {
   /* second-order f(Omega) function, dlogD2/dloga
      DIMENSIONLESS */
 
-#ifndef SCALE_DEPENDENT_GROWTH
-  return my_spline_eval(splinefO2, -log10(1.+z), accel);
-#else
-  /* This is the implementation of scale-dependent growing mode */
-  switch (SDGM.flag)
-    {
-    case -1:
-      return my_spline_eval(splinefO2, -log10(1.+z), accel);
-      break;
-    case 0:
-    case 1:
-      return VelfOmega2(z);
-      break;
-    default:
-      return 0;
-      break;
-    }
-#endif
+  return InterpolateGrowth(z,k,SP_FOMEGA2);
 }
 
-double fomega_3LPT_1(double z)
+
+double fomega_3LPT_1(double z, double k)
 {
   /* second-order f(Omega) function, dlogD2/dloga
      DIMENSIONLESS */
 
-  return my_spline_eval(splinefO31, -log10(1.+z), accel);
+  return InterpolateGrowth(z,k,SP_FOMEGA31);
 }
 
-double fomega_3LPT_2(double z)
+double fomega_3LPT_2(double z, double k)
 {
   /* second-order f(Omega) function, dlogD2/dloga
      DIMENSIONLESS */
 
-  return my_spline_eval(splinefO32, -log10(1.+z), accel);
+  return InterpolateGrowth(z,k,SP_FOMEGA32);
 }
 
-double GrowingMode(double z)
+double GrowingMode(double z, double k)
 {
   /* linear growing mode, interpolation on the grid
      DIMENSIONLESS */
 
-#ifndef SCALE_DEPENDENT_GROWTH
-  return pow(10.,my_spline_eval(splineGrow, -log10(1.+z), accel));
-#else
-  /* This is the implementation of scale-dependent growing mode */
-  switch (SDGM.flag)
-    {
-    case -1:
-      return exp(my_spline_eval(splineGrowCAMB, 1./(1.+z), accelCAMB));
-      break;
-    case 0:
-      return MatterGrowingMode(z);
-      break;
-    case 1:
-      return VelGrowingMode(z);
-      break;
-    default:
-      return 0;
-      break;
-    }
-#endif
+  return pow(10.,InterpolateGrowth(z,k,SP_GROW1));
 }
 
 
-double GrowingMode_2LPT(double z)
+double GrowingMode_2LPT(double z, double k)
 {
   /* second-order growing mode, interpolation on the grid
      DIMENSIONLESS */
 
-#ifndef SCALE_DEPENDENT_GROWTH
-  return pow(10.,my_spline_eval(splineGrow2, -log10(1.+z), accel));
-#else
-  /* This is a rough implementation of scale-dependent 2nd-order growing mode */
-  switch (SDGM.flag)
-    {
-    case -1:
-      return pow(10.,my_spline_eval(splineGrow2, -log10(1.+z), accel));
-      break;
-    case 0:
-    case 1:
-      return 3./7.*pow(GrowingMode(z),2.0) * pow(Omega(z),-0.007);
-      break;
-    default:
-      return 0;
-      break;
-    }
-#endif
+  return pow(10.,InterpolateGrowth(z,k,SP_GROW2));
 }
 
-double GrowingMode_3LPT_1(double z)
+double GrowingMode_3LPT_1(double z, double k)
 {
   /* second-order growing mode, interpolation on the grid
      DIMENSIONLESS */
 
-  return -pow(10.,my_spline_eval(splineGrow31, -log10(1.+z), accel));
+  return -pow(10.,InterpolateGrowth(z,k,SP_GROW31));
 }
 
-double GrowingMode_3LPT_2(double z)
+double GrowingMode_3LPT_2(double z, double k)
 {
   /* second-order growing mode, interpolation on the grid
      DIMENSIONLESS */
 
-  return pow(10.,my_spline_eval(splineGrow32, -log10(1.+z), accel));
+  return pow(10.,InterpolateGrowth(z,k,SP_GROW32));
 }
 
+
+#ifdef ELL_CLASSIC
 double InverseGrowingMode(double D)
 {
   /* redshift corresponding to a linear growing mode, interpolation on the grid
      DIMENSIONLESS */
 
-#ifndef SCALE_DEPENDENT_GROWTH
-  return 1./pow(10.,my_spline_eval(splineInvGrow, log10(D), accel)) -1.;
-#else
-  /* This is the implementation of scale-dependent growing mode */
-  switch (SDGM.flag)
-    {
-    case -1:
-      return 1./my_spline_eval(splineInvGrowCAMB, log(D), accel) -1.;
-      break;
-    case 0:
-      return InverseMatterGrowingMode(D);
-      break;
-    case 1:
-      return 0; //VelocityInverseGrowingMode(z);
-      break;
-    default:
-      return 0;
-      break;
-    }
-#endif
+  return 1./pow(10.,my_spline_eval(SPLINE[SP_INVGROW], log10(D), ACCEL[SP_INVGROW])) -1.;
 }
-
+#endif
 
 double CosmicTime(double z)
 {
   /* cosmic time, interpolation on the grid
      Gyr */
 
-  return pow(10.,my_spline_eval(splineTime, -log10(1.+z), accel));
+  return pow(10.,my_spline_eval(SPLINE[SP_TIME], -log10(1.+z), ACCEL[SP_TIME]));
 }
 
 double InverseCosmicTime(double t)
@@ -1234,31 +1393,23 @@ double InverseCosmicTime(double t)
   /* scale factor corresponding to a cosmic time, interpolation on the grid
      Gyr */
 
-  return pow(10.,my_spline_eval(splineInvTime, log10(t), accel));
+  return pow(10.,my_spline_eval(SPLINE[SP_INVTIME], log10(t), ACCEL[SP_INVTIME]));
 }
 
-double ProperDistance(double z)
+double ComovingDistance(double z)
 {
-  /* proper distance, interpolation on the grid
+  /* comoving distance, interpolation on the grid
      Mpc */
 
-  return my_spline_eval(splineDist, -log10(1.+z), accel);
+  return my_spline_eval(SPLINE[SP_COMVDIST], -log10(1.+z), ACCEL[SP_COMVDIST]);
 }
 
-double InverseProperDistance(double d)
+double DiameterDistance(double z)
 {
-  /* redshift corresponding to a proper distance, interpolation on the grid
-     DIMENSIONLESS */
+  /* diameter distance, interpolation on the grid
+     Mpc */
 
-  return 1./pow(10.,my_spline_eval(splineInvDist, -d, accel))-1;
-}
-
-double dProperDistance_dz(double z)
-{
-  /* cosmic time, interpolation on the grid
-     Gyr */
-
-  return my_spline_eval(splinedrdz, -log10(1.+z), accel);
+  return my_spline_eval(SPLINE[SP_DIAMDIST], -log10(1.+z), ACCEL[SP_DIAMDIST]);
 }
 
 double SizeForMass(double m)
@@ -1304,15 +1455,8 @@ double MassForSize(double size)
       return 0;
       break;
     }
-
 }
 
-double TypicalCollapsingMass(double z)
-{
-  /* NB: this is never used... 
-     for SCALE_INDEPENDENT_GROWTH one should specify the scale */
-  return MassForSize(Radius(pow(DELTA_C/GrowingMode(z),2.0)));
-}
 
 /**********************************/
 /* ANALYTIC MASS FUNCTION SECTION */
@@ -1421,53 +1565,20 @@ double AnalyticMassFunction(double mass, double z)
   r=SizeForMass(mass);
 #ifdef SCALE_DEPENDENT_GROWTH
   /* This function still must be adapted to scale-dependent growing mode */
-  SDGM.flag=0;       // mass growing mode
+  SDGM.flag=0;       /* mass growing mode */
   SDGM.radius=r;
 #endif
-  D=GrowingMode(z);
+  D=GrowingMode(z,0.);
 
   return MatterDensity * dOmega_dVariance(MassVariance(r)*D*D,z)
     * fabs(dMassVariance_dr(r) /6.0) /mass /mass;
 
 }
 
-/*
-  Table of cosmo.F90 and cosmo.c cosmological functions
-
-  C version                     F90 version
-
-  Omega(z)                      Omega(z)
-  Hubble(z)                     Hubble(z)
-  Hubble_Gyr(z)                 Hubble_Gyr(z)
-  fomega(z)                     fomega(z)
-  fomega_2LPT(z)                fomega_2LPT(z)
-  CosmicTime(z)                 time(z) or cosmic_time(z)
-  InverseCosmicTime(t)          scale(t)
-  GrowingMode(z)                grow(z)
-  GrowingMode_2LPT(z)           grow_2LPT(z)
-  InverseGrowingMode(D)         inverse_grow(D)
-  ProperDistance(z)             proper_dist(z)
-  InverseProperDistance(r)      inverse_proper_dist(r)
-  dProperDistance_dz(z)         dproper_dist_dz(z)
-  PowerSpectrum(k)              power(k)
-  MassVariance(r)               aLambda(r)
-  dMassVariance_dr(r)           dLambda(r)
-  DisplVariance(r)              --
-  Radius(v)                     Radius(v)
-  SizeForMass(m)                Size(m)
-  MassForSize(r)                --
-  TypicalCollapsingMass(z)      aM_star(z)
-  dOmega_dVariance(v,z)         dodl(v,z)
-  AnalyticMassFunction(m,z)     an_h(v,z)
-  WindowFunction(kr)            window(kr)
-
-  MassVariance(SizeForMass(m))  Variance(m)
-  MassForSize(Radius(v))        aMass(v)
-
- */
-
 double my_spline_eval(gsl_spline *spline, double x, gsl_interp_accel *accel)
 {
+  /* this function performs linear extrapolation beyond the x-range limits,
+     and calls the spline evaluation in between */
   if (x<spline->x[0])
     return spline->y[0]+(x-spline->x[0])*(spline->y[1]-spline->y[0])/(spline->x[1]-spline->x[0]);
   else if (x>spline->x[spline->size-1])
@@ -1475,5 +1586,6 @@ double my_spline_eval(gsl_spline *spline, double x, gsl_interp_accel *accel)
       (spline->y[spline->size-1]-spline->y[spline->size-2])/(spline->x[spline->size-1]-spline->x[spline->size-2]);
   else
     return gsl_spline_eval(spline,x,accel);
+
 }
 

@@ -173,8 +173,7 @@ int write_snapshot(int iout)
     (unsigned long long int)MyGrids[0].GSglobal_z;
   Lgridxy = subbox.Lgwbl_x * subbox.Lgwbl_y;
 
-  Dz = GrowingMode(outputs.z[iout]);
-  float Dz2=GrowingMode_2LPT(outputs.z[iout]);
+  Dz = GrowingMode(outputs.z[iout],0.);
 
   /* Each task counts the number of particles that will be output */
   /* first loop is on good particles that are not in groups */
@@ -854,7 +853,7 @@ int write_snapshot(int iout)
 	  MyVel[j]=(float)(vel(rot[j], &obj)*vfact);
 
 	/* /\* virial radius and concentration of the group *\/ */
-	/* Dz = GrowingMode(outputs.z[iout]); */
+	/* Dz = GrowingMode(outputs.z[iout],0.); */
 	/* /\* this is the virial radius in physical true kpc *\/ */
 	/* rvir = pow(0.01 * GRAVITY * groups[i].Mass*params.ParticleMass / */
 	/* 	   pow(Hubble(outputs.z[iout]),2.0), 1./3.);   */
@@ -1619,7 +1618,7 @@ int write_timeless_snapshot(void)
       if (good_particle)
 	{
 	  for (j=0; j<3; j++)
-	    Vel[index].axis[j]=(float)(frag[i].Vmax[rot[j]]);
+	    Vel[index].axis[j]=(float)(frag[i].Vel[rot[j]]);
 	  ++index;
 	}
     }
@@ -1677,7 +1676,7 @@ int write_timeless_snapshot(void)
       if (good_particle)
 	{
 	  for (j=0; j<3; j++)
-	    Vel[index].axis[j]=(float)(frag[i].Vmax_2LPT[rot[j]]);
+	    Vel[index].axis[j]=(float)(frag[i].Vel_2LPT[rot[j]]);
 	  ++index;
 	}
     }
@@ -1735,7 +1734,7 @@ int write_timeless_snapshot(void)
       if (good_particle)
 	{
 	  for (j=0; j<3; j++)
-	    Vel[index].axis[j]=(float)(frag[i].Vmax_3LPT_1[rot[j]]);
+	    Vel[index].axis[j]=(float)(frag[i].Vel_3LPT_1[rot[j]]);
 	  ++index;
 	}
     }
@@ -1793,7 +1792,7 @@ int write_timeless_snapshot(void)
       if (good_particle)
 	{
 	  for (j=0; j<3; j++)
-	    Vel[index].axis[j]=(float)(frag[i].Vmax_3LPT_2[rot[j]]);
+	    Vel[index].axis[j]=(float)(frag[i].Vel_3LPT_2[rot[j]]);
 	  ++index;
 	}
     }
@@ -2050,14 +2049,14 @@ int write_LPT_snapshot(double redshift)
 #endif
 
   /* GADGET format requires velocities to be divided by sqrt(a) */
-  G=GrowingMode(redshift);
-  vf = params.InterPartDist*fomega(redshift)*Hubble(redshift)/sqrt(1.+redshift) * G;
+  G=GrowingMode(redshift,0.);
+  vf = params.InterPartDist*fomega(redshift,0.)*Hubble(redshift)/sqrt(1.+redshift) * G;
 #ifdef TWO_LPT
-  G2  = GrowingMode_2LPT(redshift);
-  vf2 = params.InterPartDist*fomega_2LPT(redshift)*Hubble(redshift)/sqrt(1.+redshift) * G2;
+  G2  = GrowingMode_2LPT(redshift,0.);
+  vf2 = params.InterPartDist*fomega_2LPT(redshift,0.)*Hubble(redshift)/sqrt(1.+redshift) * G2;
 #ifdef THREE_LPT
-  G31  = GrowingMode_3LPT_1(redshift);
-  G32  = GrowingMode_3LPT_2(redshift);
+  G31  = GrowingMode_3LPT_1(redshift,0.);
+  G32  = GrowingMode_3LPT_2(redshift,0.);
 #endif
 #endif
   SGrid[0]=(double)MyGrids[0].GSstart_x;

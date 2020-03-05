@@ -36,11 +36,21 @@ extern int ngroups;
 typedef struct
 {
   int M,i;
-  double q[3],v[3],D,z;
+  double q[3],v[3],D,z,myk;
 #ifdef TWO_LPT
   double D2,v2[3];
 #ifdef THREE_LPT
   double D31,v31[3],D32,v32[3];
+#endif
+#endif
+#ifdef KEEP_DENSITY
+  double w;
+  double v_aft[3];
+#ifdef TWO_LPT
+  double v2_aft[3];
+#ifdef THREE_LPT
+  double v31_aft[3],v32_aft[3];
+#endif
 #endif
 #endif
 } pos_data;
@@ -52,6 +62,15 @@ typedef struct
   double M,q[3],x[3],v[3];
   int n, pad;
 }  catalog_data;
+
+#ifdef KEEP_DENSITY
+typedef struct
+{
+  int n, mine;
+  double z[MAXOUTPUTS];
+} Segment_data;
+Segment_data Segment;
+#endif
 
 void condition_for_accretion(int, int, int, int, double, int, double *, double *);
 void condition_for_merging(double, int, int, int *);
