@@ -334,6 +334,11 @@ int compute_velocities(int ismooth)
 #endif
 	    for (i=0;i<3;i++)
 	      products[index].Vmax[i]=first_derivatives[0][i][index];
+
+#ifdef TIMELESS_SNAPSHOT
+	  /* sets accretion redshift to -1 default value */
+	  products[index].zacc=-1;
+#endif
 	}
 
   return 0;

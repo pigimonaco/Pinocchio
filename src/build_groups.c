@@ -181,8 +181,14 @@ int build_groups(int Npeaks)
 	    return 1;
 
 	  if (iout==outputs.n-1)
-	    if (write_histories())
-	      return 1;
+	    {
+#ifdef TIMELESS_SNAPSHOT
+	      if (params.WriteTimelessSnapshot && write_timeless_snapshot())
+		return 1;
+#endif
+	      if (write_histories())
+		return 1;
+	    }
 
 	  cputime.io += MPI_Wtime() - cputmp;
 
@@ -337,7 +343,7 @@ int build_groups(int Npeaks)
 
 		      /* loop on replications */
 		      for (irep=0; irep<plc.Nreplications; irep++)
-			if (!(frag[indices[iz]].Fmax > plc.repls[irep].F1 || 
+			if (!(frag[indices[iz]].Fmax > plc.repls[irep].F1 ||
 			      groups[thisgroup].Flast < plc.repls[irep].F2))
 			  {
 			    replicate[0]=plc.repls[irep].i;
@@ -836,6 +842,37 @@ void merge_groups(int grp1,int grp2,double time)
 
   int i1;
 
+#ifdef TIMELESS_SNAPSHOT
+  /* updates zacc of particles in case one of the halos (or both)
+     was below the MinHaloMass threshold but the merged halo is above
+     the threshold */
+  if ( (groups[grp1].t_appear==-1 || groups[grp2].t_appear==-1)
+       && (groups[grp1].Mass + groups[grp2].Mass >= params.MinHaloMass) )
+    {
+      if ( groups[grp1].t_appear==-1 )
+	{
+	  i1=groups[grp1].point;
+	  while (linking_list[i1]!=groups[grp1].point)
+	    {
+	      frag[i1].zacc=time-1.0;
+	      i1=linking_list[i1];
+	    }
+	  frag[i1].zacc=time-1.0;	  
+	}
+
+      if ( groups[grp2].t_appear==-1 )
+	{
+	  i1=groups[grp2].point;
+	  while (linking_list[i1]!=groups[grp2].point)
+	    {
+	      frag[i1].zacc=time-1.0;
+	      i1=linking_list[i1];
+	    }
+	  frag[i1].zacc=time-1.0;
+	}      
+    }
+#endif
+
   /* updates the linking list */
   i1=groups[grp2].point;
   while (linking_list[i1] != groups[grp2].point)
@@ -936,8 +973,22 @@ void accretion(int group,int i,int j,int k,int indx,double F)
   update(&obj1,&obj2);
   set_group(group,&obj1);
 
+  /* if the group goes above the MinHaloMass threshold, set its appearing time */
   if (groups[group].Mass >= params.MinHaloMass && groups[group].t_appear==-1)
-    groups[group].t_appear=F;
+    {
+      groups[group].t_appear=F;
+#ifdef TIMELESS_SNAPSHOT
+      /* updates zacc for all group particles */
+      int i1=groups[group].point;
+      while (linking_list[i1]!=groups[group].point)
+	{
+	   frag[i1].zacc=F-1.0;
+	   i1=linking_list[i1];
+	}
+      frag[i1].zacc=F-1.0;
+#endif
+    }
+
   group_ID[indx]=group;
 
   /* Updates the linking list */
@@ -945,6 +996,12 @@ void accretion(int group,int i,int j,int k,int indx,double F)
   linking_list[groups[group].bottom]=indx;
   groups[group].bottom=indx;
   linking_list[indx]=groups[group].point;
+
+#ifdef TIMELESS_SNAPSHOT
+  /* accretion redshift */
+  if (groups[group].Mass >= params.MinHaloMass)
+    frag[indx].zacc=F-1.0;
+#endif
 }
 
 /* CONDITIONS */

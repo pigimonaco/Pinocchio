@@ -202,6 +202,7 @@ int set_parameters()
       printf("DoNotWriteCatalogs          %d\n",params.DoNotWriteCatalogs);
       printf("DoNotWriteHistories         %d\n",params.DoNotWriteHistories);
       printf("WriteSnapshot               %d\n",params.WriteSnapshot);
+      printf("WriteTimelessSnapshot       %d\n",params.WriteTimelessSnapshot);
       printf("OutputInH100                %d\n",params.OutputInH100);
       printf("WriteFmax                   %d\n",params.WriteFmax);
       printf("WriteVmax                   %d\n",params.WriteVmax);
@@ -965,6 +966,14 @@ int set_subboxes()
       if (!ThisTask)
 	printf("Sorry, but snapshots cannot be written if fragmentation is done in slices\n");
     }
+#ifdef TIMELESS_SNAPSHOT
+  if (NSlices>1 && params.WriteTimelessSnapshot)
+    {
+      params.WriteTimelessSnapshot=0;
+      if (!ThisTask)
+	printf("Sorry, but timeless snapshots cannot be written if fragmentation is done in slices\n");
+    }
+#endif
 
   /* initialization of quantities required by compute_mf */
    if (params.OutputInH100)

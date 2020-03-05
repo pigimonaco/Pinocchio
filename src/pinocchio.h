@@ -58,13 +58,33 @@ extern int ThisTask,NTasks;
 
 typedef struct
 {
-  double Fmax, Vmax[3];
   int Rmax;
+  double Fmax;
+
+#ifdef DOUBLE_PRECISION_VELOCITIES 
+
+  double Vmax[3];
 #ifdef TWO_LPT
   double Vmax_2LPT[3];
 #ifdef THREE_LPT
   double Vmax_3LPT_1[3],Vmax_3LPT_2[3];
 #endif
+#endif
+
+#else
+
+  float Vmax[3];
+#ifdef TWO_LPT
+  float Vmax_2LPT[3];
+#ifdef THREE_LPT
+  float Vmax_3LPT_1[3],Vmax_3LPT_2[3];
+#endif
+#endif
+
+#endif
+
+#ifdef TIMELESS_SNAPSHOT
+  float zacc;
 #endif
 } product_data;
 
@@ -137,7 +157,7 @@ typedef struct
   char RunFlag[BLENGTH],DataDir[BLENGTH],TabulatedEoSfile[BLENGTH],ParameterFile[BLENGTH],
     OutputList[BLENGTH],FileWithInputSpectrum[BLENGTH];
   int GridSize[3],WriteRmax, WriteFmax, WriteVmax, 
-    CatalogInAscii, DoNotWriteCatalogs, DoNotWriteHistories, WriteSnapshot, 
+    CatalogInAscii, DoNotWriteCatalogs, DoNotWriteHistories, WriteSnapshot, WriteTimelessSnapshot,
     OutputInH100, RandomSeed, MaxMem, NumFiles, MinMassForCat, 
     BoxInH100, simpleLambda, AnalyticMassFunction, MinHaloMass, PLCProvideConeData;
 #ifdef SCALE_DEPENDENT_GROWTH
@@ -305,6 +325,9 @@ int write_density(int);
 /* prototypes in write_snapshot.c */
 int write_snapshot(int);
 int write_LPT_snapshot(double);
+#ifdef TIMELESS_SNAPSHOT
+int write_timeless_snapshot(void);
+#endif
 
 /* prototypes for functions defined in cosmo.c */
 int initialize_cosmology();

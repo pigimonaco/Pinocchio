@@ -27,16 +27,17 @@
 
 RUNDIR = ./
 
-EXEC = pinocchio.x
+EXEC = pinocchio.merged.x
 OPTIONS += -DTWO_LPT
 OPTIONS += -DTHREE_LPT
 OPTIONS += -DPLC
 #OPTIONS += -DROTATE_BOX
 #OPTIONS += -DWHITENOISE
 #OPTIONS += -DNO_RANDOM_MODULES
-#OPTIONS += -DNORADIATION
+OPTIONS += -DNORADIATION
 #OPTIONS += -DSCALE_DEPENDENT_GROWTH
 
+#OPTIONS += -DTIMELESS_SNAPSHOT
 
 SYSTYPE="my_machine"
 
@@ -47,7 +48,7 @@ CDEBUG      = -ggdb3 -Wall
 COPTIMIZED  = -O3 -Wno-unused-result
 FFTW_LIBR   = -L$(HOME)/lib -lfftw3_mpi -lfftw3
 FFTW_INCL   = -I/usr/local/include -I$(HOME)/include
-MPI_LIBR    = -lmpi
+MPI_LIBR    =
 MPI_INCL    =
 GSL_LIBR    = -lgsl -lgslcblas -lm
 GSL_INCL    = -I/usr/include
