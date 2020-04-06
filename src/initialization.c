@@ -31,27 +31,6 @@ int set_smoothing(void);
 int generate_densities(void);
 int set_subboxes(void);
 int set_plc(void);
-#ifdef SCALE_DEPENDENT
-int set_scaledep_GM(void);
-#endif
-
-/* // LEVARE */
-/* void test_inverseGM() */
-/* { */
-/*   double D; */
-/*   FILE *fd=fopen("testinv.txt","w"); */
-/*   for (int ismooth=0; ismooth<Smoothing.Nsmooth; ismooth++) */
-/*     /\* for (int i=0; i<NBINS; i++) *\/ */
-/*     /\*   fprintf(fd," %d %d  %g %g\n", *\/ */
-/*     /\* 	      ismooth,i,SPLINE_INVGROW[ismooth]->x[i],SPLINE_INVGROW[ismooth]->y[i]); *\/ */
-/*     for (double z=100.; z>= 0.0; z-=1.) */
-/*       { */
-/*     	D=GrowingMode(z,params.k_for_GM); */
-/*     	fprintf(fd," %f %d     %g  %g\n", */
-/*     		z,ismooth,D,InverseGrowingMode(D,ismooth)); */
-/*       } */
-/*   fclose(fd); */
-/* } */
 
 
 int initialization()
@@ -69,6 +48,12 @@ int initialization()
   if (set_parameters())
     return 1;
 
+#ifdef SCALE_DEPENDENT_GROWTH
+  /* reads the P(k) tables from CAMB */
+  if (read_power_table_from_CAMB())
+    return 1;
+#endif
+
   /* call to cosmo.c: initialization of cosmological functions */
   if (initialize_cosmology())
     return 1;
@@ -85,7 +70,13 @@ int initialization()
   WindowFunctionType=2;
   if (initialize_MassVariance())
     return 1;
-  
+
+#ifdef SCALE_DEPENDENT_GROWTH
+  /* initialize scale-dependent growing modes and fomegas */
+  if (initialize_ScaleDependentGrowth())
+    return 1;
+#endif
+
   /* computes the number of sub-boxes for fragmentation */
   if (set_subboxes())
     {
@@ -94,12 +85,6 @@ int initialization()
       MPI_Finalize();
       exit (0);
     }
-
-#ifdef SCALE_DEPENDENT
-  /* computes the growth rates for displacements */
-  if (set_scaledep_GM())
-    return 1;
-#endif
 
   /* initializes quantities needed for the on-the-fly reconstruction of PLC */
   if (set_plc())
@@ -153,9 +138,6 @@ int set_parameters()
     * pow(params.InterPartDist,3.);
   strcpy(params.DataDir,"Data/");
 
-  /* The Nyquist wavenumber is used in generic calls of scale-dependent growth rates */
-  params.k_for_GM = PI/params.InterPartDist;
-
   if (!params.NumFiles)
     params.NumFiles=1;
 
@@ -173,6 +155,8 @@ int set_parameters()
 
   /* inverse collapse times for the required outputs */
   for (i=0; i<outputs.n; i++)
+    /* if F is the inverse growing mode: */
+    /* outputs.F[i]=1./GrowingMode(outputs.z[i]); */
     outputs.F[i]=1.+outputs.z[i];
   outputs.Flast=outputs.F[outputs.n-1];
 
@@ -218,7 +202,6 @@ int set_parameters()
       printf("DoNotWriteCatalogs          %d\n",params.DoNotWriteCatalogs);
       printf("DoNotWriteHistories         %d\n",params.DoNotWriteHistories);
       printf("WriteSnapshot               %d\n",params.WriteSnapshot);
-      printf("WriteTimelessSnapshot       %d\n",params.WriteTimelessSnapshot);
       printf("OutputInH100                %d\n",params.OutputInH100);
       printf("WriteFmax                   %d\n",params.WriteFmax);
       printf("WriteVmax                   %d\n",params.WriteVmax);
@@ -288,7 +271,12 @@ int set_smoothing()
   int ismooth;
   double var_min, var_max, rmin;
 
-  var_min    = pow(1.686/NSIGMA / GrowingMode(outputs.zlast,params.k_for_GM),2.0);
+#ifdef SCALE_DEPENDENT_GROWTH
+  SDGM.flag=-1;   /* here we want to use the standard, scale-independent growing mode */
+#endif
+  
+  var_min    = pow(1.686/NSIGMA / GrowingMode(outputs.zlast),2.0);
+  /* rmax       = Radius(var_min); */
   rmin       = params.InterPartDist/6.;
   var_max    = MassVariance(rmin);
   Smoothing.Nsmooth = (log10(var_max)-log10(var_min))/STEP_VAR+2;
@@ -363,29 +351,8 @@ int generate_densities()
 #endif
 
   cputime.dens=MPI_Wtime()-cputime.dens;
-  if (!ThisTask)
-    printf("[%s] Done generating density in Fourier space, cputime = %f s\n",fdate(), cputime.dens);
-
-  /* // LEVARE!!! */
-  /* write_in_cvector(0, kdensity[0]); */
-  /* (void)reverse_transform(0); */
-  /* write_from_rvector(0, density[0]); */
-  /* double Variance=0.0; */
-  /* for (int i=0; i<MyGrids[0].total_local_size; i++) */
-  /*   Variance+=density[0][i]*density[0][i]; */
-  /* Variance/=(double)MyGrids[0].total_local_size; */
-  /* printf("VARIANCE on the grid: %g\n",Variance); */
-
-  /* double VVVV=VarianceOnGrid(0,1.0,0.0); */
-  /* printf("CALCOLO: %g  %f  %f  %f   %10f    \n",VVVV, Variance/VVVV, Radius(Variance), params.InterPartDist, Radius(Variance)/params.InterPartDist); */
-
-  /* WindowFunctionType=1; */
-  /* if (initialize_MassVariance()) */
-  /*   return 1; */
-
-  /* double SSSS=MassVariance(params.InterPartDist/PI); */
-  /* printf("SKS: %g  %g\n",SSSS, Variance/SSSS); */
-  /* return 1; */
+    if (!ThisTask)
+      printf("[%s] Done generating density in Fourier space, cputime = %f s\n",fdate(), cputime.dens);
 
   return 0;
 }
@@ -449,7 +416,7 @@ int set_plc(void)
   int NAll,ir,jr,kr,ic,this,intersection,axis;
   double Largest_r,Smallest_r,smallestr,largestr,x[3],l[3],z,d,mod,displ_variance,tdis;
   FILE *fout;
-  char filename[LBLENGTH];
+  char filename[BLENGTH];
 
   /* ordering of coordinates to accomodate for rotation caused by fft ordering */
 #ifdef ROTATE_BOX
@@ -523,18 +490,21 @@ int set_plc(void)
     }
 
   /* initialization to compute the number of realizations */
-  NAll=(int)(ComovingDistance(params.StartingzForPLC)/MyGrids[0].BoxSize)+2;
+  NAll=(int)(ProperDistance(params.StartingzForPLC)/MyGrids[0].BoxSize)+2;
   plc.Fstart = 1.+params.StartingzForPLC;
   plc.Fstop  = 1.+params.LastzForPLC;
+  /* if F is the inverse collapse time: */
+  /* plc.Fstart = 1./GrowingMode(params.StartingzForPLC); */
+  /* plc.Fstop  = 1./GrowingMode(params.LastzForPLC); */
 
-  Largest_r=ComovingDistance(params.StartingzForPLC)/params.InterPartDist;
-  Smallest_r=ComovingDistance(params.LastzForPLC)/params.InterPartDist;
+  Largest_r=ProperDistance(params.StartingzForPLC)/params.InterPartDist;
+  Smallest_r=ProperDistance(params.LastzForPLC)/params.InterPartDist;
 
   /* this is needed to compute the typical displacement */
   displ_variance = sqrt( DisplVariance(params.InterPartDist) ) / params.InterPartDist;
-  Smallest_r -= NSAFE * GrowingMode(params.LastzForPLC,params.k_for_GM) * displ_variance;
+  Smallest_r -= NSAFE * GrowingMode(params.LastzForPLC) * displ_variance;
   Smallest_r = (Smallest_r>0 ? Smallest_r : 0.);
-  Largest_r += NSAFE * GrowingMode(params.StartingzForPLC,params.k_for_GM) * displ_variance;
+  Largest_r += NSAFE * GrowingMode(params.StartingzForPLC) * displ_variance;
 
   l[0]=(double)(MyGrids[0].GSglobal_x);
   l[1]=(double)(MyGrids[0].GSglobal_y);
@@ -603,10 +573,10 @@ int set_plc(void)
   for (z=100.; z>=0.0; z-=0.01)
     {
       /* NSAFE times the typical displacement at z */
-      tdis = NSAFE * GrowingMode(z,params.k_for_GM) * displ_variance;
+      tdis = NSAFE * GrowingMode(z) * displ_variance;
 
-      /* comoving distance at redshift z */
-      d = ComovingDistance(z)/params.InterPartDist;
+      /* proper distance at redshift z */
+      d = ProperDistance(z)/params.InterPartDist;
       for (this=0; this<plc.Nreplications; this++)
 	{
 	  if (plc.repls[this].F1<=0.0 && d<-plc.repls[this].F1+tdis)
@@ -641,9 +611,9 @@ int set_plc(void)
       if (params.PLCProvideConeData)
 	printf("(NB: rotation has been applied to the provided coordinates)\n");
 #endif
-      printf("The comoving distance at the starting redshift, z=%f, is: %f Mpc\n",
+      printf("The proper distance at the starting redshift, z=%f, is: %f Mpc\n",
 	     params.StartingzForPLC, Largest_r*params.InterPartDist);
-      printf("The comoving distance at the stopping redshift, z=%f, is: %f Mpc\n",
+      printf("The proper distance at the stopping redshift, z=%f, is: %f Mpc\n",
 	     params.LastzForPLC, Smallest_r*params.InterPartDist);
       printf("The reconstruction will be done for %f < z < %f\n",params.LastzForPLC,params.StartingzForPLC);
       printf("The corresponding F values are: Fstart=%f, Fstop=%f\n",plc.Fstart,plc.Fstop);
@@ -828,8 +798,12 @@ int set_subboxes()
   double tdis,size,this,BytesPerParticle,FmaxBPP,FragG_BPP,FragP_BPP,
     TotalNP,TotalNP_pertask,ratio,smallest,cc,MemPerTask;
 
+#ifdef SCALE_DEPENDENT_GROWTH
+  SDGM.flag=-1;
+#endif
+
   /* typical displacement at zlast */
-  tdis = GrowingMode(outputs.zlast,params.k_for_GM) * sqrt( DisplVariance(params.InterPartDist) );
+  tdis = GrowingMode(outputs.zlast) * sqrt( DisplVariance(params.InterPartDist) );
 
   /* mass of the largest halo expected in the box */
   params.Largest=1.e18;
@@ -851,7 +825,7 @@ int set_subboxes()
     {
       printf("\n");
       printf("Determination of the boundary layer\n");
-      printf("   growing mode at z=%f: %f\n",outputs.zlast, GrowingMode( outputs.zlast, params.k_for_GM));
+      printf("   growing mode at z=%f: %f\n",outputs.zlast, GrowingMode( outputs.zlast ));
       printf("   largest halo expected in this box at z=%f: %e Msun\n",
 	     outputs.zlast, params.Largest);
       printf("   its Lagrangian size: %f Mpc\n",size);
@@ -991,14 +965,6 @@ int set_subboxes()
       if (!ThisTask)
 	printf("Sorry, but snapshots cannot be written if fragmentation is done in slices\n");
     }
-#ifdef TIMELESS_SNAPSHOT
-  if (NSlices>1 && params.WriteTimelessSnapshot)
-    {
-      params.WriteTimelessSnapshot=0;
-      if (!ThisTask)
-	printf("Sorry, but timeless snapshots cannot be written if fragmentation is done in slices\n");
-    }
-#endif
 
   /* initialization of quantities required by compute_mf */
    if (params.OutputInH100)
@@ -1092,624 +1058,3 @@ int find_length(int L, int n, int ibox)
     }
 }
 
-
-#ifdef SCALE_DEPENDENT
-#include "def_splines.h"
-#define SMALLDIFF ((double)1.e-5)
-#define TOLERANCE ((double)1.e-4)
-#define MAXITER 20
-//#define DEBUG
-
-double ThisRadius;
-double Time;
-
-double IntegrandForSDDensVariance(double logk, void *radius)
-{
-  double k,w,D;
-
-  k=pow(10.,logk);
-  w=WindowFunction(k * ThisRadius);
-  D=GrowingMode(1./Time-1.,k);
-  return PowerSpectrum(k) * D*D * w*w * k*k*k / (2.*PI*PI);
-}
-
-double IntegrandForSDDisplVariance(double logk, void *radius)
-{
-  double k,w,D;
-
-  k=pow(10.,logk);
-  w=WindowFunction(k * ThisRadius);
-  D=GrowingMode(1./Time-1.,k);
-  return PowerSpectrum(k) * D*D * w*w * k / (2.*PI*PI);
-}
-
-double IntegrandForSDDispl2Variance(double logk, void *radius)
-{
-  double k,w,D;
-
-  k=pow(10.,logk);
-  w=WindowFunction(k * ThisRadius);
-  D=GrowingMode_2LPT(1./Time-1.,k);
-  return PowerSpectrum(k) * D*D * w*w * k / (2.*PI*PI);
-}
-
-double IntegrandForSDDispl31Variance(double logk, void *radius)
-{
-  double k,w,D;
-
-  k=pow(10.,logk);
-  w=WindowFunction(k * ThisRadius);
-  D=GrowingMode_3LPT_1(1./Time-1.,k);
-  return PowerSpectrum(k) * D*D * w*w * k / (2.*PI*PI);
-}
-
-double IntegrandForSDDispl32Variance(double logk, void *radius)
-{
-  double k,w,D;
-
-  k=pow(10.,logk);
-  w=WindowFunction(k * ThisRadius);
-  D=GrowingMode_3LPT_2(1./Time-1.,k);
-  return PowerSpectrum(k) * D*D * w*w * k / (2.*PI*PI);
-}
-
-
-double IntegrandForSDVelVariance(double logk, void *radius)
-{
-  double k,w,D,fo;
-
-  k=pow(10.,logk);
-  w=WindowFunction(k * ThisRadius);
-  D=GrowingMode(1./Time-1.,k);
-  fo=fomega(1./Time-1.,k);
-  return PowerSpectrum(k) * D*D * fo*fo * w*w * k / (2.*PI*PI);
-}
-
-double IntegrandForSDVel2Variance(double logk, void *radius)
-{
-  double k,w,D,fo;
-
-  k=pow(10.,logk);
-  w=WindowFunction(k * ThisRadius);
-  D=GrowingMode_2LPT(1./Time-1.,k);
-  fo=fomega_2LPT(1./Time-1.,k);
-  return PowerSpectrum(k) * D*D * fo*fo * w*w * k / (2.*PI*PI);
-}
-
-double IntegrandForSDVel31Variance(double logk, void *radius)
-{
-  double k,w,D,fo;
-
-  k=pow(10.,logk);
-  w=WindowFunction(k * ThisRadius);
-  D=GrowingMode_3LPT_1(1./Time-1.,k);
-  fo=fomega_3LPT_1(1./Time-1.,k);
-  return PowerSpectrum(k) * D*D * fo*fo * w*w * k / (2.*PI*PI);
-}
-
-double IntegrandForSDVel32Variance(double logk, void *radius)
-{
-  double k,w,D,fo;
-
-  k=pow(10.,logk);
-  w=WindowFunction(k * ThisRadius);
-  D=GrowingMode_3LPT_2(1./Time-1.,k);
-  fo=fomega_3LPT_2(1./Time-1.,k);
-  return PowerSpectrum(k) * D*D * fo*fo * w*w * k / (2.*PI*PI);
-}
-
-
-int set_scaledep_GM()
-{
-  /* computes for each smoothing radius the k wavenumber at which the Fourier growing mode
-     has the same time evolution of the rms of the density and displacement */
-
-  double *vector;
-  gsl_function Function;
-  int ismooth, i, Today, Z20, iter;
-  double nyquist, normv, normGM1, normGM2, normGMm, logk1, logk2, logkmid, k1, k2, kmid, 
-    diff1, diff2, diffm, mindiff, result, error;
-
-#ifdef DEBUG
-  gsl_function Function2, Function31, Function32;
-  FILE *fd;
-#endif
-
-  // CI del collasso ellissoidale
-
-
-#ifdef ELL_CLASSIC
-  /* splines for inverse growing mode */
-  SPLINE_INVGROW = (gsl_spline **)calloc(Smoothing.Nsmooth, sizeof(gsl_spline *));
-  for (i=0; i<Smoothing.Nsmooth; i++)
-    SPLINE_INVGROW[i] = gsl_spline_alloc (gsl_interp_cspline, NBINS);
-  ACCEL_INVGROW = (gsl_interp_accel **)calloc(Smoothing.Nsmooth, sizeof(gsl_interp_accel *));
-  for (i=0; i<Smoothing.Nsmooth; i++)
-    ACCEL_INVGROW[i] = gsl_interp_accel_alloc();
-#endif
-
-  Smoothing.Rad_GM          = (double*)malloc(Smoothing.Nsmooth * sizeof(double));
-  Smoothing.k_GM_dens       = (double*)malloc(Smoothing.Nsmooth * sizeof(double));
-  Smoothing.k_GM_displ      = (double*)malloc(Smoothing.Nsmooth * sizeof(double));
-  Smoothing.k_GM_vel        = (double*)malloc(Smoothing.Nsmooth * sizeof(double));
-
-  for (i=0; i<NBINS; i++)
-    if (pow(10.,SPLINE[SP_TIME]->x[i])>1.0)
-      break;
-  Today=i-1;
-
-  for (i=0; i<NBINS; i++)
-    if (pow(10.,SPLINE[SP_TIME]->x[i])>1./21.)
-      break;
-  Z20=i-1;
-
-
-  /***********/
-  /* density */
-  /***********/
-  Function.function = &IntegrandForSDDensVariance;
-  vector = (double*)malloc(NBINS * sizeof(double));
-
-  /* density (mass) variance is computed using Gaussian smoothing, 
-     the integral will be truncated at the Nyquist frequency */
-  WindowFunctionType=0;
-  nyquist = NYQUIST * PI / params.InterPartDist;
-
-#ifdef DEBUG
-  if (!ThisTask)
-    fd=fopen("accuracy_scaledependent_dens.txt","w");
-#endif
-
-  /* cycle on smoothing radii */
-  for (ismooth=0; ismooth<Smoothing.Nsmooth; ismooth++)
-    {
-      /* here we use the (Gaussian) smoothing radii used in the rest of the code */
-      ThisRadius=Smoothing.Radius[ismooth];
-
-      /* integrates the growing mode and stores in vector */
-      for (i=0; i<NBINS; i++)
-	{
-	  Time = pow(10.,SPLINE[SP_TIME]->x[i]);
-  	  gsl_integration_qags (&Function, -4., nyquist, 0.0, TOLERANCE, NWINT, workspace, &result, &error);
-	  vector[i]=sqrt(result);
-	}
-      normv=vector[Today];
-      for (i=0; i<NBINS; i++)
-	vector[i]/=normv;
-
-      /* bisector search of the k that gives the best approximation to the growth rate */
-      iter=0;
-
-      /* first guess at the extremes in k */
-      logk1=LOGKMIN;
-      logk2=LOGKMIN+(NkBINS-1)*DELTALOGK;
-      k1=pow(10.,logk1);
-      k2=pow(10.,logk2);
-
-      /* differences at the extremes in k */
-      normGM1=GrowingMode(0.0,k1);
-      normGM2=GrowingMode(0.0,k2);
-      for (diff1=diff2=0.0, i=Z20; i<=Today; i++)
-	{
-	  Time = pow(10.,SPLINE[SP_TIME]->x[i]);
-	  diff1+=vector[i]-GrowingMode(1./Time-1.,k1)/normGM1;
-	  diff2+=vector[i]-GrowingMode(1./Time-1.,k2)/normGM2;
-	}
-      diff1/=(double)NBINS;
-      diff2/=(double)NBINS;
-
-      /* k1 might be accurate enough */
-      if (fabs(diff1) < SMALLDIFF)
-	Smoothing.k_GM_dens[ismooth]=k1;
-
-      /* k2 might be accurate enough */
-      else if (fabs(diff2)<SMALLDIFF)
-	Smoothing.k_GM_dens[ismooth]=k2;
-
-      /* this is an unfortunate case: the two differences have the same sign
-         and none is accurate enough. In this case the scale is set to the k that gives
-	 the smallest difference, and a warning is printed out  */
-      else if (diff1*diff2>0)
-	{
-	  if (!ThisTask)
-	    printf("WARNING in scale-dependent density growth rate for smoothing radius %d (%f): accuracy not guaranteed [diff1=%g - diff2=%g]\n",
-		   ismooth, Smoothing.Radius[ismooth],diff1,diff2);
-	  if (fabs(diff1)<fabs(diff2))
-	    Smoothing.k_GM_dens[ismooth]=logk1;
-	  else
-	    Smoothing.k_GM_dens[ismooth]=k2;
-
-	}
-      else
-	{
-	  /* smallest difference */
-	  mindiff=fabs(diff1);
-	  mindiff=(fabs(diff2) < mindiff ? fabs(diff2) : mindiff);
-
-	  /* iteration for bisector search */
-	  do
-	    {
-
-	      /* midpoint in log space */
-	      logkmid=0.5*(logk1+logk2);
-	      kmid=pow(10.,logkmid);
-
-	      /* difference at midpoint */
-	      normGMm=GrowingMode(0.0,kmid);
-	      for (diffm=0.0, i=Z20; i<=Today; i++)
-		{
-		  Time = pow(10.,SPLINE[SP_TIME]->x[i]);
-		  diffm+=vector[i]-GrowingMode(1./Time-1.,kmid)/normGMm;
-		}
-	      diffm/=(double)NBINS;
-
-	      /* update of mindiff if necessary */
-	      mindiff=(fabs(diffm) < mindiff ? fabs(diffm) : mindiff);
-
-	      /* new extreme points */
-	      if (diff1*diffm>0)
-		{
-		  logk1=logkmid;
-		  diff1=diffm;
-		}
-	      else
-		{
-		  logk2=logkmid;
-		  diff2=diffm;
-		}
-	      ++iter;
-	    }
-	  while (fabs(mindiff)>SMALLDIFF && iter<=MAXITER);
-    
-	  Smoothing.k_GM_dens[ismooth]=kmid;
-	}
-
-#ifdef DEBUG
-      printf("density, smoothing %d, iter=%d\n",ismooth,iter); // LEVARE
-      if (!ThisTask)
-	for (i=0; i<NBINS; i++)
-	  {
-	    Time=pow(10.,SPLINE[SP_TIME]->x[i]);
-	    fprintf(fd,"  %d %g  %g  %g  %g  %g\n",
-		    ismooth,Smoothing.Radius[ismooth],Smoothing.k_GM_dens[ismooth],
-		    Time,vector[i],GrowingMode(1./Time-1.,Smoothing.k_GM_dens[ismooth])/GrowingMode(0.0,Smoothing.k_GM_dens[ismooth]));
-	  }
-#endif
-
-#ifdef ELL_CLASSIC
-      for (i=0; i<NBINS; i++)
-	vector[i]=log10(vector[i]);
-      gsl_spline_init(SPLINE_INVGROW[ismooth], vector, &(SPLINE[SP_TIME]->x[0]),  NBINS);
-#endif
-
-    }
-#ifdef DEBUG
-  if (!ThisTask)
-    fclose(fd);
-#endif
-
-
-  /*****************/
-  /* displacements */
-  /*****************/
-  Function.function = &IntegrandForSDDisplVariance;
-#ifdef DEBUG
-  Function2.function = &IntegrandForSDDispl2Variance;
-  Function31.function = &IntegrandForSDDispl31Variance;
-  Function32.function = &IntegrandForSDDispl32Variance;
-#endif
-
-  /* displacement variance is computed using Top-Hat smoothing, 
-     the integral will be again truncated at the Nyquist frequency */
-  WindowFunctionType=2;
-
-#ifdef DEBUG
-  if (!ThisTask)
-    fd=fopen("accuracy_scaledependent_disp.txt","w");
-#endif
-
-  double Largest=SizeForMass(pow(10.,mf.mmax));
-  /* cycle on smoothing radii */
-  for (ismooth=0; ismooth<Smoothing.Nsmooth; ismooth++)
-    {
-      ThisRadius=Smoothing.Rad_GM[ismooth]=Largest*(Smoothing.Nsmooth-1-ismooth)/(double)(Smoothing.Nsmooth-1);
-
-      /* integrates the growing mode and stores in vector */
-      for (i=0; i<NBINS; i++)
-	{
-	  Time = pow(10.,SPLINE[SP_TIME]->x[i]);
-  	  gsl_integration_qags (&Function, -4., nyquist, 0.0, TOLERANCE, NWINT, workspace, &result, &error);
-	  vector[i]=sqrt(result);
-	}
-      normv=vector[Today];
-      for (i=0; i<NBINS; i++)
-	vector[i]/=normv;
-
-      /* bisector search of the k that gives the best approximation to the growth rate */
-      iter=0;
-
-      /* first guess at the extremes in k */
-      logk1=LOGKMIN;
-      logk2=LOGKMIN+(NkBINS-1)*DELTALOGK;
-      k1=pow(10.,logk1);
-      k2=pow(10.,logk2);
-
-      /* differences at the extremes in k */
-      normGM1=GrowingMode(0.0,k1);
-      normGM2=GrowingMode(0.0,k2);
-      for (diff1=diff2=0.0, i=Z20; i<=Today; i++)
-	{
-	  Time = pow(10.,SPLINE[SP_TIME]->x[i]);
-	  diff1+=vector[i]-GrowingMode(1./Time-1.,k1)/normGM1;
-	  diff2+=vector[i]-GrowingMode(1./Time-1.,k2)/normGM2;
-	}
-      diff1/=(double)NBINS;
-      diff2/=(double)NBINS;
-
-      /* k1 might be accurate enough */
-      if (fabs(diff1)<SMALLDIFF)
-	Smoothing.k_GM_displ[ismooth]=k1;
-
-      /* k2 might be accurate enough */
-      else if (fabs(diff2)<SMALLDIFF)
-	Smoothing.k_GM_displ[ismooth]=k2;
-
-      /* this is an unfortunate case: the two differences have the same sign
-         and none is accurate enough. In this case the scale is set to the k that gives
-	 the smallest difference, and a warning is printed out  */
-      else if (diff1*diff2>0)
-	{
-	  if (!ThisTask)
-	    printf("WARNING in scale-dependent density growth rate for smoothing radius %d (%f): accuracy not guaranteed [diff1=%g - diff2=%g]\n",
-		   ismooth, Smoothing.Rad_GM[ismooth],diff1,diff2);
-	  if (fabs(diff1)<fabs(diff2))
-	    Smoothing.k_GM_displ[ismooth]=k1;
-
-	  else
-	    Smoothing.k_GM_displ[ismooth]=k2;
-	}
-      else
-	{
-	  /* smallest difference */
-	  mindiff=fabs(diff1);
-	  mindiff=(fabs(diff2) < mindiff ? fabs(diff2) : mindiff);
-
-	  /* iteration for bisector search */
-	  do
-	    {
-
-	      /* midpoint in log space */
-	      logkmid=0.5*(logk1+logk2);
-	      kmid=pow(10.,logkmid);
-
-	      /* difference at midpoint */
-	      normGMm=GrowingMode(0.0,kmid);
-	      for (diffm=0.0, i=Z20; i<=Today; i++)
-		{
-		  Time = pow(10.,SPLINE[SP_TIME]->x[i]);
-		  diffm+=vector[i]-GrowingMode(1./Time-1.,kmid)/normGMm;
-		}
-	      diffm/=(double)NBINS;
-
-	      /* update of mindiff if necessary */
-	      mindiff=(fabs(diffm) < mindiff ? fabs(diffm) : mindiff);
-
-	      /* new extreme points */
-	      if (diff1*diffm>0)
-		{
-		  logk1=logkmid;
-		  diff1=diffm;
-		}
-	      else
-		{
-		  logk2=logkmid;
-		  diff2=diffm;
-		}
-	      ++iter;
-	    }
-	  while (fabs(mindiff)>SMALLDIFF && iter<=MAXITER);
-
-	  Smoothing.k_GM_displ[ismooth]=kmid;
-	}
-
-#ifdef DEBUG
-      printf("displacements, smoothing %d, iter=%d\n",ismooth,iter);
-      Time=1.0;
-      gsl_integration_qags (&Function2, -4., 2., 0.0, TOLERANCE, NWINT, workspace, &result, &error);
-      normGM1=sqrt(result);
-      gsl_integration_qags (&Function31, -4., 2., 0.0, TOLERANCE, NWINT, workspace, &result, &error);
-      normGM2=sqrt(result);
-      gsl_integration_qags (&Function32, -4., 2., 0.0, TOLERANCE, NWINT, workspace, &result, &error);
-      normGMm=sqrt(result);
-      if (!ThisTask)
-	for (i=0; i<NBINS; i++)
-	  {
-	    Time=pow(10.,SPLINE[SP_TIME]->x[i]);
-	    fprintf(fd,"  %d %g  %g  %g  %g  %g",
-		    ismooth,Smoothing.Rad_GM[ismooth],Smoothing.k_GM_displ[ismooth],
-		    Time,vector[i],GrowingMode(1./Time-1.,Smoothing.k_GM_displ[ismooth])/GrowingMode(0.0,Smoothing.k_GM_displ[ismooth]));
-	    gsl_integration_qags (&Function2, -4., 2., 0.0, TOLERANCE, NWINT, workspace, &result, &error);
-	    fprintf(fd,"  %g  %g",sqrt(result)/normGM1,GrowingMode_2LPT(1./Time-1.,Smoothing.k_GM_displ[ismooth])/GrowingMode_2LPT(0.0,Smoothing.k_GM_displ[ismooth]));
-	    gsl_integration_qags (&Function31, -4., 2., 0.0, TOLERANCE, NWINT, workspace, &result, &error);
-	    fprintf(fd,"  %g  %g",sqrt(result)/normGM2,GrowingMode_3LPT_1(1./Time-1.,Smoothing.k_GM_displ[ismooth])/GrowingMode_3LPT_1(0.0,Smoothing.k_GM_displ[ismooth]));
-	    gsl_integration_qags (&Function32, -4., 2., 0.0, TOLERANCE, NWINT, workspace, &result, &error);
-	    fprintf(fd,"  %g  %g\n",sqrt(result)/normGMm,GrowingMode_3LPT_2(1./Time-1.,Smoothing.k_GM_displ[ismooth])/GrowingMode_3LPT_2(0.0,Smoothing.k_GM_displ[ismooth]));
-	  }
-#endif
-
-    }
-
-#ifdef DEBUG
-  if (!ThisTask)
-    fclose(fd);
-#endif
-
-  /**************/
-  /* velocities */
-  /**************/
-  Function.function = &IntegrandForSDVelVariance;
-#ifdef DEBUG
-  Function2.function = &IntegrandForSDVel2Variance;
-  Function31.function = &IntegrandForSDVel31Variance;
-  Function32.function = &IntegrandForSDVel32Variance;
-#endif
-
-  /* displacement variance is computed using Top-Hat smoothing, 
-     the integral will be again truncated at the Nyquist frequency */
-  WindowFunctionType=2;
-
-#ifdef DEBUG
-  if (!ThisTask)
-    fd=fopen("accuracy_scaledependent_velo.txt","w");
-#endif
-
-  /* cycle on smoothing radii */
-  for (ismooth=0; ismooth<Smoothing.Nsmooth; ismooth++)
-    {
-      ThisRadius=Smoothing.Rad_GM[ismooth];
-
-      /* integrates the growing mode and stores in vector */
-      for (i=0; i<NBINS; i++)
-	{
-	  Time = pow(10.,SPLINE[SP_TIME]->x[i]);
-  	  gsl_integration_qags (&Function, -4., nyquist, 0.0, TOLERANCE, NWINT, workspace, &result, &error);
-	  vector[i]=sqrt(result);
-	}
-      normv=vector[Today];
-      for (i=0; i<NBINS; i++)
-	vector[i]/=normv;
-
-      /* bisector search of the k that gives the best approximation to the growth rate */
-      iter=0;
-
-      /* first guess at the extremes in k */
-      logk1=LOGKMIN;
-      logk2=LOGKMIN+(NkBINS-1)*DELTALOGK;
-      k1=pow(10.,logk1);
-      k2=pow(10.,logk2);
-
-      /* differences at the extremes in k */
-      normGM1=GrowingMode(0.0,k1)*fomega(0.0,k1);
-      normGM2=GrowingMode(0.0,k2)*fomega(0.0,k2);
-      for (diff1=diff2=0.0, i=Z20; i<=Today; i++)
-	{
-	  Time = pow(10.,SPLINE[SP_TIME]->x[i]);
-	  diff1+=vector[i]-GrowingMode(1./Time-1.,k1)*fomega(1./Time-1,k1)/normGM1;
-	  diff2+=vector[i]-GrowingMode(1./Time-1.,k2)*fomega(1./Time-1,k1)/normGM2;
-	}
-      diff1/=(double)NBINS;
-      diff2/=(double)NBINS;
-
-      /* k1 might be accurate enough */
-      if (fabs(diff1)<SMALLDIFF)
-	Smoothing.k_GM_vel[ismooth]=k1;
-
-      /* k2 might be accurate enough */
-      else if (fabs(diff2)<SMALLDIFF)
-	Smoothing.k_GM_vel[ismooth]=k2;
-
-      /* this is an unfortunate case: the two differences have the same sign
-         and none is accurate enough. In this case the scale is set to the k that gives
-	 the smallest difference, and a warning is printed out  */
-      else if (diff1*diff2>0)
-	{
-	  if (!ThisTask)
-	    printf("WARNING in scale-dependent density growth rate for smoothing radius %d (%f): accuracy not guaranteed [diff1=%g - diff2=%g]\n",
-		   ismooth, Smoothing.Rad_GM[ismooth],diff1,diff2);
-	  if (fabs(diff1)<fabs(diff2))
-	    Smoothing.k_GM_vel[ismooth]=k1;
-	  else
-	    Smoothing.k_GM_vel[ismooth]=k2;
-	}
-      else
-	{
-	  /* smallest difference */
-	  mindiff=fabs(diff1);
-	  mindiff=(fabs(diff2) < mindiff ? fabs(diff2) : mindiff);
-
-	  /* iteration for bisector search */
-	  do
-	    {
-
-	      /* midpoint in log space */
-	      logkmid=0.5*(logk1+logk2);
-	      kmid=pow(10.,logkmid);
-
-	      /* difference at midpoint */
-	      normGMm=GrowingMode(0.0,kmid)*fomega(0.0,kmid);
-	      for (diffm=0.0, i=Z20; i<=Today; i++)
-		{
-		  Time = pow(10.,SPLINE[SP_TIME]->x[i]);
-		  diffm+=vector[i]-GrowingMode(1./Time-1.,kmid)*fomega(1./Time-1.,kmid)/normGMm;
-		}
-	      diffm/=(double)NBINS;
-
-	      /* update of mindiff if necessary */
-	      mindiff=(fabs(diffm) < mindiff ? fabs(diffm) : mindiff);
-
-	      /* new extreme points */
-	      if (diff1*diffm>0)
-		{
-		  logk1=logkmid;
-		  diff1=diffm;
-		}
-	      else
-		{
-		  logk2=logkmid;
-		  diff2=diffm;
-		}
-	      ++iter;
-	    }
-	  while (fabs(mindiff)>SMALLDIFF && iter<=MAXITER);
-
-	  Smoothing.k_GM_vel[ismooth]=kmid;
-	}
-
-#ifdef DEBUG
-      printf("velocities, smoothing %d, iter=%d\n",ismooth,iter); // LEVARE
-      Time=1.0;
-      gsl_integration_qags (&Function2, -4., 2., 0.0, TOLERANCE, NWINT, workspace, &result, &error);
-      normGM1=sqrt(result);
-      gsl_integration_qags (&Function31, -4., 2., 0.0, TOLERANCE, NWINT, workspace, &result, &error);
-      normGM2=sqrt(result);
-      gsl_integration_qags (&Function32, -4., 2., 0.0, TOLERANCE, NWINT, workspace, &result, &error);
-      normGMm=sqrt(result);
-      if (!ThisTask)
-	for (i=0; i<NBINS; i++)
-	  {
-	    Time=pow(10.,SPLINE[SP_TIME]->x[i]);
-	    fprintf(fd,"  %d %g  %g  %g  %g  %g",
-		    ismooth,Smoothing.Rad_GM[ismooth],Smoothing.k_GM_vel[ismooth],
-		    Time,vector[i],GrowingMode(1./Time-1.,Smoothing.k_GM_vel[ismooth])*fomega(1./Time-1.,Smoothing.k_GM_vel[ismooth])/
-		    GrowingMode(0.,Smoothing.k_GM_vel[ismooth]) / fomega(0.,Smoothing.k_GM_vel[ismooth]));
-
-	    gsl_integration_qags (&Function2, -4., 2., 0.0, TOLERANCE, NWINT, workspace, &result, &error);
-	    fprintf(fd,"  %g  %g",sqrt(result)/normGM1,GrowingMode_2LPT(1./Time-1.,Smoothing.k_GM_vel[ismooth])*fomega_2LPT(1./Time-1.,Smoothing.k_GM_vel[ismooth])/
-		    GrowingMode_2LPT(0.,Smoothing.k_GM_vel[ismooth]) /fomega_2LPT(0.0,Smoothing.k_GM_vel[ismooth]));
-
-	    gsl_integration_qags (&Function31, -4., 2., 0.0, TOLERANCE, NWINT, workspace, &result, &error);
-	    fprintf(fd,"  %g  %g",sqrt(result)/normGM2,GrowingMode_3LPT_1(1./Time-1.,Smoothing.k_GM_vel[ismooth])*fomega_3LPT_1(1./Time-1.,Smoothing.k_GM_vel[ismooth])/
-		    GrowingMode_3LPT_1(0.,Smoothing.k_GM_vel[ismooth])/fomega_3LPT_1(0.,Smoothing.k_GM_vel[ismooth]));
-
-	    gsl_integration_qags (&Function32, -4., 2., 0.0, TOLERANCE, NWINT, workspace, &result, &error);
-	    fprintf(fd,"  %g  %g\n",sqrt(result)/normGMm,GrowingMode_3LPT_2(1./Time-1.,Smoothing.k_GM_vel[ismooth])*fomega_3LPT_2(1./Time-1.,Smoothing.k_GM_vel[ismooth])/
-		    GrowingMode_3LPT_2(0.,Smoothing.k_GM_vel[ismooth])/fomega_3LPT_2(0.,Smoothing.k_GM_vel[ismooth]));
-
-	  }
-#endif
-
-    }
-
-#ifdef DEBUG
-  if (!ThisTask)
-    fclose(fd);
-#endif
-
-  free(vector);
-
-  WindowFunctionType=2;
-  return 0;
-}
-
-
-#endif
