@@ -45,11 +45,11 @@
 int read_parameter_file()
 {
   FILE *fd;
-  char buf[BLENGTH], buf1[BLENGTH], buf2[BLENGTH], buf3[BLENGTH], buf4[BLENGTH];
+  char buf[SBLENGTH], buf1[SBLENGTH], buf2[SBLENGTH], buf3[SBLENGTH], buf4[SBLENGTH];
   int i, j, nt, number_of_fields;
   int id[MAXTAGS];
   void *addr[MAXTAGS];
-  char tag[MAXTAGS][BLENGTH];
+  char tag[MAXTAGS][SBLENGTH];
   double z;
 
   if (!ThisTask)
@@ -210,7 +210,7 @@ int read_parameter_file()
       addr[nt] = params.TabulatedEoSfile;
       id[nt++] = STRING;
 
-#ifdef SCALE_DEPENDENT_GROWTH
+#ifdef READ_PK_TABLE
       strcpy(tag[nt], "CAMBMatterFileTag");
       addr[nt] = params.camb.MatterFile;
       id[nt++] = STRING;
@@ -226,14 +226,6 @@ int read_parameter_file()
       strcpy(tag[nt], "CAMBRedsfhitsFile");
       addr[nt] = params.camb.RedshiftsFile;
       id[nt++] = STRING;
-
-      strcpy(tag[nt], "CAMBReferenceOutput");
-      addr[nt] = &params.camb.ReferenceOutput;
-      id[nt++] = INT;
-
-      strcpy(tag[nt], "CAMBReferenceScale");
-      addr[nt] = &params.camb.ReferenceScale;
-      id[nt++] = INT;
 #endif
 
       strcpy(tag[nt], "MaxMemPerParticle");
@@ -253,7 +245,7 @@ int read_parameter_file()
 	  while(!feof(fd))
 	    {
 	      *buf = 0;
-	      (void)fgets(buf, BLENGTH, fd);
+	      (void)fgets(buf, SBLENGTH, fd);
 	      number_of_fields = sscanf(buf, "%s %s %s %s", buf1, buf2, buf3, buf4);
 	      if(number_of_fields < 1)
 		continue;
@@ -381,7 +373,7 @@ int read_parameter_file()
 	while(!feof(fd))
 	  {
 	    *buf = 0;
-	    (void)fgets(buf, BLENGTH, fd);
+	    (void)fgets(buf, SBLENGTH, fd);
 	    if (buf[0] != '#' && buf[0] != '%' && sscanf(buf,"%lf",&z) != EOF)
 	      outputs.z[outputs.n++]=z;
 	    if (outputs.n == MAXOUTPUTS)

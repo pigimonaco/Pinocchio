@@ -25,9 +25,11 @@
 */
 
 #include "pinocchio.h"
+#include "def_splines.h"
 
 void abort_code(void);
 void write_cputimes(void);
+void greetings(void);
 
 int main(int argc, char **argv, char **envp)
 {
@@ -41,51 +43,7 @@ int main(int argc, char **argv, char **envp)
 
   /* timing of the code */
   cputime.total=MPI_Wtime();
-
-  if (!ThisTask)
-    {
-      printf("[%s] This is pinocchio V4.1, running on %d MPI tasks\n\n",fdate(),NTasks);
-#ifdef TWO_LPT
-#ifndef THREE_LPT
-      printf("This version uses 2LPT displacements\n");
-#else
-      printf("This version uses 3LPT displacements\n");
-#endif
-#else
-      printf("This version uses Zeldovich displacements\n");
-#endif
-#ifdef ROTATE_BOX
-      printf("The output will be rotated to reproduce N-GenIC and 2LPTic orientation\n");
-#endif
-#ifdef WHITENOISE
-      printf("Initial conditions will be read from a white noise file\n");
-#endif
-#ifdef SCALE_DEPENDENT_GROWTH
-      printf("This version of the code works with scale-dependent growing modes.\n");
-      printf("These will be computed from CAMB tables\n");
-#ifdef THREE_LPT
-      if (!ThisTask)
-	{
-	  printf("********************************************************\n");
-	  printf("Scale-dependent growth presently does not work with 3LPT\n");
-	  printf("Please recompile without the THREE_LPT directive\n");
-	  printf("********************************************************\n");
-	}
-#endif
-#endif
-#ifdef NO_RANDOM_MODULES
-      printf("Initial conditions will be generated with non-random modules of the Fourier modes\n");
-#endif
-#ifdef LIST_OF_FRAGMENT_PARAMETERS
-      printf("Fragmentation will be repeated many times, reading parameters from list_of_fragment_parameters.txt\n");
-      printf("NB: THIS OPTION IS USEFUL ONLY TO FINE-TUNE THE MASS FUNCTION\n");
-#endif
-#ifdef SMOOTH_VELOCITIES
-      printf("Velocities will be computed at the same smoothing radius as the collapse time.\n");
-      printf("NB: THIS IS NOT A RECOMMENDED OPTION, USE IT IF YOU KNOW WHAT YOU ARE DOING!\n");
-#endif
-
-    }
+  greetings();
 
   /* checks that the parameter file is given in the command line */
   if (argc<2)
@@ -226,4 +184,75 @@ void write_cputimes()
   printf("  Groups:         %14.6f (%5.2f%%)\n",cputime.group,100.*cputime.group/cputime.total);
 #endif
   printf("Total I/O:        %14.6f (%5.2f%%)\n",cputime.io,   100.*cputime.io   /cputime.total);
+}
+
+void greetings(void)
+{
+  /* This is a list of messages to declare the most relevant precompiler directives in the stdout */
+
+  if (!ThisTask)
+    {
+      printf("[%s] This is pinocchio V4.XX, running on %d MPI tasks\n\n",fdate(),NTasks);
+#ifdef TWO_LPT
+#ifndef THREE_LPT
+      printf("This version uses 2LPT displacements\n");
+#else
+      printf("This version uses 3LPT displacements\n");
+#endif
+#else
+      printf("This version uses Zeldovich displacements\n");
+#endif
+#ifdef ROTATE_BOX
+      printf("The output will be rotated to reproduce N-GenIC and 2LPTic orientation\n");
+#endif
+#ifdef NORADIATION
+      printf("Radiation is not included in the Friedmann equations\n");
+#else
+      printf("Radiation is included in the Friedmann equations\n");
+#endif
+#ifdef TIMELESS_SNAPSHOT
+      printf("Production of the timeless snapshot has been activated\n");
+#endif
+
+#ifdef TABULATED_CT
+#ifdef ELL_CLASSIC
+      printf("Ellipsoidal collapse will be tabulated as Monaco (1995)\n");
+#endif
+#ifdef ELL_SNG
+      printf("Numerical integration of ellipsoidal collapse will be tabulated\n");
+#endif
+#else
+      printf("Ellipsoidal collapse will be computed as Monaco (1995)\n");
+#endif
+
+#ifdef WHITENOISE
+      printf("Initial conditions will be read from a white noise file\n");
+#endif
+
+#ifdef SCALE_DEPENDENT
+      printf("This version of the code works with scale-dependent growing modes;\n");
+#ifdef MOD_GRAV_FR
+      printf("Scales will range from %10g to %10g 1/Mpc, in %d steps\n",
+	     0.0, pow(10.,LOGKMIN+(NkBINS-1)*DELTALOGK), NkBINS);
+      printf("Gravity will be given by Hu-Sawicki f(R) with f_R0=%7g\n",FR0);
+#endif
+#ifdef READ_PK_TABLE
+      printf("Scales will range from %10g to %10g 1/Mpc, in %d steps\n",
+	     pow(10.,LOGKMIN), pow(10.,LOGKMIN+(NkBINS-1)*DELTALOGK), NkBINS);
+      printf("Scale-dependent growth rates will be worked out from CAMB P(k) files\n");
+#ifdef ONLY_MATTER_POWER
+      printf("The power spectrum will include only dark matter + baryon fluctuations, excluding neutrinos (if present)\n");
+#else
+      printf("The power spectrum will include TOTAL matter fluctuations, including neutrinos (if present)\n");
+#endif
+#endif
+#endif
+
+#ifdef NO_RANDOM_MODULES
+      printf("Initial conditions will be generated with non-random modules of the Fourier modes\n");
+#endif
+
+      printf("\n");
+
+    }
 }
