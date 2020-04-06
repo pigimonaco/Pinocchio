@@ -1,6 +1,10 @@
-# Pinocchio
+# DEV BRANCH
 
-PLEASE USE ONLY THE MASTER BRANCH! other branches are under development and are unstable.
+## This branch is not for normal users: the code is undergoing a drastic development, pls refer to master branch
+## ---
+
+
+# Pinocchio
 
 PINOCCHIO is a fast code to generate catalogues of cosmological dark matter halos with known mass, position, velocity and merger history.
 
