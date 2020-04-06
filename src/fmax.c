@@ -53,6 +53,10 @@ int compute_fmax(void)
     5) re-initialize fftw for the small-scale grid
   */
 
+#ifdef SCALE_DEPENDENT
+  ScaleDep.order=0; /* collapse times must be computed as for LambdaCDM */
+#endif
+
 
   /****************************
    * CYCLE ON SMOOTHING RADII *
@@ -94,74 +98,33 @@ int compute_fmax(void)
       if (!ThisTask)
 	printf("[%s] Computing collapse times\n",fdate());
 
+#ifdef TABULATED_CT
+      /* initialize spline for interpolating collapse times */
+      if (initialize_collapse_times(ismooth))
+	return 1;
+
+      cputmp=MPI_Wtime()-cputmp;
+
+      if (!ThisTask)
+	printf("[%s] Collapse times computed for interpolation, cpu time =%f s\n",fdate(),cputmp);
+
+      cputime.coll+=cputmp;
+      cputmp=MPI_Wtime();
+#endif
+
       if (compute_collapse_times(ismooth))
 	return 1;
+
+#ifdef TABULATED_CT
+      /* this is needed only for debug options, to be removed in the official code */
+      if (reset_collapse_times(ismooth))
+	return 1;
+#endif
 
       cputmp=MPI_Wtime()-cputmp;
       if (!ThisTask)
 	printf("[%s] Done computing collapse times, cpu time = %f s\n",fdate(),cputmp);
       cputime.coll+=cputmp;
-
-#ifdef TWO_LPT
-#ifndef SMOOTH_VELOCITIES
-      if (ismooth==Smoothing.Nsmooth-1)
-#endif
-	{
-	  /* computes sources and displacements for 2LPT (and 3LPT in case...) */
-	  cputmp=MPI_Wtime();
-
-	  if (!ThisTask)
-	    printf("[%s] Computing LPT displacements\n",fdate());
-
-	  if (compute_LPT_displacements(ismooth))
-	    return 1;
-
-	  cputmp=MPI_Wtime()-cputmp;
-	  if (!ThisTask)
-	    printf("[%s] Done LPT displacements, cpu time = %f s\n",fdate(),cputmp);
-	  cputime.lpt+=cputmp;
-	}
-#endif
-
-      /* 
-	 Part 3:
-	 Compute first derivatives of the potential
-      */
-
-#ifndef SMOOTH_VELOCITIES
-      if (ismooth==Smoothing.Nsmooth-1)
-#endif
-	{
-	  cputmp=MPI_Wtime();
-
-	  if (!ThisTask)
-	    printf("[%s] Computing first derivatives\n",fdate());
-
-	  if (compute_first_derivatives(Smoothing.Radius[ismooth] ,ThisGrid))
-	    return 1;
-
-	  cputmp=MPI_Wtime()-cputmp;
-	  if (!ThisTask)
-	    printf("[%s] Done first derivatives, cpu time = %f s\n",fdate(),cputmp);
-
-      /* 
-	 Part 4:
-	 Store velocities of collapsed particles
-      */
-
-	  cputmp=MPI_Wtime();
-
-	  if (!ThisTask)
-	    printf("[%s] Computing velocities\n",fdate());
-
-	  if (compute_velocities(ismooth))
-	    return 1;
-
-	  cputmp=MPI_Wtime()-cputmp;
-	  if (!ThisTask)
-	    printf("[%s] Done computing velocities, cpu time = %f s\n",fdate(),cputmp);
-	  cputime.vel+=cputmp;
-	}
 
       /*
 	End of cycle on smoothing radii
@@ -170,20 +133,74 @@ int compute_fmax(void)
       cpusm = MPI_Wtime()-cpusm;
 
       if (!ThisTask)
-	printf("Smoothing radius completed: %d, R=%6.3f, expected rms: %7.4f, computed rms: %7.4f, cpu time = %f s\n",
-	       ismooth, Smoothing.Radius[ismooth], sqrt(Smoothing.Variance[ismooth]), 
-	       sqrt(Smoothing.TrueVariance[ismooth]), cpusm );
+	printf("[%s] Completed, R=%6.3f, expected sigma: %7.4f, computed sigma: %7.4f, cpu time = %f s\n",fdate(),
+	       Smoothing.Radius[ismooth], sqrt(Smoothing.Variance[ismooth]), 
+	       sqrt(Smoothing.TrueVariance[ismooth]), 
+	       cpusm );
 
       fflush(stdout);
       MPI_Barrier(MPI_COMM_WORLD);
     }
+
+  /********************************
+   * COMPUTATION OF DISPLACEMENTS *
+   ********************************/
+
+#ifdef TWO_LPT
+  ismooth=Smoothing.Nsmooth-1;
+
+  /* computes sources and displacements for 2LPT and 3LPT */
+  cputmp=MPI_Wtime();
+
+  if (!ThisTask)
+    printf("[%s] Computing LPT displacements\n",fdate());
+
+  if (compute_LPT_displacements(ismooth))
+    return 1;
+
+  cputmp=MPI_Wtime()-cputmp;
+  if (!ThisTask)
+    printf("[%s] Done LPT displacements, cpu time = %f s\n",fdate(),cputmp);
+  cputime.lpt+=cputmp;
+
+#endif
+
+#ifndef RECOMPUTE_DISPLACEMENTS
+  /* displacements are computed during fragmentation in this case */
+
+  cputmp=MPI_Wtime();
+
+  if (!ThisTask)
+    printf("[%s] Computing first derivatives\n",fdate());
+
+  if (compute_first_derivatives(Smoothing.Radius[ismooth] ,ThisGrid))
+    return 1;
+
+  cputmp=MPI_Wtime()-cputmp;
+  if (!ThisTask)
+    printf("[%s] Done first derivatives, cpu time = %f s\n",fdate(),cputmp);
+
+  /* Store velocities of collapsed particles */
+  cputmp=MPI_Wtime();
+
+  if (!ThisTask)
+    printf("[%s] Storing velocities\n",fdate());
+
+  if (compute_velocities(ismooth))
+    return 1;
+
+  cputmp=MPI_Wtime()-cputmp;
+  if (!ThisTask)
+    printf("[%s] Done computing velocities, cpu time = %f s\n",fdate(),cputmp);
+  cputime.vel+=cputmp;
+#endif
 
   /****************************************************/
   /* FINAL PART                                       */
   /* Output density, Fmax and Vel* fields if required */
   /****************************************************/
 
-  /* Writes the results in files in the Data/ directory */
+  /* Writes the results in files in the Data/ directory if required */
   cputmp=MPI_Wtime();
 
   if (write_fields())

@@ -149,6 +149,7 @@ double reverse_transform(int ThisGrid)
 
 int finalize_fftw()
 {
+#ifndef RECOMPUTE_DISPLACEMENTS
   int igrid;
 
   for (igrid=Ngrids-1; igrid>=0; igrid--)
@@ -162,7 +163,7 @@ int finalize_fftw()
       return 1;
 
   fftw_cleanup();
-
+#endif
   return 0;
 }
 
@@ -173,7 +174,9 @@ int compute_derivative(int ThisGrid, int first_derivative, int second_derivative
   int swap, local_x,local_y,local_z,ixx,iyy,izz,index,nxhalf,nyhalf,nzhalf;
   double kx,ky,kz,kxnorm,kynorm,kznorm,green,k_squared,smoothing,tmp,time;
   double diff_comp[4];
-
+#ifdef SCALE_DEPENDENT
+  double k_module;
+#endif
 
 #ifdef DEBUG
   sprintf(filename,"results.%d-%d.%d",first_derivative,second_derivative,ThisTask);
@@ -203,6 +206,7 @@ int compute_derivative(int ThisGrid, int first_derivative, int second_derivative
       (for the x and z coordinates they are the same as ix and iz)
 */
 
+  double growth_rate=1.0;
 
 /* loop over k-space indices */
 /* This loop is correct for transposed order in FFTW */
@@ -228,6 +232,34 @@ int compute_derivative(int ThisGrid, int first_derivative, int second_derivative
 
               k_squared  = kx*kx + ky*ky + kz*kz;
 
+#ifdef SCALE_DEPENDENT
+	      k_module = sqrt(k_squared);
+
+	      /* In the scale-dependent case the delta(k) must be multiplied 
+		 by the relevant growth rate */
+	      switch (ScaleDep.order)
+		{
+		case 0:
+		  growth_rate = 1.0;
+		  break;
+		case 1:
+		  growth_rate = GrowingMode(ScaleDep.redshift,k_module);
+		  break;
+		case 2:
+		  growth_rate = GrowingMode_2LPT(ScaleDep.redshift,k_module);
+		  break;
+		case 3:
+		  growth_rate = GrowingMode_3LPT_1(ScaleDep.redshift,k_module);
+		  break;
+		case 4:
+		  growth_rate = GrowingMode_3LPT_2(ScaleDep.redshift,k_module);
+		  break;
+		default:
+		  growth_rate = 1.0;
+		  break;
+		}
+#endif
+
 	      /* corresponding index of real part in vector (imaginary in index + 1) */
 	      index = 1 + 2*local_x + (MyGrids[ThisGrid].GSglobal_x+MyGrids[ThisGrid].off)
 		*(local_z + local_y* MyGrids[ThisGrid].GSglobal_z);
@@ -246,8 +278,8 @@ int compute_derivative(int ThisGrid, int first_derivative, int second_derivative
 
 		  green = greens_function(diff_comp, k_squared, first_derivative, second_derivative);
 
-		  (cvector_fft[ThisGrid][index/2])[0] *=  green * smoothing;
-		  (cvector_fft[ThisGrid][index/2])[1] *=  green * smoothing;
+		  (cvector_fft[ThisGrid][index/2])[0] *=  green * smoothing * growth_rate;
+		  (cvector_fft[ThisGrid][index/2])[1] *=  green * smoothing * growth_rate;
 		}
 
               if (swap)

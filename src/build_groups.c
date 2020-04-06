@@ -49,17 +49,20 @@ int store_PLC(double);
 double find_brent(double, double);
 #endif
 
-int build_groups(int Npeaks)
+int build_groups(int Npeaks, double zstop)
 {
 
   int merge[NV][NV], neigh[NV], fil_list[NV][3];
-  int iout,Lgridxy,nn,ifil,indx,neigrp;
+  static int iout,Lgridxy,nstep,nstep_p;
+  int nn,ifil,indx,neigrp,nf;
   int iz,kk,i1,j1,k1,skip;
-  int ig3,small,large,nf,to_group,accgrp,ig1,ig2;
-  int accrflag,nstep,nmerge,nstep_p,peak_cond;
+  int ig3,small,large,to_group,accgrp,ig1,ig2;
+  int accrflag,nmerge,peak_cond;
   double ratio,best_ratio,d2,r2,cputmp;
   int merge_flag;
   int ibox,jbox,kbox;
+
+  static int first_call=1,last_iz=0;
 
     /*
       counters:
@@ -73,65 +76,83 @@ int build_groups(int Npeaks)
       12 number of filament particles
       13 number of accreted filament particles
     */
-  unsigned int counters[NCOUNTERS],all_counters[NCOUNTERS];
+  static unsigned int counters[NCOUNTERS],all_counters[NCOUNTERS];
 
 #ifdef PLC
-  int plc_started=0, last_check_done=0, irep, last_stored=0,
-    save, mysave, storex, storey, storez;
-  double aa, bb, Fplc, NextF_PLC, DeltaF_PLC;
+  static int plc_started=0, last_check_done=0, last_stored=0;
+  int irep, save, mysave, storex, storey, storez;
+  static double NextF_PLC, DeltaF_PLC;
+  double aa, bb, Fplc;
 #endif
 
 
-  /* Initializations */
-
-  ngroups=FILAMENT;           // number of groups + filaments
-  Lgridxy = subbox.Lgwbl_x * subbox.Lgwbl_y;
-
-  iout=0;
-
-  for (i1=0; i1<NCOUNTERS; i1++)
+  if (first_call)
     {
-      counters[i1]=0; 
-      all_counters[i1]=0;
-    }
+      /* Initializations */
+      ngroups=FILAMENT;           /* number of groups + filaments */
+      Lgridxy = subbox.Lgwbl_x * subbox.Lgwbl_y;
 
-  groups[FILAMENT].point = groups[FILAMENT].bottom = subbox.Npart; // filaments are not grouped!
+      iout=0;
 
-  if (!ThisTask)
-    printf("[%s] Starting the fragmentation process\n",fdate());
+      for (i1=0; i1<NCOUNTERS; i1++)
+	{
+	  counters[i1]=0; 
+	  all_counters[i1]=0;
+	}
 
-  /* Calculates the number of steps required */
+      groups[FILAMENT].point = groups[FILAMENT].bottom = subbox.Npart; /* filaments are not grouped! */
 
-  nstep=0;
-  while (frag[indices[nstep]].Fmax >= outputs.Flast)
-    nstep++;
+      if (!ThisTask)
+	printf("[%s] Starting the fragmentation process to redshift %7.4f\n",fdate(),zstop);
 
-  nstep_p=nstep/20;
+      /* Calculates the number of steps required */
+
+      nstep=0;
+      while (frag[indices[nstep]].Fmax >= outputs.Flast)
+	nstep++;
+
+      nstep_p=nstep/20;
 
 #ifdef PLC
-  /* initialization of the root finding routine */
-  cPLC.function = &condition_F;
-  brent = gsl_root_fsolver_brent;
-  solver = gsl_root_fsolver_alloc (brent);
-  Lgrid[0]=(double)MyGrids[0].GSglobal_x;
-  Lgrid[1]=(double)MyGrids[0].GSglobal_y;
-  Lgrid[2]=(double)MyGrids[0].GSglobal_z;
-  start[0]=(double)subbox.stabl_x;
-  start[1]=(double)subbox.stabl_y;
-  start[2]=(double)subbox.stabl_z;
-  NextF_PLC=plc.Fstart;
-  DeltaF_PLC=0.9;
-  brent_err = 1.e-3 * params.InterPartDist;
-  last_stored=0;
-  plc.Nstored=0;
+      /* initialization of the root finding routine */
+      cPLC.function = &condition_F;
+      brent = gsl_root_fsolver_brent;
+      solver = gsl_root_fsolver_alloc (brent);
+      Lgrid[0]=(double)MyGrids[0].GSglobal_x;
+      Lgrid[1]=(double)MyGrids[0].GSglobal_y;
+      Lgrid[2]=(double)MyGrids[0].GSglobal_z;
+      start[0]=(double)subbox.stabl_x;
+      start[1]=(double)subbox.stabl_y;
+      start[2]=(double)subbox.stabl_z;
+      NextF_PLC=plc.Fstart;
+      DeltaF_PLC=0.9;
+      brent_err = 1.e-3 * params.InterPartDist;
+      last_stored=0;
+      plc.Nstored=0;
 #endif
+
+      first_call=0;
+    }
+  else
+    {
+      if (!ThisTask)
+	printf("[%s] Restarting the fragmentation process to redshift %7.4f\n",fdate(),zstop);
+    }
 
   /************************************************************************
                         START OF THE CYCLE ON POINTS
    ************************************************************************/
-  for (iz=0; iz<=nstep; iz++)
+  for (iz=last_iz; iz<=nstep; iz++)
     {
 
+
+      if (iz<nstep-1 && frag[indices[iz]].Fmax < zstop+1.0)
+	{
+	  if (!ThisTask)
+	    printf("[%s] Pausing fragmentation process\n",fdate());
+	  last_iz=iz;
+	  return 0;
+	}
 
 #ifdef PLC
       if (frag[indices[iz]].Fmax >= plc.Fstop)
@@ -167,9 +188,8 @@ int build_groups(int Npeaks)
 	  cputmp=MPI_Wtime();
 
 	  if (!ThisTask)
-	    printf("[%s] Writing output at z=%f (Dsigma=%f)\n",fdate(), 
-		   outputs.z[iout], 
-		   sqrt(Smoothing.TrueVariance[Smoothing.Nsmooth-1]) * GrowingMode(outputs.z[iout]));
+	    printf("[%s] Writing output at z=%f\n",fdate(), 
+		   outputs.z[iout]);
 
 	  if (write_catalog(iout))
 	    return 1;
@@ -202,11 +222,11 @@ int build_groups(int Npeaks)
 
       /* More initializations */
 
-      neigrp=0;               // number of neighbouring groups
-      nf=0;                   // number of neighbouring filament points
-      accrflag=0;             // if =1 all the neighbouring filaments are accreted
+      neigrp=0;               /* number of neighbouring groups */
+      nf=0;                   /* number of neighbouring filament points */
+      accrflag=0;             /* if =1 all the neighbouring filaments are accreted */
       for (i1=0; i1<NV; i1++)
-	neigh[i1]=0;          // number of neighbours
+	neigh[i1]=0;          /* number of neighbours */
 
       /* grid coordinates from the indices (sub-box coordinates) */
       kbox=indices[iz]/Lgridxy;
@@ -343,7 +363,7 @@ int build_groups(int Npeaks)
 
 		      /* loop on replications */
 		      for (irep=0; irep<plc.Nreplications; irep++)
-			if (!(frag[indices[iz]].Fmax > plc.repls[irep].F1 ||
+			if (!(frag[indices[iz]].Fmax > plc.repls[irep].F1 || 
 			      groups[thisgroup].Flast < plc.repls[irep].F2))
 			  {
 			    replicate[0]=plc.repls[irep].i;
@@ -421,20 +441,38 @@ int build_groups(int Npeaks)
 	groups[ngroups].Pos[0]=ibox+SHIFT;
 	groups[ngroups].Pos[1]=jbox+SHIFT;
 	groups[ngroups].Pos[2]=kbox+SHIFT;
-	groups[ngroups].Vel[0]=frag[indices[iz]].Vmax[0];
-	groups[ngroups].Vel[1]=frag[indices[iz]].Vmax[1];
-	groups[ngroups].Vel[2]=frag[indices[iz]].Vmax[2];
+	groups[ngroups].Vel[0]=frag[indices[iz]].Vel[0];
+	groups[ngroups].Vel[1]=frag[indices[iz]].Vel[1];
+	groups[ngroups].Vel[2]=frag[indices[iz]].Vel[2];
 #ifdef TWO_LPT
-        groups[ngroups].Vel_2LPT[0]=frag[indices[iz]].Vmax_2LPT[0];
-        groups[ngroups].Vel_2LPT[1]=frag[indices[iz]].Vmax_2LPT[1];
-        groups[ngroups].Vel_2LPT[2]=frag[indices[iz]].Vmax_2LPT[2];
+        groups[ngroups].Vel_2LPT[0]=frag[indices[iz]].Vel_2LPT[0];
+        groups[ngroups].Vel_2LPT[1]=frag[indices[iz]].Vel_2LPT[1];
+        groups[ngroups].Vel_2LPT[2]=frag[indices[iz]].Vel_2LPT[2];
 #ifdef THREE_LPT
-        groups[ngroups].Vel_3LPT_1[0]=frag[indices[iz]].Vmax_3LPT_1[0];
-        groups[ngroups].Vel_3LPT_1[1]=frag[indices[iz]].Vmax_3LPT_1[1];
-        groups[ngroups].Vel_3LPT_1[2]=frag[indices[iz]].Vmax_3LPT_1[2];
-        groups[ngroups].Vel_3LPT_2[0]=frag[indices[iz]].Vmax_3LPT_2[0];
-        groups[ngroups].Vel_3LPT_2[1]=frag[indices[iz]].Vmax_3LPT_2[1];
-        groups[ngroups].Vel_3LPT_2[2]=frag[indices[iz]].Vmax_3LPT_2[2];
+        groups[ngroups].Vel_3LPT_1[0]=frag[indices[iz]].Vel_3LPT_1[0];
+        groups[ngroups].Vel_3LPT_1[1]=frag[indices[iz]].Vel_3LPT_1[1];
+        groups[ngroups].Vel_3LPT_1[2]=frag[indices[iz]].Vel_3LPT_1[2];
+        groups[ngroups].Vel_3LPT_2[0]=frag[indices[iz]].Vel_3LPT_2[0];
+        groups[ngroups].Vel_3LPT_2[1]=frag[indices[iz]].Vel_3LPT_2[1];
+        groups[ngroups].Vel_3LPT_2[2]=frag[indices[iz]].Vel_3LPT_2[2];
+#endif
+#endif
+#ifdef RECOMPUTE_DISPLACEMENTS
+	groups[ngroups].Vel_after[0]=frag[indices[iz]].Vel_after[0];
+	groups[ngroups].Vel_after[1]=frag[indices[iz]].Vel_after[1];
+	groups[ngroups].Vel_after[2]=frag[indices[iz]].Vel_after[2];
+#ifdef TWO_LPT
+        groups[ngroups].Vel_2LPT_after[0]=frag[indices[iz]].Vel_2LPT_after[0];
+        groups[ngroups].Vel_2LPT_after[1]=frag[indices[iz]].Vel_2LPT_after[1];
+        groups[ngroups].Vel_2LPT_after[2]=frag[indices[iz]].Vel_2LPT_after[2];
+#ifdef THREE_LPT
+        groups[ngroups].Vel_3LPT_1_after[0]=frag[indices[iz]].Vel_3LPT_1_after[0];
+        groups[ngroups].Vel_3LPT_1_after[1]=frag[indices[iz]].Vel_3LPT_1_after[1];
+        groups[ngroups].Vel_3LPT_1_after[2]=frag[indices[iz]].Vel_3LPT_1_after[2];
+        groups[ngroups].Vel_3LPT_2_after[0]=frag[indices[iz]].Vel_3LPT_2_after[0];
+        groups[ngroups].Vel_3LPT_2_after[1]=frag[indices[iz]].Vel_3LPT_2_after[1];
+        groups[ngroups].Vel_3LPT_2_after[2]=frag[indices[iz]].Vel_3LPT_2_after[2];
+#endif
 #endif
 #endif
 	groups[ngroups].Mass=1;
@@ -743,8 +781,6 @@ int build_groups(int Npeaks)
       if (!ThisTask && !(iz%nstep_p))
         printf("[%s] *** %3d%% done, F = %6.2f,  z = %6.2f\n",fdate(),
 	       iz/(nstep_p)*5,frag[indices[iz]].Fmax,
-	       /* if F is the inverse growing mode: */
-	       /* InverseGrowingMode(1./frag[indices[iz]].Fmax) */
 	       frag[indices[iz]].Fmax-1.0
 	       );
 
@@ -822,8 +858,13 @@ double virial(int grp,double F,int flag)
   double r2,rlag,sigmaD;
 
   rlag = pow((double)grp,0.333333333333333);
-  sigmaD = sqrt(Smoothing.TrueVariance[Smoothing.Nsmooth-1]) * GrowingMode(F-1.);
-
+  int S=Smoothing.Nsmooth-1;
+  sigmaD = sqrt(Smoothing.TrueVariance[S]) * 
+#ifdef SCALE_DEPENDENT
+    GrowingMode(F-1.,Smoothing.k_GM_dens[S]); //  ATTENZIONE, QUESTO NON E` DEL TUTTO CORRETTO IN MG
+#else
+    GrowingMode(F-1.,params.k_for_GM);
+#endif
   if (!flag)
     /*  merging */
     r2 = pow( f_m * pow(rlag, espo) * (sigmaD>sigmaD0 ? 1.0+(sigmaD-sigmaD0)*f_rm : 1.0) , 2.0 ) + pow( f_200 * rlag, 2.0 );
@@ -1078,6 +1119,56 @@ void set_obj(int grp,double F,pos_data *myobj)
   int i;
 
   myobj->M=groups[grp].Mass;
+  myobj->z=F-1.0;
+
+#ifdef SCALE_DEPENDENT
+
+  /* Group velocities are averaged over group extent, so their growth  
+     should be computed with a different scale */
+
+  /* Lagrangian radius of the object */
+  myobj->R=pow((double)(myobj->M)*3./4./PI,1./3.)*params.InterPartDist;
+  double interp=(1.-myobj->R/Smoothing.Rad_GM[0])*(double)(Smoothing.Nsmooth-1);
+  interp=(interp<0.?0.:interp);
+  int indx=(int)interp;
+  double w=interp-(double)indx;
+
+  /* linear interpolation of log k */
+  double myk= pow(10., log10(Smoothing.k_GM_displ[indx])*(1.-w) + log10(Smoothing.k_GM_displ[indx+1])*w);
+
+  /* growing modes for displacements */
+  myobj->D=GrowingMode(myobj->z,myk)/GrowingMode(0.0,myk); 
+#ifdef TWO_LPT
+  myobj->D2=GrowingMode_2LPT(myobj->z,myk)*GrowingMode_2LPT(0.0,0.0)/GrowingMode_2LPT(0.0,myk);
+#ifdef THREE_LPT
+  myobj->D31=GrowingMode_3LPT_1(myobj->z,myk)*GrowingMode_3LPT_1(0.0,0.0)/GrowingMode_3LPT_1(0.0,myk);
+  myobj->D32=GrowingMode_3LPT_2(myobj->z,myk)*GrowingMode_3LPT_2(0.0,0.0)/GrowingMode_3LPT_2(0.0,myk);
+#endif
+#endif
+
+#else
+
+  /* growing modes for displacements */
+  myobj->D=GrowingMode(myobj->z,params.k_for_GM);
+#ifdef TWO_LPT
+  myobj->D2=GrowingMode_2LPT(myobj->z,params.k_for_GM);
+#ifdef THREE_LPT
+  myobj->D31=GrowingMode_3LPT_1(myobj->z,params.k_for_GM);
+  myobj->D32=GrowingMode_3LPT_2(myobj->z,params.k_for_GM);
+#endif
+#endif
+
+#endif
+
+#ifdef RECOMPUTE_DISPLACEMENTS
+  if (!Segment.mine)
+    myobj->w = 1.0;
+  else
+    myobj->w = (myobj->z - Segment.z[Segment.mine-1])/
+      (Segment.z[Segment.mine] - Segment.z[Segment.mine-1]);
+#endif
+
+  myobj->M=groups[grp].Mass;
   for (i=0;i<3;i++)
     {
       myobj->q[i]=groups[grp].Pos[i];
@@ -1089,63 +1180,145 @@ void set_obj(int grp,double F,pos_data *myobj)
       myobj->v32[i]=groups[grp].Vel_3LPT_2[i];
 #endif
 #endif
-    }
 
-#ifdef SCALE_DEPENDENT_GROWTH
-  SDGM.flag=1;
-  SDGM.ismooth=-1;
-  SDGM.radius=pow(myobj->M,1./3.)*params.InterPartDist;
-#endif
-
-  /* if F is the inverse growing mode: */
-  /* myobj->z=InverseGrowingMode(1./F); */
-  /* myobj->D=1./F; */
-  myobj->z=F-1.0;
-  myobj->D=GrowingMode(myobj->z);
+#ifdef RECOMPUTE_DISPLACEMENTS
+      myobj->v_aft[i]=groups[grp].Vel_after[i];
 #ifdef TWO_LPT
-  myobj->D2=GrowingMode_2LPT(myobj->z);
+      myobj->v2_aft[i]=groups[grp].Vel_2LPT_after[i];
 #ifdef THREE_LPT
-  myobj->D31=GrowingMode_3LPT_1(myobj->z);
-  myobj->D32=GrowingMode_3LPT_2(myobj->z);
+      myobj->v31_aft[i]=groups[grp].Vel_3LPT_1_after[i];
+      myobj->v32_aft[i]=groups[grp].Vel_3LPT_2_after[i];
 #endif
 #endif
+#endif
+
+    }
 
 }
 
+void set_obj_vel(int grp,double F,pos_data *myobj)
+{
+
+#ifdef SCALE_DEPENDENT
+
+  /* this routine sets the growth rates for peculiar velocities for a group */
+
+  double interp=(1.-myobj->R/Smoothing.Rad_GM[0])*(double)(Smoothing.Nsmooth-1);
+  interp=(interp<0.?0.:interp);
+  int indx=(int)interp;
+  double w=interp-(double)indx;
+
+  /* linear interpolation of log k */
+  double myk=pow(10., log10(Smoothing.k_GM_vel[indx])*(1.-w) + log10(Smoothing.k_GM_vel[indx+1])*w);
+  myobj->Dv = fomega(myobj->z,myk) * GrowingMode(myobj->z,myk) * GrowingMode(0.0,0.0) / GrowingMode(0.0,myk);
+    //* (Smoothing.norm_GM1_vel[indx+1]*(1.-w) + Smoothing.norm_GM1_vel[indx+1]*w);
+#ifdef TWO_LPT
+  myobj->D2v = fomega_2LPT(myobj->z,myk) * GrowingMode_2LPT(myobj->z,myk) * GrowingMode_2LPT(0.0,0.0) / GrowingMode_2LPT(0.0,myk);
+    //* (Smoothing.norm_GM2_vel[indx+1]*(1.-w) + Smoothing.norm_GM2_vel[indx+1]*w);
+#ifdef THREE_LPT
+  myobj->D31v = fomega_3LPT_1(myobj->z,myk) * GrowingMode_3LPT_1(myobj->z,myk) * GrowingMode_3LPT_1(0.0,0.0) / GrowingMode_3LPT_1(0.0,myk); 
+    //* (Smoothing.norm_GM31_vel[indx+1]*(1.-w) + Smoothing.norm_GM31_vel[indx+1]*w);
+  myobj->D32v = fomega_3LPT_2(myobj->z,myk) * GrowingMode_3LPT_2(myobj->z,myk) * GrowingMode_3LPT_2(0.0,0.0) /  GrowingMode_3LPT_2(0.0,myk);
+    //* (Smoothing.norm_GM32_vel[indx+1]*(1.-w) + Smoothing.norm_GM32_vel[indx+1]*w);
+#endif
+#endif
+
+#else
+
+  double myk=params.k_for_GM;
+  myobj->Dv = fomega(myobj->z,myk) * GrowingMode(myobj->z,myk);
+#ifdef TWO_LPT
+  myobj->D2v = fomega_2LPT(myobj->z,myk) * GrowingMode_2LPT(myobj->z,myk);
+#ifdef THREE_LPT
+  myobj->D31v = fomega_3LPT_1(myobj->z,myk) * GrowingMode_3LPT_1(myobj->z,myk);
+  myobj->D32v = fomega_3LPT_2(myobj->z,myk) * GrowingMode_3LPT_2(myobj->z,myk);
+#endif
+#endif
+
+#endif
+}
+
+
 void set_point(int i,int j,int k,int ind,double F,pos_data *myobj)
 {
-#ifdef SCALE_DEPENDENT_GROWTH
-  SDGM.flag=1;
-  SDGM.ismooth=frag[ind].Rmax;
-#endif
-  /* if F is the inverse growing mode: */
-  /* myobj->z=InverseGrowingMode(1./F); */
-  /* myobj->D=1./F; */
+
   myobj->z=F-1.0;
-  myobj->D=GrowingMode(myobj->z);
+
+#ifdef SCALE_DEPENDENT
+
+  int S=Smoothing.Nsmooth-1;
+  double myk=Smoothing.k_GM_displ[S];
+  myobj->D=GrowingMode(myobj->z,myk) / GrowingMode(0.0,myk);
+#ifdef TWO_LPT
+  myobj->D2=GrowingMode_2LPT(myobj->z,myk) * GrowingMode_2LPT(0.0,0.0) / GrowingMode_2LPT(0.0,myk);
+#ifdef THREE_LPT
+  myobj->D31=GrowingMode_3LPT_1(myobj->z,myk) * GrowingMode_3LPT_1(0.0,0.0) / GrowingMode_3LPT_1(0.0,myk);
+  myobj->D32=GrowingMode_3LPT_2(myobj->z,myk) * GrowingMode_3LPT_2(0.0,0.0) / GrowingMode_3LPT_2(0.0,myk);
+#endif
+#endif
+
+#else
+
+  double myk=params.k_for_GM;
+  myobj->D=GrowingMode(myobj->z,myk);
+#ifdef TWO_LPT
+  myobj->D2=GrowingMode_2LPT(myobj->z,myk);
+#ifdef THREE_LPT
+  myobj->D31=GrowingMode_3LPT_1(myobj->z,myk);
+  myobj->D32=GrowingMode_3LPT_2(myobj->z,myk);
+#endif
+#endif
+
+#endif
+
   myobj->M=1;
   myobj->q[0]=i+SHIFT;
   myobj->q[1]=j+SHIFT;
   myobj->q[2]=k+SHIFT;
-  myobj->v[0]=frag[ind].Vmax[0];
-  myobj->v[1]=frag[ind].Vmax[1];
-  myobj->v[2]=frag[ind].Vmax[2];
+  myobj->v[0]=frag[ind].Vel[0];
+  myobj->v[1]=frag[ind].Vel[1];
+  myobj->v[2]=frag[ind].Vel[2];
 #ifdef TWO_LPT
-  myobj->v2[0]=frag[ind].Vmax_2LPT[0];
-  myobj->v2[1]=frag[ind].Vmax_2LPT[1];
-  myobj->v2[2]=frag[ind].Vmax_2LPT[2];
-  myobj->D2=GrowingMode_2LPT(myobj->z);
+  myobj->v2[0]=frag[ind].Vel_2LPT[0];
+  myobj->v2[1]=frag[ind].Vel_2LPT[1];
+  myobj->v2[2]=frag[ind].Vel_2LPT[2];
 #ifdef THREE_LPT
-  myobj->v31[0]=frag[ind].Vmax_3LPT_1[0];
-  myobj->v31[1]=frag[ind].Vmax_3LPT_1[1];
-  myobj->v31[2]=frag[ind].Vmax_3LPT_1[2];
-  myobj->v32[0]=frag[ind].Vmax_3LPT_2[0];
-  myobj->v32[1]=frag[ind].Vmax_3LPT_2[1];
-  myobj->v32[2]=frag[ind].Vmax_3LPT_2[2];
-  myobj->D31=GrowingMode_3LPT_1(myobj->z);
-  myobj->D32=GrowingMode_3LPT_2(myobj->z);
+  myobj->v31[0]=frag[ind].Vel_3LPT_1[0];
+  myobj->v31[1]=frag[ind].Vel_3LPT_1[1];
+  myobj->v31[2]=frag[ind].Vel_3LPT_1[2];
+  myobj->v32[0]=frag[ind].Vel_3LPT_2[0];
+  myobj->v32[1]=frag[ind].Vel_3LPT_2[1];
+  myobj->v32[2]=frag[ind].Vel_3LPT_2[2];
 #endif
 #endif
+
+#ifdef RECOMPUTE_DISPLACEMENTS
+
+  if (!Segment.mine)
+    myobj->w = 1.0;
+  else
+    myobj->w = (myobj->z - Segment.z[Segment.mine-1])/
+      (Segment.z[Segment.mine] - Segment.z[Segment.mine-1]);
+
+  myobj->v_aft[0]=frag[ind].Vel_after[0];
+  myobj->v_aft[1]=frag[ind].Vel_after[1];
+  myobj->v_aft[2]=frag[ind].Vel_after[2];
+#ifdef TWO_LPT
+  myobj->v2_aft[0]=frag[ind].Vel_2LPT_after[0];
+  myobj->v2_aft[1]=frag[ind].Vel_2LPT_after[1];
+  myobj->v2_aft[2]=frag[ind].Vel_2LPT_after[2];
+#ifdef THREE_LPT
+  myobj->v31_aft[0]=frag[ind].Vel_3LPT_1_after[0];
+  myobj->v31_aft[1]=frag[ind].Vel_3LPT_1_after[1];
+  myobj->v31_aft[2]=frag[ind].Vel_3LPT_1_after[2];
+  myobj->v32_aft[0]=frag[ind].Vel_3LPT_2_after[0];
+  myobj->v32_aft[1]=frag[ind].Vel_3LPT_2_after[1];
+  myobj->v32_aft[2]=frag[ind].Vel_3LPT_2_after[2];
+#endif
+#endif
+
+#endif
+
 }
 
 
@@ -1165,6 +1338,17 @@ void set_group(int grp,pos_data *myobj)
       groups[grp].Vel_3LPT_2[i]=myobj->v32[i];
 #endif
 #endif
+
+#ifdef RECOMPUTE_DISPLACEMENTS
+      groups[grp].Vel_after[i]=myobj->v_aft[i];
+#ifdef TWO_LPT
+      groups[grp].Vel_2LPT_after[i]=myobj->v2_aft[i];
+#ifdef THREE_LPT
+      groups[grp].Vel_3LPT_1_after[i]=myobj->v31_aft[i];
+      groups[grp].Vel_3LPT_2_after[i]=myobj->v32_aft[i];
+#endif
+#endif
+#endif
     }
 }
 
@@ -1177,6 +1361,8 @@ double q2x(int i,pos_data *myobj,int order)
   int p;
   double L,pos;
 
+#ifndef RECOMPUTE_DISPLACEMENTS
+
   pos = myobj->q[i] + myobj->v[i]*myobj->D;
 #ifdef TWO_LPT
   if (order>1)
@@ -1185,6 +1371,21 @@ double q2x(int i,pos_data *myobj,int order)
   if (order>2)
     pos += myobj->D31*myobj->v31[i] + myobj->D32*myobj->v32[i];
 #endif
+#endif
+
+#else
+
+  pos = myobj->q[i] + (myobj->v[i]*(1.-myobj->w) + myobj->v_aft[i]*myobj->w)*myobj->D;
+#ifdef TWO_LPT
+  if (order>1)
+    pos += (myobj->v2[i]*(1.-myobj->w) + myobj->v2_aft[i]*myobj->w) * myobj->D2;
+#ifdef THREE_LPT
+  if (order>2)
+    pos += (myobj->v31[i]*(1.-myobj->w) + myobj->v31_aft[i]*myobj->w) * myobj->D31
+        +  (myobj->v32[i]*(1.-myobj->w) + myobj->v32_aft[i]*myobj->w) * myobj->D32;
+#endif
+#endif
+
 #endif
 
   switch (i)
@@ -1201,7 +1402,7 @@ double q2x(int i,pos_data *myobj,int order)
       p=subbox.pbc_z;
       L=(double)subbox.Lgwbl_z;
       break;
-    }	
+    }
 
   if (p)
     {
@@ -1220,13 +1421,29 @@ double vel(int i,pos_data *myobj)
   double vv,fac;
 
   fac=Hubble(myobj->z)/(1.+myobj->z)*params.InterPartDist;
-  vv = myobj->v[i] * fac * fomega(myobj->z) * myobj->D;
+
+#ifndef RECOMPUTE_DISPLACEMENTS
+
+  vv = myobj->v[i] * fac * myobj->Dv;
 #ifdef TWO_LPT
-  vv += myobj->v2[i] * fac * fomega_2LPT(myobj->z) * myobj->D2;
+  vv += myobj->v2[i] * fac * myobj->D2v;
 #ifdef THREE_LPT
-  vv += myobj->v31[i] * fac * fomega_3LPT_1(myobj->z) * myobj->D31
-    +   myobj->v32[i] * fac * fomega_3LPT_2(myobj->z) * myobj->D32;
+  vv += myobj->v31[i] * fac * myobj->D31v
+    +   myobj->v32[i] * fac * myobj->D32v;
 #endif
+#endif
+
+#else
+
+  vv = (myobj->v[i]*(1.-myobj->w) + myobj->v_aft[i]*myobj->w) * fac * myobj->Dv;
+#ifdef TWO_LPT
+  vv += (myobj->v2[i]*(1.-myobj->w) + myobj->v2_aft[i]*myobj->w) * fac * myobj->D2v;
+#ifdef THREE_LPT
+  vv += (myobj->v31[i]*(1.-myobj->w) + myobj->v31_aft[i]*myobj->w) * fac * myobj->D31v
+    +   (myobj->v32[i]*(1.-myobj->w) + myobj->v32_aft[i]*myobj->w) * fac * myobj->D32v;
+#endif
+#endif
+
 #endif
 
   return vv;
@@ -1326,6 +1543,18 @@ void update(pos_data *obj1, pos_data *obj2)
 #endif
 #endif
 
+#ifdef RECOMPUTE_DISPLACEMENTS
+
+      obj1->v_aft[i] = (obj1->v_aft[i]*obj1->M + obj2->v_aft[i]*obj2->M)/(double)(obj1->M + obj2->M);
+#ifdef TWO_LPT
+      obj1->v2_aft[i] = (obj1->v2_aft[i]*obj1->M + obj2->v2_aft[i]*obj2->M)/(double)(obj1->M + obj2->M);
+#ifdef THREE_LPT
+      obj1->v31_aft[i] = (obj1->v31_aft[i]*obj1->M + obj2->v31_aft[i]*obj2->M)/(double)(obj1->M + obj2->M);
+      obj1->v32_aft[i] = (obj1->v32_aft[i]*obj1->M + obj2->v32_aft[i]*obj2->M)/(double)(obj1->M + obj2->M);
+#endif
+#endif
+
+#endif
     }
 
   obj1->M+=obj2->M;
@@ -1360,8 +1589,7 @@ double condition_PLC(double F)
       condition+=diff1*diff1;
     }
 
-  /* if F is the inverse growing mode: z -> InverseGrowingMode(1./F) */
-  condition = sqrt(condition) - ProperDistance(F-1.0)/params.InterPartDist;
+  condition = sqrt(condition) - ComovingDistance(F-1.0)/params.InterPartDist;
 
   return condition;
 }
@@ -1382,6 +1610,7 @@ int store_PLC(double F)
     }
 
   set_obj(thisgroup,F,&obj1);
+  set_obj_vel(thisgroup,F,&obj1);
   for (i=0; i<3; i++)
     {
       /* displacement is done up to ORDER_FOR_CATALOG */
@@ -1393,8 +1622,6 @@ int store_PLC(double F)
   if (90.-theta<params.PLCAperture)
     {
 
-      /* if F is the inverse growing mode: */
-      /* plcgroups[plc.Nstored].z    = InverseGrowingMode(1./F); */
       plcgroups[plc.Nstored].z    = F-1.0;
       plcgroups[plc.Nstored].Mass = groups[thisgroup].Mass;
       plcgroups[plc.Nstored].name = groups[thisgroup].name;
