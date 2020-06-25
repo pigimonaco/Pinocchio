@@ -27,65 +27,67 @@
 
 RUNDIR = ./
 
-EXEC = pinocchio.merged.x
-OPTIONS += -DTWO_LPT
-OPTIONS += -DTHREE_LPT
-OPTIONS += -DPLC
-#OPTIONS += -DROTATE_BOX
-#OPTIONS += -DWHITENOISE
-#OPTIONS += -DNO_RANDOM_MODULES
-OPTIONS += -DNORADIATION
-#OPTIONS += -DSCALE_DEPENDENT_GROWTH
+# Compiler:
+CC = /data/moretti/local/bin/mpicc
 
-#OPTIONS += -DTIMELESS_SNAPSHOT
+CFLAGS  = -ggdb3 -O0 -Wall -std=gnu99
+#CFLAGS += -O3 -Wno-unused-result
+CFLAGS += -DTWO_LPT
+CFLAGS += -DNORADIATION
 
-SYSTYPE="my_machine"
+# Flag to choose how to compute collapse times
+# Classic = LPT based
+# SNG = differential equations
+# MG only works with SNG!!!
+CFLAGS += -DTABULATED_CT
+CFLAGS += -DELL_SNG
+#CFLAGS += -DELL_CLASSIC
 
+# Flag for MG scale dependent growth
+CFLAGS += -DSCALE_DEPENDENT
+CFLAGS += -DMOD_GRAV_FR
+CFLAGS += -DFR0=1.e-4
 
-ifeq ($(SYSTYPE),"my_machine")
-CC          =  mpicc
-CDEBUG      = -ggdb3 -Wall
-COPTIMIZED  = -O3 -Wno-unused-result
-FFTW_LIBR   = -L$(HOME)/lib -lfftw3_mpi -lfftw3
-FFTW_INCL   = -I/usr/local/include -I$(HOME)/include
-MPI_LIBR    =
-MPI_INCL    =
-GSL_LIBR    = -lgsl -lgslcblas -lm
-GSL_INCL    = -I/usr/include
-endif
+#CFLAGS += -DKEEP_DENSITY
+#CFLAGS += -DROTATE_BOX
+#CFLAGS += -DWHITENOISE
+#CFLAGS += -DNO_RANDOM_MODULES
+#CFLAGS += -DNORADIATION
+#CFLAGS += -DSCALE_DEPENDENT_GROWTH
 
+# Poderosa:
+CFLAGS +=  -I/data/moretti/local/include
+LDFLAGS = -L/data/moretti/local/lib
 
-# included libraries, shared libraries 
-INC =  $(FFTW_INCL)  $(MPI_INCL) $(GSL_INCL)
-LIB =  $(FFTW_LIBR)  $(MPI_LIBR) $(GSL_LIBR)
+LDLIBS =  -lfftw3_mpi -lfftw3 -lgsl -lgslcblas -lm
 
-
-# compiler options : choose from CDEBUG or COPTIMIZED
-#COPTS = $(CDEBUG)
-COPTS = $(COPTIMIZED)
-
-# source files:
-OBJECTS = fmax.o variables.o initialization.o collapse_times.o fmax-fftw.o GenIC.o \
-	ReadParamfile.o ReadWhiteNoise.o write_fields.o allocations.o LPT.o fragment.o \
-	build_groups.o distribute.o write_halos.o write_snapshot.o cosmo.o
-
-ifeq (SCALE_DEPENDENT_GROWTH,$(findstring SCALE_DEPENDENT_GROWTH,$(OPTIONS)))
-OBJECTS += Pk_from_CAMB.o
-endif
-
-
-# rules
-%.o: %.c Makefile pinocchio.h fragment.h
-	$(CC) $(INC) $(COPTS) $(OPTIONS) -c $<
-
-
-pinocchio: $(OBJECTS) pinocchio.o Makefile
-	$(CC) $(INC) $(COPTS) -o $(EXEC) pinocchio.o $(OBJECTS) $(LIB)
-
-memorytest: $(OBJECTS) memorytest.o Makefile
-	$(CC) $(INC) $(COPTS) -o memorytest memorytest.o $(OBJECTS) $(LIB)
+all: pinocchio
 
 clean:
-	\rm -f *.o *~ $(EXEC) memorytest
+	rm -f *.o pinocchio
 
+pinocchio: fmax.o variables.o initialization.o collapse_times.o \
+		   fmax-fftw.o GenIC.o ReadParamfile.o ReadWhiteNoise.o \
+		   write_fields.o allocations.o LPT.o fragment.o build_groups.o \
+		   distribute.o write_halos.o write_snapshot.o cosmo_new.o
+
+
+
+fmax.o:           pinocchio.h
+variables.o:	  pinocchio.h
+initialization.o: pinocchio.h
+collapse_times.o: pinocchio.h
+fmax-fftw.o:	  pinocchio.h
+GenIC.o:		  pinocchio.h
+ReadParamfile.o:  pinocchio.h
+ReadWhiteNoise.o: pinocchio.h
+write_fields.o:   pinocchio.h
+allocations.o:    pinocchio.h
+LPT.o:			  pinocchio.h
+fragment.o:		  pinocchio.h
+build_groups.o:   pinocchio.h
+distribute.o:	  pinocchio.h
+write_halos.o:	  pinocchio.h
+write_snapshot.o: pinocchio.h
+cosmo_new.o:	  pinocchio.h
 

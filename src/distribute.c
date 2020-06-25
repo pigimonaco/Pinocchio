@@ -295,7 +295,7 @@ int distribute(void)
       if (keep_data(comm_keep+i))
 	return 1;
       comm_keep[i].check=1;
-    }  
+    }
 
   /* hypercubic communication scheme */
   for (log_ntask=0; log_ntask<1000; log_ntask++)
@@ -362,13 +362,13 @@ int distribute(void)
 
   /* check that all wanted communications have been performed */
   for (i=0; i<count_keep; i++)
-    if (!comm_keep[i].check) 
+    if (!comm_keep[i].check)
       printf("CASINO FINALE KEEP %d %d %d\n",ThisTask,i,comm_keep[i].task);
   for (i=0; i<count_send; i++)
-    if (!comm_send[i].check) 
+    if (!comm_send[i].check)
       printf("CASINO FINALE SEND %d %d %d\n",ThisTask,i,comm_send[i].task);
   for (i=0; i<count_recv; i++)
-    if (!comm_recv[i].check) 
+    if (!comm_recv[i].check)
       printf("CASINO FINALE RECV %d %d %d\n",ThisTask,i,comm_recv[i].task);
 
   free(sub_plane);

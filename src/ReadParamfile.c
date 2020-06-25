@@ -186,10 +186,6 @@ int read_parameter_file()
       addr[nt] = &params.WriteSnapshot;
       id[nt++] = LOGICAL;
 
-      strcpy(tag[nt], "WriteTimelessSnapshot");
-      addr[nt] = &params.WriteTimelessSnapshot;
-      id[nt++] = LOGICAL;
-
       strcpy(tag[nt], "OutputInH100");
       addr[nt] = &params.OutputInH100;
       id[nt++] = LOGICAL;

@@ -60,7 +60,6 @@ static gsl_interp_accel *accelCAMB=0x0;
 #endif
 
 int system_of_ODEs(double, const double [], double*, void* );
-int jac(double, const double [], double *, double [], void *);
 int read_TabulatedEoS(void);
 int initialize_PowerSpectrum(void);
 int normalize_PowerSpectrum(void);
@@ -94,11 +93,11 @@ int initialize_cosmology()
   double *scalef, *cosmtime, *grow1, *grow2, *IntEoS, *prdist, *prdistneg, *dprdist,
     *fomegav, *fomega2v, *grow31, *grow32, *fomega31v, *fomega32v;
 
-  const gsl_odeiv_step_type *T = gsl_odeiv_step_rkf45;
-  gsl_odeiv_step *ode_s = gsl_odeiv_step_alloc(T,NVAR);
-  gsl_odeiv_control *ode_c = gsl_odeiv_control_standard_new(1.0e-8, 1.0e-8, 1.0, 1.0);
-  gsl_odeiv_evolve *ode_e = gsl_odeiv_evolve_alloc(NVAR);
-  gsl_odeiv_system ode_sys = {system_of_ODEs, jac, NVAR, (void*)&ode_param};
+  const gsl_odeiv2_step_type *T = gsl_odeiv2_step_rkf45;
+  gsl_odeiv2_step *ode_s = gsl_odeiv2_step_alloc(T,NVAR);
+  gsl_odeiv2_control *ode_c = gsl_odeiv2_control_standard_new(1.0e-8, 1.0e-8, 1.0, 1.0);
+  gsl_odeiv2_evolve *ode_e = gsl_odeiv2_evolve_alloc(NVAR);
+  gsl_odeiv2_system ode_sys = {system_of_ODEs, jac, NVAR, (void*)&ode_param};
 
   gsl_spline *spline=0x0;
 
@@ -180,7 +179,7 @@ int initialize_cosmology()
   y[2]=2.0/3.0*pow(x1,1.5);   /*  initial value of t(a)*Hubble0 */
   y[3]=-6./7.*x1;             /*  initial value of the dD2/da */
   y[4]=-3./7.*x1*x1;          /*  intial value of D2(a) */
-  h1=1.e-6;                   /*  initial guess of time-step */
+  h1=x1/10.;                  /*  initial guess of time-step */
   hh=h1;
 
   /* this function will be integrated within the loop */
@@ -194,7 +193,7 @@ int initialize_cosmology()
       /* integration of ODE system */
       while (x1<x2 && status==GSL_SUCCESS)
 	{
-	  status=gsl_odeiv_evolve_apply(ode_e, ode_c, ode_s, &ode_sys, &x1, x2, &hh, y);
+	  status=gsl_odeiv2_evolve_apply(ode_e, ode_c, ode_s, &ode_sys, &x1, x2, &hh, y);
 	  if (status!=GSL_SUCCESS)
 	    {
 	      printf("ERROR on task %d: integration of cosmological quantities failed\n",ThisTask);
@@ -286,7 +285,6 @@ int initialize_cosmology()
   gsl_spline_init(splineInvDist, prdistneg, scalef, NBIN);
   gsl_spline_init(splinedrdz, scalef, dprdist, NBIN);
 
-
   /* deallocation of vectors for interpolation */
   if (!params.simpleLambda)
     free(IntEoS  );
@@ -321,38 +319,44 @@ int initialize_cosmology()
 
       fd=fopen(filename,"w");
 
-      fprintf(fd,"# Cosmological quantities used in PINOCCHIO (h=%f)\n",params.Hubble100);
-      fprintf(fd,"# TIME-DEPENDENT QUANTITIES\n");
-      fprintf(fd,"# 1: scale factor\n");
-      fprintf(fd,"# 2: cosmic time (Gyr)\n");
-      fprintf(fd,"# 3: growth factor\n");
-      fprintf(fd,"# 4: 2nd-order growth factor\n");
-      fprintf(fd,"# 5: dark energy EOS\n");
-      fprintf(fd,"# 6: proper distance (true Mpc)\n");
-      fprintf(fd,"# 7: d/dz of proper distance (true Mpc)\n");
-      fprintf(fd,"# SCALE-DEPENDENT QUANTITIES\n");
-      fprintf(fd,"# 8: scale (true Mpc)\n");
-      fprintf(fd,"# 9: mass variance\n");
-      fprintf(fd,"#10: d Log sigma^2 / d Log R\n");
-      fprintf(fd,"#11: k (true Mpc^-1)\n");
-      fprintf(fd,"#12: P(k)\n");
-      fprintf(fd,"#\n");
+      /* fprintf(fd,"# Cosmological quantities used in PINOCCHIO (h=%f)\n",params.Hubble100); */
+      /* fprintf(fd,"# TIME-DEPENDENT QUANTITIES\n"); */
+      /* fprintf(fd,"# 1: scale factor\n"); */
+      /* fprintf(fd,"# 2: cosmic time (Gyr)\n"); */
+      /* fprintf(fd,"# 3: growth factor\n"); */
+      /* fprintf(fd,"# 4: 2nd-order growth factor\n"); */
+      /* fprintf(fd,"# 5: dark energy EOS\n"); */
+      /* fprintf(fd,"# 6: proper distance (true Mpc)\n"); */
+      /* fprintf(fd,"# 7: d/dz of proper distance (true Mpc)\n"); */
+      /* fprintf(fd,"# SCALE-DEPENDENT QUANTITIES\n"); */
+      /* fprintf(fd,"# 8: scale (true Mpc)\n"); */
+      /* fprintf(fd,"# 9: mass variance\n"); */
+      /* fprintf(fd,"#10: d Log sigma^2 / d Log R\n"); */
+      /* fprintf(fd,"#11: k (true Mpc^-1)\n"); */
+      /* fprintf(fd,"#12: P(k)\n"); */
+      /* fprintf(fd,"#\n"); */
       for (i=0; i<NBIN; i++)
 	{
 	  k=pow(10.,-4.0+(double)i/(double)NBIN*6.0);
-	  fprintf(fd," %lg %lg %lg %lg %lg %lg %lg %lg %lg %lg %lg %lg  %lg %lg\n",
-		  pow(10.,splineGrow->x[i]),
+	  fprintf(fd," %lg %lg %lg %lg %lg %lg %lg %lg %lg %lg %lg %lg %lg   %lg %lg %lg %lg   %lg %lg\n",
+		  pow(10.,splineTime->x[i]),
 		  pow(10.,splineTime->y[i]),
-		  pow(10.,splineGrow->y[i]),
-		  -pow(10.,splineGrow2->y[i]),
-		  (!params.simpleLambda ? -1 : splineEoS->y[i]),
 		  splineDist->y[i],
-		  splinedrdz->y[i],
+		  splineDist->y[i]*pow(10.,splineTime->x[i]),
+		  (!params.simpleLambda ? -1 : splineEoS->y[i]),
+		  pow(10.,splineGrow->y[i]),
+		  pow(10.,splineGrow2->y[i]),
+		  pow(10.,splineGrow31->y[i]),
+		  pow(10.,splineGrow32->y[i]),
+		  pow(10.,splinefO->y[i]),
+		  pow(10.,splinefO2->y[i]),
+		  pow(10.,splinefO31->y[i]),
+		  pow(10.,splinefO32->y[i]),
 		  pow(10.,splineVar->x[i]),
 		  pow(10.,splineVar->y[i]),
-		  pow(10.,splinedldr->y[i]),
-		  k,PowerSpectrum(k),
-		  pow(10.,splineDVar->x[i]),pow(10.,splineDVar->y[i]));
+		  pow(10.,splineDVar->y[i]),
+		  splinedldr->y[i],
+		  k,PowerSpectrum(k));
 	  }
       fclose(fd);
     }  
@@ -1028,6 +1032,14 @@ double Omega(double z)
      DIMENSIONLESS */
 
   return params.Omega0 * pow(1.+z,3.) * pow(Hubble(z)/100./params.Hubble100, -2);
+}
+
+double Omega_Lambda(double z)
+{
+  /* Cosmological mass density parameter as a function of redshift
+     DIMENSIONLESS */
+
+  return params.OmegaLambda * pow(Hubble(z)/100./params.Hubble100, -2);
 }
 
 

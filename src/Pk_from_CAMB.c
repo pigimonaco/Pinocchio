@@ -342,10 +342,10 @@ int initialize_ScaleDependentGrowth(void)
 	      i2=ThisOutput+1;  //(ThisOutput<params.camb.NCAMB-1 ? ThisOutput+1 : params.camb.NCAMB-1);
 
 	      ThisfO[ThisOutput] = (ThisVel[i2]-ThisVel[i1]) / (CAMBScalefac[i2]-CAMBScalefac[i1]) * CAMBScalefac[ThisOutput] / ThisVel[ThisOutput];
-	      ThisfO2[ThisOutput] = ( (3./7.*pow(ThisVel[i2],2.0)*pow(Omega(CAMBRedshifts[i2]),-0.007)) - 
-				      (3./7.*pow(ThisVel[i1],2.0)*pow(Omega(CAMBRedshifts[i1]),-0.007)) )
+	      ThisfO2[ThisOutput] = ( (3./7.*pow(ThisVel[i2],2.0)*pow(OmegaMatter(CAMBRedshifts[i2]),-0.007)) - 
+				      (3./7.*pow(ThisVel[i1],2.0)*pow(OmegaMatter(CAMBRedshifts[i1]),-0.007)) )
 		/ (CAMBScalefac[i2]-CAMBScalefac[i1]) * CAMBScalefac[ThisOutput] / 
-		(3./7.*pow(ThisVel[ThisOutput],2.0)*pow(Omega(CAMBRedshifts[ThisOutput]),-0.007));
+		(3./7.*pow(ThisVel[ThisOutput],2.0)*pow(OmegaMatter(CAMBRedshifts[ThisOutput]),-0.007));
 	    }
 	  else
 	    {
