@@ -54,8 +54,8 @@ double interpolate_collapse_time(int ismooth, double l1, double l2, double l3);
 //#define HISTO
 #define BILINEAR_SPLINE
 
-#define CT_NBINS_XY (50)  // 50
-#define CT_NBINS_D  (100) // 100
+#define CT_NBINS_XY (20)  // 50
+#define CT_NBINS_D  (40)  // 100
 #define CT_SQUEEZE (1.2)  // 1.2
 #define CT_EXPO   (1.75)  // 1.75
 #define CT_RANGE_D (7.0)  // 7.0

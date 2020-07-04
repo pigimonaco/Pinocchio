@@ -166,6 +166,7 @@ int write_product(int flag, char *tag)
       return 1;
     }
 
+
   /* file opening and header */
   if (!ThisTask)
     {
@@ -426,18 +427,19 @@ int write_product(int flag, char *tag)
 	  if (ThisTask==belongs[global_z])
 	    {
 	      /* Task belongs[iz] sends the plane to task 0 */
-	      MPI_Send(plane, planesize, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
+	      MPI_Send(plane, planesize, MPI_PRODFLOAT, 0, 0, MPI_COMM_WORLD);
 	      
 	    }
 	  else if (!ThisTask)
 	    {
 	      /* task 0 receives the info from task belongs[global_z] and writes it on the file */
-	      MPI_Recv(plane, planesize, MPI_DOUBLE, belongs[global_z], 0, MPI_COMM_WORLD, &status);
+	      MPI_Recv(plane, planesize, MPI_PRODFLOAT, belongs[global_z], 0, MPI_COMM_WORLD, &status);
 	    }
 	}
 
       if (!ThisTask)
 	{
+
 #ifdef ASCII_WRITE
 	  /* writes the plane */
 	  for (iy=0; iy<MyGrids[MyGrid].GSglobal_y; iy++)
@@ -447,7 +449,7 @@ int write_product(int flag, char *tag)
 		last=1;
 		if (!((1+ix + iy*MyGrids[MyGrid].GSglobal_x)%8))
 		  {
-		    fprintf(file,"\n");
+ 		    fprintf(file,"\n");
 		    last=0;
 		  }
 	      }

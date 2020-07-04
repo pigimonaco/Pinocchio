@@ -79,8 +79,10 @@
 extern int ThisTask,NTasks;
 
 #ifdef DOUBLE_PRECISION_PRODUCTS
+#define MPI_PRODFLOAT MPI_DOUBLE
 typedef double PRODFLOAT;
 #else
+#define MPI_PRODFLOAT MPI_FLOAT
 typedef float PRODFLOAT;
 #endif
 

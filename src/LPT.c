@@ -30,7 +30,10 @@
 
 int compute_LPT_displacements(int ismooth)
 {
-  int local_x,local_y,local_z,index,ia;
+  int local_x,local_y,local_z,index;
+#if !defined(RECOMPUTE_DISPLACEMENTS) && !defined(THREE_LPT)
+  int ia;
+#endif
 #ifdef THREE_LPT
   int ib,ider;
 #endif

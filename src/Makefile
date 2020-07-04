@@ -27,36 +27,19 @@
 
 RUNDIR = ./
 
-EXEC = pinocchio.MG.x
+EXEC = pinocchio.x
 
-# stantard options
-OPTIONS += -DPLC
-OPTIONS += -DNORADIATION
 OPTIONS += -DTWO_LPT
-
-# for the standard version
-OPTIONS += -DTHREE_LPT
-OPTIONS += -DELL_CLASSIC
-
-# to compute collapse times numerically
 #OPTIONS += -DTHREE_LPT
-#OPTIONS += -DTABULATED_CT
-#OPTIONS += -DELL_SNG
-
-# for neutrino cosmology:
-#OPTIONS += -DTHREE_LPT   # NB: this was not possible in Rizzo et al. (2017)
-#OPTIONS += -DSCALE_DEPENDENT
-#OPTIONS += -DREAD_PK_TABLE
-#OPTIONS += -DONLY_MATTER_POWER
+#OPTIONS += -DPLC
+OPTIONS += -DNORADIATION
+OPTIONS += -DTABULATED_CT
+OPTIONS += -DELL_SNG
 #OPTIONS += -DELL_CLASSIC
-
-# for f(R) MG
-#OPTIONS += -DSCALE_DEPENDENT
+OPTIONS += -DSCALE_DEPENDENT
+OPTIONS += -DMOD_GRAV_FR
+OPTIONS += -DFR0=1.e-4
 #OPTIONS += -DRECOMPUTE_DISPLACEMENTS
-#OPTIONS += -DMOD_GRAV_FR
-#OPTIONS += -DFR0=1.e-4
-#OPTIONS += -DTABULATED_CT
-#OPTIONS += -DELL_SNG
 
 # output
 #OPTIONS += -DROTATE_BOX
@@ -98,10 +81,6 @@ OBJECTS = fmax.o variables.o initialization.o collapse_times.o fmax-fftw.o GenIC
 	ReadParamfile.o ReadWhiteNoise.o write_fields.o allocations.o LPT.o fragment.o \
 	build_groups.o distribute.o write_halos.o write_snapshot.o cosmo.o
 
-# ifeq (SCALE_DEPENDENT_GROWTH,$(findstring SCALE_DEPENDENT_GROWTH,$(OPTIONS)))
-# OBJECTS += Pk_from_CAMB.o
-# endif
-
 
 # rules
 %.o: %.c Makefile pinocchio.h fragment.h def_splines.h
@@ -109,7 +88,7 @@ OBJECTS = fmax.o variables.o initialization.o collapse_times.o fmax-fftw.o GenIC
 
 
 pinocchio: $(OBJECTS) pinocchio.o Makefile
-	$(CC) $(INC) $(COPTS) -o $(EXEC) pinocchio.o $(OBJECTS) $(LIB)
+	$(CC) $(INC) $(COPTS) -o $(RUNDIR)/$(EXEC) pinocchio.o $(OBJECTS) $(LIB)
 
 memorytest: $(OBJECTS) memorytest.o Makefile
 	$(CC) $(INC) $(COPTS) -o memorytest memorytest.o $(OBJECTS) $(LIB)

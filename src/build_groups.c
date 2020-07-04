@@ -1375,14 +1375,16 @@ double q2x(int i,pos_data *myobj,int order)
 
 #else
 
-  pos = myobj->q[i] + (myobj->v[i]*(1.-myobj->w) + myobj->v_aft[i]*myobj->w)*myobj->D;
+// IMPLEMENTARE L'INTERPOLAZIONE PRIMA DEL PRIMO REDSHIFT
+
+  pos = myobj->q[i] + (myobj->v[i]*(1.-myobj->w) + myobj->v_aft[i]*myobj->w); // * myobj->D;
 #ifdef TWO_LPT
   if (order>1)
-    pos += (myobj->v2[i]*(1.-myobj->w) + myobj->v2_aft[i]*myobj->w) * myobj->D2;
+    pos += (myobj->v2[i]*(1.-myobj->w) + myobj->v2_aft[i]*myobj->w); // * myobj->D2;
 #ifdef THREE_LPT
   if (order>2)
-    pos += (myobj->v31[i]*(1.-myobj->w) + myobj->v31_aft[i]*myobj->w) * myobj->D31
-        +  (myobj->v32[i]*(1.-myobj->w) + myobj->v32_aft[i]*myobj->w) * myobj->D32;
+    pos += (myobj->v31[i]*(1.-myobj->w) + myobj->v31_aft[i]*myobj->w); // * myobj->D31
+        +  (myobj->v32[i]*(1.-myobj->w) + myobj->v32_aft[i]*myobj->w); // * myobj->D32;
 #endif
 #endif
 
