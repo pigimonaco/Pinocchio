@@ -100,13 +100,18 @@ int compute_fmax(void)
 
 #ifdef TABULATED_CT
       /* initialize spline for interpolating collapse times */
-      if (initialize_collapse_times(ismooth))
+      if (initialize_collapse_times(ismooth,0))
 	return 1;
 
       cputmp=MPI_Wtime()-cputmp;
 
       if (!ThisTask)
-	printf("[%s] Collapse times computed for interpolation, cpu time =%f s\n",fdate(),cputmp);
+	{
+	  if (strcmp(params.CTtableFile,"none"))
+	    printf("[%s] Collapse times read from file %s\n",fdate(),params.CTtableFile);
+	  else
+	    printf("[%s] Collapse times computed for interpolation, cpu time =%f s\n",fdate(),cputmp);
+	}
 
       cputime.coll+=cputmp;
       cputmp=MPI_Wtime();

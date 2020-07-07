@@ -548,19 +548,6 @@ int shift_all_displacements()
   return 0;
 }
 
-// QUESTO DOVREBBE ESSERE INUTILE
-/*   /\* This shifts Vel_after to Vel in the subbox space *\/ */
-/*   for (i=0; i<subbox.Npart; i++) */
-/*     for (ia=0; ia<3; ia++) */
-/*       frag[i].Vel[ia]=frag[i].Vel_after[ia]; */
-/* #ifdef TWO_LPT */
-/*   frag[i].Vel_2LPT[ia]=frag[i].Vel_2LPT_after[ia]; */
-/* #ifdef THREE_LPT */
-/*   frag[i].Vel_3LPT_1[ia]=frag[i].Vel_3LPT_1_after[ia]; */
-/*   frag[i].Vel_3LPT_2[ia]=frag[i].Vel_3LPT_2_after[ia]; */
-/* #endif */
-/* #endif */
-
 
 int recompute_group_velocities()
 {

@@ -190,7 +190,7 @@ typedef struct
     BoundaryLayerFactor, Largest, MaxMemPerParticle, k_for_GM, PLCAperture,
     PLCCenter[3], PLCAxis[3];
   char RunFlag[SBLENGTH],DataDir[SBLENGTH],TabulatedEoSfile[LBLENGTH],ParameterFile[LBLENGTH],
-    OutputList[LBLENGTH],FileWithInputSpectrum[LBLENGTH];
+    OutputList[LBLENGTH],FileWithInputSpectrum[LBLENGTH],CTtableFile[LBLENGTH];
   int GridSize[3],WriteRmax, WriteFmax, WriteVmax, 
     CatalogInAscii, DoNotWriteCatalogs, DoNotWriteHistories, WriteSnapshot, WriteTimelessSnapshot,
     OutputInH100, RandomSeed, MaxMem, NumFiles, MinMassForCat, 
@@ -336,7 +336,7 @@ extern double H_over_c;
 int compute_collapse_times(int);
 int compute_velocities(int);
 #ifdef TABULATED_CT
-int initialize_collapse_times(int);
+int initialize_collapse_times(int, int);
 int reset_collapse_times(int);
 #endif
 

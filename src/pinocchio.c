@@ -127,6 +127,53 @@ int main(int argc, char **argv, char **envp)
       return 0;
     }
 
+  /* called as "pinocchio.x parameterfile 2" it computes and writes collapse time table, then exit */
+  if (argc>=3 && atoi(argv[2])==3)
+    {
+#ifdef TABULATED_CT
+      if (!ThisTask)
+	{
+	  printf("In this configuration pinocchio will only compute a table of collapse times\n");
+	}
+
+      /****************************
+       * CYCLE ON SMOOTHING RADII *
+       ****************************/
+      for (int ismooth=0; ismooth<Smoothing.Nsmooth; ismooth++)
+	{
+	  double cputmp=MPI_Wtime();
+
+	  if (!ThisTask)
+	    printf("\n[%s] Starting smoothing radius %d of %d (R=%9.5f, sigma=%9.5f)\n", 
+		   fdate(), ismooth+1, Smoothing.Nsmooth, Smoothing.Radius[ismooth],
+		   sqrt(Smoothing.Variance[ismooth]) );
+
+	  if (initialize_collapse_times(ismooth,1))
+	    return 1;
+
+	  if (!ThisTask)
+	    printf("[%s] Collapse times computed, cpu time =%f s\n",fdate(),cputmp);
+
+	}
+
+      if (!ThisTask)
+	printf("Pinocchio done!\n");
+      MPI_Finalize();
+
+      return 0;
+
+#else
+      if (!ThisTask)
+	{
+	  printf("Sorry but you have to compile the code with TABULATED_CT to compute CT table\n");
+	}
+      MPI_Finalize();
+
+      return 0;
+#endif
+    }
+
+
   /* computation of collapse times and displacements */
   if (compute_fmax())
     abort_code();

@@ -24,17 +24,9 @@
  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 */
 
-/* TODO
-   - write table in binary format
-   - let the code read the table if required
-*/
-
 #include "pinocchio.h"
 #include <gsl/gsl_interp2d.h>
 #include <gsl/gsl_spline2d.h>
-
-//#define ELL_SNG
-//#define ELL_CLASSIC
 
 double inverse_collapse_time(int, double *, double *, double *, double *, int *);
 double ell(int,double,double,double);
@@ -44,7 +36,7 @@ void ord(double *,double *,double *);
 #ifdef TABULATED_CT
 double interpolate_collapse_time(int ismooth, double l1, double l2, double l3);
 
-// quanto segue alla fine potra` essere spostato giu` dove inizia 
+// quanto segue alla fine potra` essere spostato giu` dove inizia la parte TABULATED_CT
 
 //#define DEBUG
 //#define PRINTJUNK
@@ -54,8 +46,8 @@ double interpolate_collapse_time(int ismooth, double l1, double l2, double l3);
 //#define HISTO
 #define BILINEAR_SPLINE
 
-#define CT_NBINS_XY (20)  // 50
-#define CT_NBINS_D  (40)  // 100
+#define CT_NBINS_XY (50)  // 50
+#define CT_NBINS_D (100)  // 100
 #define CT_SQUEEZE (1.2)  // 1.2
 #define CT_EXPO   (1.75)  // 1.75
 #define CT_RANGE_D (7.0)  // 7.0
@@ -82,7 +74,7 @@ FILE *JUNK;
 #endif
 #endif
 
-#endif
+#endif /* TABULATED_CT */
 
 int compute_collapse_times(int ismooth)
 {
@@ -312,10 +304,17 @@ int compute_velocities(int ismooth)
 
 #ifdef TABULATED_CT
 
-int initialize_collapse_times(int ismooth)
+FILE *CTtableFilePointer;
+
+int check_CTtable_header();
+void write_CTtable_header();
+
+
+int initialize_collapse_times(int ismooth, int onlycompute)
 {
   double l1, l2, l3, del, ampl, x, y, interval, ref_interval, deltaf;
-  int id,ix,iy,i,j;
+  int id,ix,iy,i,j, dummy, fail;
+  char fname[LBLENGTH];
 
   /* the bin size for delta varies like (delta - CT_DELTA0)^CT_EXPO, 
      so it is smallest around CT_DELTA0 if CT_EXPO>1. The bin size 
@@ -391,8 +390,39 @@ int initialize_collapse_times(int ismooth)
 
     }
 
+  /* In this case collapse times are read from a file */
+  if (strcmp(params.CTtableFile,"none") && !onlycompute)
+    {
+      /* opening of file and consistency tests */
+      if (!ismooth)
+	{
+	  /* Task 0 reads the file */
+	  if (!ThisTask)
+	    {
+
+	      CTtableFilePointer=fopen(params.CTtableFile,"r");
+	      fail=check_CTtable_header(CTtableFilePointer);
+
+	    }
+	  MPI_Bcast(&fail, sizeof(int), MPI_BYTE, 0, MPI_COMM_WORLD);
+	  if (fail)
+	    return 1;
+	}
+
+      if (!ThisTask)
+	{
+	  fread(&dummy,sizeof(int),1,CTtableFilePointer);
+	  fread(CT_table,sizeof(double),Ncomputations,CTtableFilePointer);
+	}
+
+      MPI_Bcast(CT_table, Ncomputations, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+      if (!ThisTask && ismooth==Smoothing.Nsmooth-1)
+	fclose(CTtableFilePointer);
+
+    }
+  else
+
   /* The collapse time table is computed for each smoothing radius */
-  //  if (!ismooth)
     {
 
       ampl = sqrt(Smoothing.Variance[ismooth]);
@@ -430,25 +460,23 @@ int initialize_collapse_times(int ismooth)
       free(displs);
       free(counts);
 
-      /* now initialize the splines */
-      for (i=0; i<CT_NBINS_XY; i++)
-	for (j=0; j<CT_NBINS_XY; j++)
-	  {
-	    gsl_spline_init(CT_Spline[i][j],delta_vector,&CT_table[i*CT_NBINS_D+j*CT_NBINS_D*CT_NBINS_XY],CT_NBINS_D);
-	  }
-
-
       /* Writes the table on a file */
       if (!ThisTask)
 	{
-	  char fname[LBLENGTH];
-	  FILE *fd;
-	  sprintf(fname,"pinocchio.%s.CTtable.out",params.RunFlag);
-	  if (!ismooth)
-	    fd=fopen(fname,"w");
+	  if (onlycompute)
+	    strcpy(fname,params.CTtableFile);
 	  else
-	    fd=fopen(fname,"a");
-	  fprintf(fd,"################\n# smoothing %2d #\n################\n",ismooth);
+	    sprintf(fname,"pinocchio.%s.CTtable.out",params.RunFlag);
+	  if (!ismooth)
+	    {
+	      CTtableFilePointer=fopen(fname,"w");
+	      write_CTtable_header(CTtableFilePointer);
+	    }
+	  else
+	    CTtableFilePointer=fopen(fname,"a");
+#ifdef ASCII
+	  fprintf(CTtableFilePointer,"################\n# smoothing %2d #\n################\n",ismooth);
+
 	  for (i=0; i<Ncomputations; i++)
 	    {
 	      id=i%CT_NBINS_D;
@@ -461,13 +489,25 @@ int initialize_collapse_times(int ismooth)
 	      l2  = (delta_vector[id] -    x +    y)/3.0*ampl;
 	      l3  = (delta_vector[id] -    x - 2.*y)/3.0*ampl;
 
-	      fprintf(fd," %d   %3d %3d %3d   %8f %8f %8f   %8f %8f %8f   %20g\n",
+	      fprintf(CTtableFilePointer," %d   %3d %3d %3d   %8f %8f %8f   %8f %8f %8f   %20g\n",
 		      ismooth,id,ix,iy,delta_vector[id],x,y,l1,l2,l3,CT_table[i]);
+
 	    }
-	  fclose(fd);
+#else
+	  fwrite(&ismooth,sizeof(int),1,CTtableFilePointer);
+	  fwrite(CT_table,sizeof(double),Ncomputations,CTtableFilePointer);
+#endif
+
+	  fclose(CTtableFilePointer);
 	}
+
     }
 
+  /* now initialize the splines */
+  for (i=0; i<CT_NBINS_XY; i++)
+    for (j=0; j<CT_NBINS_XY; j++)
+	gsl_spline_init(CT_Spline[i][j],delta_vector,&CT_table[i*CT_NBINS_D+j*CT_NBINS_D*CT_NBINS_XY],CT_NBINS_D);
+  
   return 0;
 }
 
@@ -504,6 +544,9 @@ int reset_collapse_times(int ismooth)
 #ifdef TRILINEAR
 #ifdef HISTO
   // scrive l'istogramma della tabella
+
+  // QUESTA PARTE ANDREBBE SCRITTA E COMMENTATA MEGLIO
+
   char fname[50];
   FILE *fd;
   int i,id,ix,iy;
@@ -648,10 +691,6 @@ double interpolate_collapse_time(int ismooth, double l1, double l2, double l3)
   double dx = x/bin_x-ix;
   double dy = y/bin_x-iy;
 
-
-  /* if (ismooth==10) */
-  /*   printf(" %f %f %f    %f %f %f   %d %d   %f\n",l1,l2,l3,d,x,y,ix,iy,my_spline_eval(CT_Spline[ix  ][iy  ], d, accel)); */
-
   return ((1.-dx)*(1.-dy)*my_spline_eval(CT_Spline[ix  ][iy  ], d, accel)+
 	  (   dx)*(1.-dy)*my_spline_eval(CT_Spline[ix+1][iy  ], d, accel)+
 	  (1.-dx)*(   dy)*my_spline_eval(CT_Spline[ix  ][iy+1], d, accel)+
@@ -661,8 +700,120 @@ double interpolate_collapse_time(int ismooth, double l1, double l2, double l3)
 
 }
 
+int check_CTtable_header()
+{
 
-#endif 
+  /* checks that the information contained in the header is consistent with the run 
+     NB: this is done by Task 0 */
+
+  int fail=0, dummy;
+  double fdummy;
+
+  fread(&dummy,sizeof(int),1,CTtableFilePointer);
+#ifdef ELL_CLASSIC 
+  if (dummy!=1)   /* classic ellipsoidal collapse, tabulated */
+    {
+      fail=1;
+      printf("ERROR: CT table not constructed for ELL_CLASSIC, %d\n",
+	     dummy);
+    }
+#endif
+#ifdef ELL_SNG
+#ifndef MOD_GRAV_FR
+  if (dummy!=3)   /* standard gravity, numerical ellipsoidal collapse */
+    {
+      fail=1;
+      printf("ERROR: CT table not constructed for ELL_SNG and standard gravity, %d\n",
+	     dummy);
+    }
+#else
+  if (dummy!=4)   /* f(R) gravity, numerical ellipsoidal collapse */
+    {
+      fail=1;
+      printf("ERROR: CT table not constructed for ELL_SNG and MOD_GRAV_FR, %d\n",
+	     dummy);
+    }
+#endif
+#endif
+  fread(&fdummy,sizeof(double),1,CTtableFilePointer);
+  if (fabs(fdummy-params.Omega0)>1.e-10)
+    {
+      fail=1;
+      printf("ERROR: CT table constructed for the wrong Omega0, %f in place of %f\n",
+	     fdummy,params.Omega0);
+    }
+  fread(&fdummy,sizeof(double),1,CTtableFilePointer);
+  if (fabs(fdummy-params.OmegaLambda)>1.e-10)
+    {
+      fail=1;
+      printf("ERROR: CT table constructed for the wrong OmegaLambda, %f in place of %f\n",
+	     fdummy,params.OmegaLambda);
+    }
+  fread(&fdummy,sizeof(double),1,CTtableFilePointer);
+  if (fabs(fdummy-params.Hubble100)>1.e-10)
+    {
+      fail=1;
+      printf("ERROR: CT table constructed for the wrong Hubble100, %f in place of %f\n",
+	     fdummy,params.Hubble100);
+    }
+
+  fread(&dummy,sizeof(int),1,CTtableFilePointer);
+  if (dummy != Ncomputations)
+    {
+      fail=1;
+      printf("ERROR: CT table has the wrong size, %d in place of %d\n",
+	     dummy,Ncomputations);
+    }
+  fread(&dummy,sizeof(int),1,CTtableFilePointer);
+  if (dummy != CT_NBINS_D)
+    {
+      fail=1;
+      printf("ERROR: CT table has the wrong density sampling, %d in place of %d\n",
+	     dummy,CT_NBINS_D);
+    }
+  fread(&dummy,sizeof(int),1,CTtableFilePointer);
+  if (dummy != CT_NBINS_XY)
+    {
+      fail=1;
+      printf("ERROR: CT table has the wrong x and y sampling, %d in place of %d\n",
+	     dummy,CT_NBINS_XY);
+    }
+
+  return fail;
+}
+
+
+void write_CTtable_header()
+{
+
+  int dummy;
+
+#ifdef ELL_CLASSIC 
+  dummy=1;   /* classic ellipsoidal collapse, tabulated */
+  fwrite(&dummy,sizeof(int),1,CTtableFilePointer);
+#endif
+#ifdef ELL_SNG
+#ifndef MOD_GRAV_FR
+  dummy=3;   /* standard gravity, numerical ellipsoidal collapse */
+  fwrite(&dummy,sizeof(int),1,CTtableFilePointer);
+#else
+  dummy=4;   /* f(R) gravity, numerical ellipsoidal collapse */
+  fwrite(&dummy,sizeof(int),1,CTtableFilePointer);
+#endif
+#endif
+  fwrite(&params.Omega0,sizeof(double),1,CTtableFilePointer);
+  fwrite(&params.OmegaLambda,sizeof(double),1,CTtableFilePointer);
+  fwrite(&params.Hubble100,sizeof(double),1,CTtableFilePointer);
+
+  fwrite(&Ncomputations,sizeof(int),1,CTtableFilePointer);
+  dummy=CT_NBINS_D;
+  fwrite(&dummy,sizeof(int),1,CTtableFilePointer);
+  dummy=CT_NBINS_XY;
+  fwrite(&dummy,sizeof(int),1,CTtableFilePointer);
+
+}
+
+#endif /* TABULATED_CT */
 
 
 double ell(int ismooth, double l1, double l2, double l3)
@@ -744,8 +895,6 @@ int sng_system(double t, const double y[], double f[], void *sng_par)
 		 - (1. + delta) / (2.5 + delta) * (y[3] + y[4] + y[5]))
 		- (2.5 + delta) * (1. + y[i+3]) + sum) / t;
 
-
-      //printf("%f %f %f %f\n",t,*(double*)params,delta,ForceModification(*(double*)params, t, delta));
     }
   return GSL_SUCCESS;
 }

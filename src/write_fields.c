@@ -28,11 +28,11 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-//#define FORTRAN
-#define ASCII_WRITE
+#define FORTRAN
+//#define ASCII_WRITE
 
 int check_DataDir(void);
-//int write_product(int, char*);
+
 int MyGrid;
 
 int write_fields(void)

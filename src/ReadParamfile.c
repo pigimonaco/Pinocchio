@@ -210,6 +210,10 @@ int read_parameter_file()
       addr[nt] = params.TabulatedEoSfile;
       id[nt++] = STRING;
 
+      strcpy(tag[nt], "MaxMemPerParticle");
+      addr[nt] = &(params.MaxMemPerParticle);
+      id[nt++] = DOUBLE;
+
 #ifdef READ_PK_TABLE
       strcpy(tag[nt], "CAMBMatterFileTag");
       addr[nt] = params.camb.MatterFile;
@@ -228,10 +232,11 @@ int read_parameter_file()
       id[nt++] = STRING;
 #endif
 
-      strcpy(tag[nt], "MaxMemPerParticle");
-      addr[nt] = &(params.MaxMemPerParticle);
-      id[nt++] = DOUBLE;
-
+#ifdef TABULATED_CT
+      strcpy(tag[nt], "CTtableFile");
+      addr[nt] = params.CTtableFile;
+      id[nt++] = STRING;
+#endif
 
       for (j=0; j<nt; j++)     /* All logical tags are FALSE by default */
 	if (id[j]==LOGICAL)

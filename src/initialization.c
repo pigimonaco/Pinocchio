@@ -35,24 +35,6 @@ int set_plc(void);
 int set_scaledep_GM(void);
 #endif
 
-/* // LEVARE */
-/* void test_inverseGM() */
-/* { */
-/*   double D; */
-/*   FILE *fd=fopen("testinv.txt","w"); */
-/*   for (int ismooth=0; ismooth<Smoothing.Nsmooth; ismooth++) */
-/*     /\* for (int i=0; i<NBINS; i++) *\/ */
-/*     /\*   fprintf(fd," %d %d  %g %g\n", *\/ */
-/*     /\* 	      ismooth,i,SPLINE_INVGROW[ismooth]->x[i],SPLINE_INVGROW[ismooth]->y[i]); *\/ */
-/*     for (double z=100.; z>= 0.0; z-=1.) */
-/*       { */
-/*     	D=GrowingMode(z,params.k_for_GM); */
-/*     	fprintf(fd," %f %d     %g  %g\n", */
-/*     		z,ismooth,D,InverseGrowingMode(D,ismooth)); */
-/*       } */
-/*   fclose(fd); */
-/* } */
-
 
 int initialization()
 {
@@ -365,27 +347,6 @@ int generate_densities()
   cputime.dens=MPI_Wtime()-cputime.dens;
   if (!ThisTask)
     printf("[%s] Done generating density in Fourier space, cputime = %f s\n",fdate(), cputime.dens);
-
-  /* // LEVARE!!! */
-  /* write_in_cvector(0, kdensity[0]); */
-  /* (void)reverse_transform(0); */
-  /* write_from_rvector(0, density[0]); */
-  /* double Variance=0.0; */
-  /* for (int i=0; i<MyGrids[0].total_local_size; i++) */
-  /*   Variance+=density[0][i]*density[0][i]; */
-  /* Variance/=(double)MyGrids[0].total_local_size; */
-  /* printf("VARIANCE on the grid: %g\n",Variance); */
-
-  /* double VVVV=VarianceOnGrid(0,1.0,0.0); */
-  /* printf("CALCOLO: %g  %f  %f  %f   %10f    \n",VVVV, Variance/VVVV, Radius(Variance), params.InterPartDist, Radius(Variance)/params.InterPartDist); */
-
-  /* WindowFunctionType=1; */
-  /* if (initialize_MassVariance()) */
-  /*   return 1; */
-
-  /* double SSSS=MassVariance(params.InterPartDist/PI); */
-  /* printf("SKS: %g  %g\n",SSSS, Variance/SSSS); */
-  /* return 1; */
 
   return 0;
 }
@@ -1214,8 +1175,6 @@ int set_scaledep_GM()
   gsl_function Function2, Function31, Function32;
   FILE *fd;
 #endif
-
-  // CI del collasso ellissoidale
 
 
 #ifdef ELL_CLASSIC

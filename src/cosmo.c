@@ -1246,12 +1246,6 @@ int read_Pk_table_from_CAMB(double *scalef, double *grow1, double *grow2, double
       Ttransf = (double*)malloc(Nktransf*sizeof(double));
 #endif
 
-      /* This loop starts form ReferenceOuput and then steps to 0, if ReferenceOutput is not 0,
-	 or 1 otherwise, and then steps on, skipping ReferenceOutput */
-      /* for (i=params.camb.ReferenceOutput; i<params.camb.NCAMB;  */
-      /* 	   i==params.camb.ReferenceOutput? i=(params.camb.ReferenceOutput==0) :  */
-      /* 	     (i==params.camb.ReferenceOutput-1? i=params.camb.ReferenceOutput+1 : i++)) */
-
       /* This loop starts from the last output, the one at z=0 that is stored in P(k) */
       for (i=params.camb. NCAMB-1; i>=0; i--)
 	{
