@@ -202,7 +202,7 @@ int compute_derivative(int ThisGrid, int first_derivative, int second_derivative
       ix: [0,N/2]
       iy, iz: [0,N-1]
       iyy and izz are unfolded, they run from -N/2+1 to N/2 (ixx = ix)
-      local_x, local_y and local_z are local coordinates of the slice
+      local_x, local_y and local_z are local coordinates of the box
       (for the x and z coordinates they are the same as ix and iz)
 */
 

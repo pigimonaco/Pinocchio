@@ -29,18 +29,72 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-int init_fragment_1(void);
-int init_fragment_2(int *);
-int count_peaks();
+//#define DEBUG
+
+int fragment(void);
+int count_peaks(int *);
 void set_fragment_parameters(int);
+void write_map(int);
+int create_map(void);
+void reorder(int *, int);
+void reorder_nofrag(int *, int); 
+void sort_and_organize(void);
+int init_segmentation(void);
 #ifdef RECOMPUTE_DISPLACEMENTS
 int compute_future_LPT_displacements(double, int);
-int init_segmentation();
-int shift_all_displacements();
-int recompute_group_velocities();
+int shift_all_displacements(void);
+int recompute_group_velocities(void);
 #endif
 
 int ngroups;
+
+
+/* void scrivi() */
+/* { */
+
+/*   char fname[LBLENGTH]; */
+/*   sprintf(fname,"Task%d.%s",ThisTask,params.RunFlag); */
+/*   FILE *fd=fopen(fname,"w"); */
+/*   int ibox, jbox, kbox, kk; */
+/*   int global_x, global_y, global_z, good_particle; */
+
+/*   for (long long iz=0; iz<subbox.Nalloc; iz++) */
+/*     { */
+
+/* #ifdef CLASSIC_FRAGMENTATION */
+/*       ibox = iz%subbox.Lgwbl_x; */
+/*       kk   = iz/subbox.Lgwbl_x; */
+/* #else */
+/*       ibox = frag_pos[iz]%subbox.Lgwbl_x; */
+/*       kk   = frag_pos[iz]/subbox.Lgwbl_x; */
+/* #endif */
+/*       jbox = kk%subbox.Lgwbl_y; */
+/*       kbox = kk/subbox.Lgwbl_y; */
+      
+/*       global_x = ibox + subbox.stabl_x; */
+/*       if (global_x<0) global_x+=MyGrids[0].GSglobal_x; */
+/*       if (global_x>=MyGrids[0].GSglobal_x) global_x-=MyGrids[0].GSglobal_x; */
+/*       global_y = jbox + subbox.stabl_y; */
+/*       if (global_y<0) global_y+=MyGrids[0].GSglobal_y; */
+/*       if (global_y>=MyGrids[0].GSglobal_y) global_y-=MyGrids[0].GSglobal_y; */
+/*       global_z = kbox + subbox.stabl_z; */
+/*       if (global_z<0) global_z+=MyGrids[0].GSglobal_z; */
+/*       if (global_z>=MyGrids[0].GSglobal_z) global_z-=MyGrids[0].GSglobal_z; */
+
+/*       good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x &&  */
+/* 			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y &&  */
+/* 			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z ); */
+
+/*       if (good_particle && (frag[iz].Fmax>=1.0)) */
+/* 	fprintf(fd,"  %3d %3d %3d   %10f\n",global_x, global_y, global_z ,frag[iz].Fmax); */
+/*     } */
+/*   fclose(fd); */
+
+/* } */
+
+
+
+
 
 void set_fragment_parameters(int order)
 {
@@ -113,28 +167,72 @@ void set_fragment_parameters(int order)
 
 }
 
-/* NB the list of fragment parameters option has been removed, 
-   it should be implemented by repeated calls of fragment().
-   One should then check what is to be reinitialized after each call. */
+
+static int index_compare_F(const void * a,const void * b)
+{
+  if ( frag[*((int *)a)].Fmax == frag[*((int *)b)].Fmax )
+    return 0;
+  else
+    if ( frag[*((int *)a)].Fmax > frag[*((int *)b)].Fmax )
+      return -1;
+    else
+      return 1;
+}
+
+
+static int index_compare_P(const void * a,const void * b)
+{
+  if ( frag_pos[*((int *)a)] == frag_pos[*((int *)b)] )
+    return 0;
+  else
+    if ( frag_pos[*((int *)a)] < frag_pos[*((int *)b)] )
+      return -1;
+    else
+      return 1;
+}
+
+
+int fragment_driver()
+{
+  /* This routine can be edited to call fragmentation for many combinations 
+     of fragment parameters */
+
+  if (!ThisTask)
+    printf("\n[%s] Second part: fragmentation of the collapsed medium\n",fdate());
+
+  /* parameters are assigned in the standard way */
+  set_fragment_parameters(ORDER_FOR_GROUPS);
+  
+  /* reallocates the memory */
+  if (reallocate_memory_for_fragmentation())
+    return 1;
+
+  if (fragment())
+    return 1;
+
+  return 0;
+}
+
 
 int fragment()
 {
   /* This function is the driver for fragmentation of collapsed medium 
      and construction of halo catalogs */
 
-  int Npeaks;
+  int Npeaks, Ngood;
+#ifndef CLASSIC_FRAGMENTATION
+  unsigned int nadd[2];
+#endif
+  unsigned long long mynadd[2], nadd_all[2];
   double tmp;
-
-  /* timing */
-
-  if (!ThisTask)
-    printf("\n[%s] Second part: fragmentation of the collapsed medium\n",fdate());
-
-
-#ifdef RECOMPUTE_DISPLACEMENTS
   int mysegment;
+
+
+  /* this initializes the segmentation of the fragmentation process */
   if (init_segmentation())
     return 1;
+
+#ifdef RECOMPUTE_DISPLACEMENTS
 
   /* computation of displacements for the first redshift */
   if (!ThisTask)
@@ -147,88 +245,328 @@ int fragment()
     printf("\n[%s] Computing displacements for redshift %f\n",fdate(),Segment.z[1]);
   if (compute_future_LPT_displacements(Segment.z[1],1))
     return 1;
+
 #endif
 
+  /* timing */
   cputime.frag=MPI_Wtime();
-
-  if (init_fragment_1())
-    return 1;
-
   cputime.group=cputime.sort=cputime.distr=0.0;
-
 #ifdef PLC
   cputime.plc=0.0;
 #endif
 
-  for (ThisSlice=0; ThisSlice<NSlices; ThisSlice++)
-    {
-      if (!ThisTask)
-	printf("\n[%s] Starting slice N. %d of %d\n",fdate(),ThisSlice+1,NSlices);
 
-      if (init_fragment_2(&Npeaks))
+#ifdef CLASSIC_FRAGMENTATION
+  /*************************************************************/
+  /* This implements the classic fragmentation, without slices */
+  /*************************************************************/
+
+  /* redistribution of products */
+  if (!ThisTask)
+    printf("[%s] Starting re-distribution of products\n",fdate());
+
+  tmp=MPI_Wtime();
+
+  if (distribute())
+    return 1;
+
+  tmp=MPI_Wtime()-tmp;
+  cputime.distr += tmp;
+
+  if (!ThisTask)
+    printf("[%s] re-distribution of Fmax done, cputime = %14.6f\n", fdate(), tmp);
+
+  /* counts the number of peaks in the sub-volume to know the number of groups */
+  Npeaks=count_peaks(&Ngood);
+
+  mynadd[0]=Ngood;
+  MPI_Reduce(mynadd, nadd_all, 1, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+
+  if (!ThisTask)
+    {
+      printf("[%s] Task 0 found %d peaks, %d in the well resolved region. Total number of peaks: %Ld\n",
+	     fdate(),Npeaks,Ngood,nadd_all[0]);
+    }
+
+  /* the number of peaks was supposed to be at most 1/10 of the number of particles
+     (we need space for Npeaks+2 groups) */
+  if (Npeaks+2 > subbox.PredNpeaks)
+    {
+      printf("ERROR on task %d: the number of peaks %d exceeds the predicted one (%d)\n",
+	     ThisTask,Npeaks,subbox.PredNpeaks);
+      printf("      Please increase PredPeakFactor and restart\n");
+      fflush(stdout);
+      return 1;
+    }
+
+  /* Gives the minimal PredPeakFactor */
+  mynadd[0]=Npeaks;
+  MPI_Reduce(mynadd, nadd_all, 1, MPI_UNSIGNED_LONG_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+
+  if (!ThisTask)
+    printf("[%s] The PredPeakFactor parameter could have been %5.2f in place of %5.2f\n",
+	   fdate(),(double)nadd_all[0]/(double)MyGrids[0].ParticlesPerTask*6.0,
+	   params.PredPeakFactor);
+
+  /* sets arrays to zero */
+  memset(group_ID,0,subbox.Nalloc*sizeof(int));
+  memset(linking_list,0,subbox.Nalloc*sizeof(int));
+  memset(groups,0,subbox.PredNpeaks*sizeof(group_data));
+  memset(wheretoplace_mycat,0,subbox.PredNpeaks*sizeof(histories_data));
+#ifdef PLC
+  memset(plcgroups,0,plc.Nmax*sizeof(plcgroup_data));
+#endif
+
+  tmp=MPI_Wtime();
+  if (!ThisTask)
+    printf("[%s] Starting sorting\n",fdate());
+
+  for (int i=0; i<subbox.Npart; i++)
+    *(indices+i)=i;
+  qsort((void *)indices, subbox.Npart, sizeof(int), index_compare_F);
+
+  tmp=MPI_Wtime()-tmp;
+  cputime.sort+=tmp;
+  if (!ThisTask)
+    printf("[%s] Sorting done, total cputime = %14.6f\n",fdate(),tmp);
+
+  /* full fragmentation is done segmenting the redshift interval */
+  for (mysegment=0; mysegment<Segment.n; mysegment++)
+    {
+      Segment.mine=mysegment;
+
+#ifdef RECOMPUTE_DISPLACEMENTS
+      // tanto cambia...
+#endif
+
+      tmp=MPI_Wtime();
+      
+      //scrivi(); //LEVARE
+
+      if (build_groups(Npeaks,Segment.z[mysegment],(mysegment==0)))
 	return 1;
 
+      tmp=MPI_Wtime()-tmp;
+      if (!ThisTask)
+	printf("[%s] Fragmentation done to redshift %6.4f, cputime = %14.6f\n",
+	       fdate(),Segment.z[mysegment],tmp);
+      cputime.group+=tmp;
+    }
 
-      /* Generates the group catalogue */
-      /* The call is segmented into consecutive calls */
-#ifdef RECOMPUTE_DISPLACEMENTS
-      for (mysegment=0; mysegment<Segment.n; mysegment++)
+#else
+  /*********************************************/
+  /* This implements the updated fragmentation */
+  /*********************************************/
+  
+  int all_pbc = (subbox.pbc_x && subbox.pbc_y && subbox.pbc_z);
+
+  /* fragmentation is performed twice;
+     in the first turn a quick fragmentation is performed to locate
+     halos and determine the interesting particles; velocities are not updated;
+     in the second turn the full fragmentation is performed, segmentation is applied
+     and velocities are updated */
+  for (int turn=0; turn<2; turn++)
+    {
+
+      if (!turn)
 	{
-	  Segment.mine=mysegment;
 
-	  /* The first segment uses only the first computed velocity
-	     The second segment has the two velocities already loaded */
-	  if (mysegment>=2)
-	    {
-	      /* computation of displacements for the next redshift */
-	      if (!ThisTask)
-		printf("\n[%s] Computing displacements for redshift %f\n",fdate(),Segment.z[mysegment]);
-	      if (shift_all_displacements())
-		return 1;
+	  /* it creates the map by setting to 1 the well-resolved region */
+	  if (!ThisTask)
+	    printf("[%s] Creating map of needed particles\n",fdate());
 
-	      if (compute_future_LPT_displacements(Segment.z[mysegment],(mysegment>0)))
-		return 1;
-
-	      tmp=MPI_Wtime();
-	      if (!ThisTask)
-		printf("[%s] Starting re-distribution of products\n",fdate());
-
-	      if (distribute())
-		return 1;
-
-	      tmp=MPI_Wtime()-tmp;
-	      cputime.distr += tmp;
-	      if (!ThisTask)
-		printf("[%s] Re-distribution of Fmax products done, cputime = %14.6f\n",fdate(),tmp);
-
-	      if (recompute_group_velocities())
-		return 1;
-	    }
-
-	  tmp=MPI_Wtime();
-      
-	  if (build_groups(Npeaks,Segment.z[mysegment]))
+	  if (create_map())
 	    return 1;
 
-	  cputime.group+=MPI_Wtime()-tmp;	  
+	  /* the rest of the first turn is skipped if there are PBCs in all directions */
+	  if (all_pbc)
+	    continue;
+
 	}
-#else
+      else if (!all_pbc)
+	{
+
+	  /* it updates the map by adding spheres around halos in the boundary layer */
+	  if (!ThisTask)
+	    printf("[%s] Updating map of needed particles\n",fdate());
+
+	  update_map(nadd);
+
+	  mynadd[0]=nadd[0];
+	  mynadd[1]=nadd[1];
+	  MPI_Reduce(mynadd, nadd_all, 2, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+
+	  if (!ThisTask)
+	    {
+	      printf("[%s] Requesting %Ld particles from the boundary layer\n",fdate(),nadd_all[0]);
+	      if (nadd_all[1])
+		printf("WARNING: %Ld requested particles lie beyond the boundary layer, some halos may be inaccurate\n",nadd_all[1]);
+	    }
+	}
+
+      /* redistribution of products for queried particles */
+      if (!ThisTask)
+	printf("[%s] Starting %s re-distribution of products\n",fdate(),(turn?"second":"first"));
+
       tmp=MPI_Wtime();
 
-      if (build_groups(Npeaks,outputs.zlast))
+      if (distribute())
 	return 1;
 
-      cputime.group+=MPI_Wtime()-tmp;
+      tmp=MPI_Wtime()-tmp;
+      cputime.distr += tmp;
+
+      mynadd[0]=subbox.Nstored;
+      MPI_Reduce(mynadd, nadd_all, 1, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+
+      if (!ThisTask)
+	printf("[%s] %s re-distribution of Fmax done, %Ld particles stored by all tasks, average overhead: %f, cputime = %14.6f\n",
+	       fdate(), (turn?"Second":"First"), nadd_all[0], 
+	       (float)nadd_all[0]/(float)MyGrids[0].Ntotal, tmp);
+
+      mynadd[0]=subbox.Nstored;
+      MPI_Reduce(mynadd, nadd_all, 1, MPI_UNSIGNED_LONG_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+
+      if (!ThisTask)
+	printf("[%s] Largest overhead: %f\n",fdate(),(float)nadd_all[0]/(float)MyGrids[0].ParticlesPerTask);
+
+      /* sets or updates the map of potentially loaded particles */
+      if (!turn)
+	for (int i=0; i<subbox.maplength; i++)
+	  frag_map[i]=frag_map_update[i];
+      else
+	for (int i=0; i<subbox.maplength; i++)
+	  frag_map[i]|=frag_map_update[i];
+
+#ifdef DEBUG
+      write_map(turn);
+#endif
+
+      /* this part sorts particles and reorganizes index arrays */
+      sort_and_organize();
+
+      /* counts the number of peaks in the sub-volume to know the number of groups */
+      Npeaks=count_peaks(&Ngood);
+
+      mynadd[0]=Ngood;
+      MPI_Reduce(mynadd, nadd_all, 1, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+
+      if (!ThisTask)
+	{
+	  printf("[%s] Task 0 found %d peaks, %d in the well resolved region. Total number of peaks: %Ld\n",
+		 fdate(),Npeaks,Ngood,nadd_all[0]);
+	}
+
+       /* the number of peaks was supposed to be at most 1/10 of the number of particles
+	 (we need space for Npeaks+2 groups) */
+      if (Npeaks+2 > subbox.PredNpeaks)
+	{
+	  printf("ERROR on task %d: the number of peaks %d exceeds the predicted one (%d)\n",
+		 ThisTask,Npeaks,subbox.PredNpeaks);
+	  printf("      Please increase PredPeakFactor and restart\n");
+	  fflush(stdout);
+	  return 1;
+	}
+
+      if (turn)
+	{
+	  /* Gives the minimal PredPeakFactor */
+	  mynadd[0]=Npeaks;
+	  MPI_Reduce(mynadd, nadd_all, 1, MPI_UNSIGNED_LONG_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+
+	  if (!ThisTask)
+	    printf("[%s] The PredPeakFactor parameter could have been %5.2f in place of %5.2f\n",
+		   fdate(),(double)nadd_all[0]/(double)MyGrids[0].ParticlesPerTask*6.0,
+		   params.PredPeakFactor);
+	}
+
+
+      /* sets arrays to zero */
+      memset(group_ID,0,subbox.Nalloc*sizeof(int));
+      memset(linking_list,0,subbox.Nalloc*sizeof(int));
+      memset(groups,0,subbox.PredNpeaks*sizeof(group_data));
+      memset(wheretoplace_mycat,0,subbox.PredNpeaks*sizeof(histories_data));
+#ifdef PLC
+      memset(plcgroups,0,plc.Nmax*sizeof(plcgroup_data));
+#endif
+
+      if (!turn)
+	{
+
+	  /* quick fragmentation is done in a shot */
+	  tmp=MPI_Wtime();
+
+	  /* quickly generates the group catalogue */
+	  if (quick_build_groups(Npeaks))
+	  return 1;
+
+	  tmp=MPI_Wtime()-tmp;
+	  cputime.group+=tmp;
+	  if (!ThisTask)
+	    printf("[%s] Quick fragmentation done, cputime = %14.6f\n",fdate(),tmp);
+
+	}
+      else
+	{
+
+	  /* full fragmentation is done segmenting the redshift interval */
+	  for (mysegment=0; mysegment<Segment.n; mysegment++)
+	    {
+	      Segment.mine=mysegment;
+
+
+#ifdef RECOMPUTE_DISPLACEMENTS
+	      /* The first segment uses only the first computed velocity
+		 The second segment has the two velocities already loaded */
+	      if (mysegment>=2)
+		{
+		  /* computation of displacements for the next redshift */
+		  if (!ThisTask)
+		    printf("\n[%s] Computing displacements for redshift %f\n",fdate(),Segment.z[mysegment]);
+		  if (shift_all_displacements())
+		    return 1;
+
+		  if (compute_future_LPT_displacements(Segment.z[mysegment],1))
+		    return 1;
+
+		  tmp=MPI_Wtime();
+		  if (!ThisTask)
+		    printf("[%s] Starting re-distribution of products\n",fdate());
+
+		  full_map(); // QUESTA E` DA SCRIVERE (forse)
+
+		  if (distribute())
+		    return 1;
+
+		  tmp=MPI_Wtime()-tmp;
+		  cputime.distr += tmp;
+		  if (!ThisTask)
+		    printf("[%s] Re-distribution of Fmax products done, cputime = %14.6f\n",fdate(),tmp);
+
+		  if (recompute_group_velocities())  // RIVEDERE
+		    return 1;
+		}
 #endif
 
 
-      /* next slice */
-      subbox.mybox_z += subbox.nbox_z_thisslice;
-      subbox.start_z = find_start(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,subbox.mybox_z);
-      subbox.Lgrid_z = find_length(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,subbox.mybox_z);
-      subbox.stabl_z = subbox.start_z - subbox.safe_z;
+	      tmp=MPI_Wtime();
+      
+	      //scrivi(); //LEVARE
 
+	      if (build_groups(Npeaks,Segment.z[mysegment],(mysegment==0)))
+		return 1;
+
+	      tmp=MPI_Wtime()-tmp;
+	      if (!ThisTask)
+		printf("[%s] Fragmentation done to redshift %6.4f, cputime = %14.6f\n",
+		       fdate(),Segment.z[mysegment],tmp);
+	      cputime.group+=tmp;
+	    }
+	}
     }
+
+#endif
+
   /* cpu time for fragmentation */
   cputime.frag = MPI_Wtime() - cputime.frag;
 
@@ -239,79 +577,127 @@ int fragment()
 }
 
 
-static int index_compare(const void * a,const void * b)
+void sort_and_organize(void)
 {
-  if ( frag[*((int *)a)].Fmax == frag[*((int *)b)].Fmax )
-    return 0;
-  else
-    if ( frag[*((int *)a)].Fmax > frag[*((int *)b)].Fmax )
-      return -1;
-    else
-      return 1;
-}
-
-
-int init_fragment_1(void)
-{
-  /* Initializes all quantities for the run */
-  set_fragment_parameters(ORDER_FOR_GROUPS);
-
-  /* reallocates the memory, for the part needed to redistribution */
-  if (reallocate_memory_for_fragmentation_1())
-    return 1;
-
-  return 0;
-}
-
-
-int init_fragment_2(int *Npeaks)
-{
-  int Ngood, tot_good;
   double tmp;
-
-  tmp=MPI_Wtime();
-
-  /* this routine redistributes the products from planes to sub-boxes */
-  if (!ThisTask)
-    printf("[%s] Starting re-distribution of products\n",fdate());
-  if (distribute())
-    return 1;
-
-  tmp=MPI_Wtime()-tmp;
-  cputime.distr += tmp;
-  if (!ThisTask)
-    printf("[%s] Re-distribution of Fmax products done, cputime = %14.6f\n",fdate(),tmp);
-
-  /* counts the number of peaks in the sub-volume to know the number of groups */
-  *Npeaks=count_peaks(&Ngood);
-
-  if (MPI_Reduce(&Ngood, &tot_good, 1, 
-		 MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD) != MPI_SUCCESS)
-    {
-      printf("ERROR on task %d: init_fragment failed an MPI_Reduce\n",ThisTask);
-      fflush(stdout);
-      return 1;
-    }
-
-  if (!ThisTask)
-    printf("[%s] Task 0 found %d peaks, in the well resolved region: %d. Total number of peaks: %d\n",
-	   fdate(),*Npeaks,Ngood,tot_good);
-
-  if (reallocate_memory_for_fragmentation_2(*Npeaks))
-    return 1;
+  int i;
 
   tmp=MPI_Wtime();
   if (!ThisTask)
     printf("[%s] Starting sorting\n",fdate());
 
-  qsort((void *)indices, subbox.Npart, sizeof(int), index_compare);
+  /* sort particles in order of descending Fmax */
+  for (i=0; i<subbox.Nstored; i++)
+    *(indices+i)=i;
+  qsort((void *)indices, subbox.Nstored, sizeof(int), index_compare_F);
+
+  /* this is needed to reorder */
+  for (i=0; i<subbox.Nstored; i++)
+    indicesY[indices[i]]=i;
+
+  /* reorder the frag data structure and frag_pos in order of descending Fmax */
+  reorder(indicesY, subbox.Nstored);
+
+  /* sort particles in order of ascending position */
+  qsort((void *)indices, subbox.Nstored, sizeof(int), index_compare_P);
+  /* create a vector sorted_pos with sorted positions and pointers to it */
+  for (i=0; i<subbox.Nstored; i++)
+    sorted_pos[i]=frag_pos[i];
+
+  /* reorder the sorted vector */
+  for (i=0; i<subbox.Nstored; i++)
+    indicesY[indices[i]]=i;
+  reorder_nofrag(indicesY,subbox.Nstored);
 
   tmp=MPI_Wtime()-tmp;
   cputime.sort+=tmp;
   if (!ThisTask)
     printf("[%s] Sorting done, total cputime = %14.6f\n",fdate(),tmp);
 
-  return 0;
+}
+
+
+static int compare_search(const void * a,const void * b)
+{
+  if ( *((int *)a) == *((int *)b) )
+    return 0;
+  else
+    if ( *((int *)a) < *((int *)b) )
+      return -1;
+    else
+      return 1;
+}
+
+/* reorders frag_pos and frag after they have been index-sorted */
+void reorder(int *ind, int n) 
+{
+  int i,oldf,next,tmp;
+  product_data oldF,tmpF;
+
+  memset(&oldF,0,sizeof(product_data));
+  memset(&tmpF,0,sizeof(product_data));
+  for (i=0; i<n; i++)
+    {
+      if (ind[i]!=i)
+	{
+	  oldf=frag_pos[i];
+	  memcpy(&oldF,&frag[i],sizeof(product_data));
+	  next=ind[i];
+	  while (next != i) 
+	    {
+	      tmp=frag_pos[next];	    
+	      frag_pos[next]=oldf;
+	      oldf=tmp;
+	      memcpy(&tmpF,&frag[next],sizeof(product_data));
+	      memcpy(&frag[next],&oldF,sizeof(product_data));
+	      memcpy(&oldF,&tmpF,sizeof(product_data));
+	      tmp=ind[next];
+	      ind[next]=next;
+	      next=tmp;
+	    }
+	  frag_pos[i]=oldf;
+	  memcpy(&frag[i],&oldF,sizeof(product_data));
+	  ind[i]=next;
+	}
+    } 
+}
+
+/* reorders only frag_pos after it has been index-sorted */
+void reorder_nofrag(int *ind, int n) 
+{
+  int i,oldf,next,tmp;
+
+  for (i=0; i<n; i++)
+    {
+      if (ind[i]!=i)
+	{
+	  oldf=sorted_pos[i];
+	  next=ind[i];
+	  while (next != i) 
+	    {
+	      tmp=sorted_pos[next];
+	      sorted_pos[next]=oldf;
+	      oldf=tmp;
+	      tmp=ind[next];
+	      ind[next]=next;
+	      next=tmp;
+	    }
+	  sorted_pos[i]=oldf;
+	  ind[i]=next;
+	}
+    } 
+}
+
+int find_location(int i,int j,int k)
+{
+  /* this function finds the location in the frag and frag_pos vectors of a given particle */
+
+  int pos = i + (j + k*subbox.Lgwbl_y)*subbox.Lgwbl_x;
+  int *nn=bsearch((void*)&pos,(void*)sorted_pos,(size_t)subbox.Nstored,sizeof(int),compare_search);
+  if (nn!=0x0)
+    return nn-sorted_pos;
+  else
+    return -1; /* if the particle is not stored, it returns -1 */
 }
 
 
@@ -321,20 +707,32 @@ int count_peaks(int *ngood)
   /* counts the number of Fmax peaks down to the final redshift
      to know the total number of groups */
 
-  int iz,i,j,k,kk,nn,ngroups_tot,Lgridxy,peak_cond,i1,j1,k1;
+  int iz,i,j,k,kk,nn,ngroups_tot,peak_cond,i1,j1,k1;
 
-  ngroups_tot=0;     /* number of groups, group 1 is the filament group */
-  *ngood=0;          /* number of groups out of the safety boundary */
-  Lgridxy = subbox.Lgwbl_x * subbox.Lgwbl_y;
+#ifdef DEBUG
+  FILE *fd=fopen("peaks.dat","w");
+#endif
 
-  for (iz=0; iz<subbox.Npart; iz++)
+  ngroups_tot=0;     // number of groups, group 1 is the filament group
+  *ngood=0;          // number of groups out of the safety boundary
+
+#ifdef CLASSIC_FRAGMENTATION
+  int Lgridxy = subbox.Lgwbl_x * subbox.Lgwbl_y;
+#else
+  int pos;
+#endif
+  for (iz=0; iz<subbox.Nstored; iz++)
     {
-
       /* position on the local box */
-      k=iz/Lgridxy;
-      kk=iz-k*Lgridxy;
-      j=kk/subbox.Lgwbl_x;
-      i=kk-j*subbox.Lgwbl_x;
+#ifdef CLASSIC_FRAGMENTATION
+      i  = iz%subbox.Lgwbl_x;
+      kk = iz/subbox.Lgwbl_x;
+#else
+      i  = frag_pos[iz]%subbox.Lgwbl_x;
+      kk = frag_pos[iz]/subbox.Lgwbl_x;
+#endif
+      j  = kk%subbox.Lgwbl_y;
+      k  = kk/subbox.Lgwbl_y;
 
       /* avoid borders */
       if ( !subbox.pbc_x && (i==0 || i==subbox.Lgwbl_x-1) ) continue;
@@ -379,23 +777,175 @@ int count_peaks(int *ngood)
 	      break;
 	    }
 
+#ifdef CLASSIC_FRAGMENTATION
 	  peak_cond &= (frag[iz].Fmax > frag[i1 +j1*subbox.Lgwbl_x + k1*Lgridxy].Fmax);
+#else
+	  /* looks for the neighbouring particle in the list */
+	  pos = find_location(i1,j1,k1);
+	  if (pos>=0)
+	    peak_cond &= (frag[iz].Fmax > frag[indices[pos]].Fmax);
+#endif
+
+	  if (!peak_cond)
+	    break;
 
 	}
 
-      if (peak_cond && frag[iz].Fmax >= outputs.Flast)
+      if (peak_cond)
 	{
 	  ngroups_tot++;
 	  if ( i>=subbox.safe_x && i<subbox.Lgwbl_x-subbox.safe_x &&
 	       j>=subbox.safe_y && j<subbox.Lgwbl_y-subbox.safe_y &&
 	       k>=subbox.safe_z && k<subbox.Lgwbl_z-subbox.safe_z)
 	    (*ngood)++;
+#ifdef DEBUG
+	  fprintf(fd," %2d %2d %2d   %12.10f\n",i,j,k,frag[iz].Fmax);
+#endif
 
 	}
     }
 
+#ifdef DEBUG
+  fclose(fd);
+#endif
+
   return ngroups_tot;
 }
+
+
+int create_map()
+{
+  int i,j,k,i1,i2,j1,j2,k1,k2;
+
+  /* sets to 1 all particles in the well-resolved region plus one row for each side (without PBCs) */
+  memset(frag_map_update, 0, subbox.maplength*sizeof(unsigned int));
+  if (!subbox.pbc_x)
+    {
+      i1=subbox.safe_x-1;
+      i2=subbox.Lgrid_x+subbox.safe_x+1;
+    }
+  else
+    {
+      i1=0;
+      i2=subbox.Lgrid_x;
+    }
+  if (!subbox.pbc_y)
+    {
+      j1=subbox.safe_y-1;
+      j2=subbox.Lgrid_y+subbox.safe_y+1;
+    }
+  else
+    {
+      j1=0;
+      j2=subbox.Lgrid_y;
+    }
+  if (!subbox.pbc_z)
+    {
+      k1=subbox.safe_z-1;
+      k2=subbox.Lgrid_z+subbox.safe_z+1;
+    }
+  else
+    {
+      k1=0;
+      k2=subbox.Lgrid_z;
+    }
+
+  for (i=i1; i<i2; i++)
+    for (j=j1; j<j2; j++)
+      for (k=k1; k<k2; k++)
+	set_mapup_bit(i,j,k);
+
+  return 0;
+}
+
+void set_mapup_bit(int i, int j, int k)
+{
+  /* this operates on frag_map_update */
+  unsigned int pos = i + (j + k*subbox.Lgwbl_y)*subbox.Lgwbl_x;
+  frag_map_update[pos/UINTLEN]|=(1<<pos%UINTLEN);
+}
+
+int get_mapup_bit(unsigned int pos)
+{
+  /* this operates on frag_map_update */
+  /* unsigned int pos = i + (j + k*subbox.Lgwbl_y)*subbox.Lgwbl_x; */
+  unsigned int rem = pos%UINTLEN;
+  return (frag_map_update[pos/UINTLEN] & (1<<rem))>>rem;
+}
+
+int get_map_bit(int i, int j, int k)
+{
+  /* this operates on frag_map */
+  unsigned int pos = i + (j + k*subbox.Lgwbl_y)*subbox.Lgwbl_x;
+  unsigned int rem = pos%UINTLEN;
+  return (frag_map[pos/UINTLEN] & (1<<rem))>>rem;
+}
+
+void write_map(int turn)
+{
+  int i,j,k;
+  unsigned int pos,rem;
+  char fname[LBLENGTH];
+  sprintf(fname,"map_task%d_turn%d.txt",ThisTask,turn);
+  FILE *fd=fopen(fname,"w"); 
+  for (k=0; k<subbox.Lgwbl_z; k++)
+    {
+      fprintf(fd,"k=%d\n",k);
+      for (j=0; j<subbox.Lgwbl_y; j++)
+	{
+	  for (i=0; i<subbox.Lgwbl_x; i++)
+	    {
+	      pos = i + (j + k*subbox.Lgwbl_y)*subbox.Lgwbl_x;
+	      rem = pos%UINTLEN;
+	      fprintf(fd,"%1d",(frag_map[pos/UINTLEN] & (1<<rem))>>rem);
+	    }
+	  fprintf(fd,"\n");
+	}
+    }
+  fclose(fd);
+  sprintf(fname,"mapup_task%d_turn%d.txt",ThisTask,turn);
+  fd=fopen(fname,"w"); 
+  for (k=0; k<subbox.Lgwbl_z; k++)
+    {
+      fprintf(fd,"k=%d\n",k);
+      for (j=0; j<subbox.Lgwbl_y; j++)
+	{
+	  for (i=0; i<subbox.Lgwbl_x; i++)
+	    {
+	      pos = i + (j + k*subbox.Lgwbl_y)*subbox.Lgwbl_x;
+	      rem = pos%UINTLEN;
+	      fprintf(fd,"%1d",(frag_map_update[pos/UINTLEN] & (1<<rem))>>rem);
+	    }
+	  fprintf(fd,"\n");
+	}
+    }
+  fclose(fd);
+}
+
+
+
+int init_segmentation(void)
+{
+  /* Fragmentation is segmented into redshift bins, 
+     that may be a unique one from infinity to the last redshit */
+
+#ifdef RECOMPUTE_DISPLACEMENTS
+  /* here the segmentation of the fragmentation process is defined */
+  /* for now, segmentation is taken from the outputs file */
+  Segment.n=outputs.n;
+  for (int i=0; i<outputs.n; i++)
+    Segment.z[i]=outputs.z[i];
+  Segment.mine=1;
+  return 0;
+#else
+  Segment.n=1;
+  Segment.z[0]=outputs.zlast;
+  Segment.mine=0;
+  return 0;
+#endif
+
+}
+
 
 
 #ifdef RECOMPUTE_DISPLACEMENTS
@@ -416,7 +966,7 @@ int compute_future_LPT_displacements(double z, int after)
 
   /* Zeldovich displacements */
   if (!ThisTask)
-    printf("[%s] Computing future LPT displacements  -- %s\n",fdate(), tag); // levare tag
+    printf("[%s] Computing future LPT displacements  -- %s\n",fdate());
 
   for (ia=1; ia<=3; ia++)
     {
@@ -514,18 +1064,6 @@ int compute_future_LPT_displacements(double z, int after)
   return 0;
 }
 
-
-int init_segmentation(void)
-{
-
-  /* here the segmentation of the fragmentation process is defined */
-  /* for now, segmentation is taken from the outputs file */
-  Segment.n=outputs.n;
-  for (int i=0; i<outputs.n; i++)
-    Segment.z[i]=outputs.z[i];
-  Segment.mine=1;
-  return 0;
-}
 
 int shift_all_displacements()
 {

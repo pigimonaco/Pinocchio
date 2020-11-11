@@ -151,10 +151,6 @@ int write_snapshot(int iout)
 
 
 
-  /* Snapshots are written only if fragmentation is done in one slice */
-  if (NSlices>1)
-    return 0;
-
   NTasksPerFile=NTasks/params.NumFiles;
   ThisFile=ThisTask/NTasksPerFile;
   collector=ThisFile*NTasksPerFile;
@@ -298,7 +294,7 @@ int write_snapshot(int iout)
 	  my_strcpy(wn,InfoBlock[tb].name,4);
 	  wn[4]='\0';
 	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[9]='\0';
+	  wt[8]='\0';
 	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
 		 wn,wt,
 		 /* InfoBlock[tb].name, */
@@ -323,7 +319,7 @@ int write_snapshot(int iout)
 	  my_strcpy(wn,InfoBlock[tb].name,4);
 	  wn[4]='\0';
 	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[9]='\0';
+	  wt[8]='\0';
 	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
 		 wn,wt,
 		 /* InfoBlock[tb].name, */
@@ -348,7 +344,7 @@ int write_snapshot(int iout)
 	  my_strcpy(wn,InfoBlock[tb].name,4);
 	  wn[4]='\0';
 	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[9]='\0';
+	  wt[8]='\0';
 	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
 		 wn,wt,
 		 /* InfoBlock[tb].name, */
@@ -378,7 +374,7 @@ int write_snapshot(int iout)
 	  my_strcpy(wn,InfoBlock[tb].name,4);
 	  wn[4]='\0';
 	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[9]='\0';
+	  wt[8]='\0';
 	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
 		 wn,wt,
 		 /* InfoBlock[tb].name, */
@@ -404,7 +400,7 @@ int write_snapshot(int iout)
 	  my_strcpy(wn,InfoBlock[tb].name,4);
 	  wn[4]='\0';
 	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[9]='\0';
+	  wt[8]='\0';
 	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
 		 wn,wt,
 		 /* InfoBlock[tb].name, */
@@ -429,7 +425,7 @@ int write_snapshot(int iout)
 	  my_strcpy(wn,InfoBlock[tb].name,4);
 	  wn[4]='\0';
 	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[9]='\0';
+	  wt[8]='\0';
 	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
 		 wn,wt,
 		 /* InfoBlock[tb].name, */
@@ -1229,17 +1225,10 @@ int write_timeless_snapshot(void)
   /* The collector task opens the file and writes the header */
   if (ThisTask==collector)
     {
-      if (NSlices==1)
-	{
-	  if (params.NumFiles>1)
-	    sprintf(filename,"pinocchio.%s.t_snapshot.out.%d",params.RunFlag,ThisFile);
-	  else
-	    sprintf(filename,"pinocchio.%s.t_snapshot.out",params.RunFlag);
-	}
+      if (params.NumFiles>1)
+	sprintf(filename,"pinocchio.%s.t_snapshot.out.%d",params.RunFlag,ThisFile);
       else
-	{
-	  sprintf(filename,"pinocchio.%s.t_snapshot.out.%d",params.RunFlag,ThisFile+ThisSlice*params.NumFiles);
-	}
+	sprintf(filename,"pinocchio.%s.t_snapshot.out",params.RunFlag);
 	    
 
       if (!ThisTask)
@@ -1301,7 +1290,7 @@ int write_timeless_snapshot(void)
 	  my_strcpy(wn,InfoBlock[tb].name,4);
 	  wn[4]='\0';
 	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[9]='\0';
+	  wt[8]='\0';
 	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
 		 wn,wt,
 		 /* InfoBlock[tb].name, */
@@ -1327,7 +1316,7 @@ int write_timeless_snapshot(void)
 	  my_strcpy(wn,InfoBlock[tb].name,4);
 	  wn[4]='\0';
 	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[9]='\0';
+	  wt[8]='\0';
 	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
 		 wn,wt,
 		 /* InfoBlock[tb].name, */
@@ -1354,7 +1343,7 @@ int write_timeless_snapshot(void)
 	  my_strcpy(wn,InfoBlock[tb].name,4);
 	  wn[4]='\0';
 	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[9]='\0';
+	  wt[8]='\0';
 	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
 		 wn,wt,
 		 /* InfoBlock[tb].name, */
@@ -1381,7 +1370,7 @@ int write_timeless_snapshot(void)
 	  my_strcpy(wn,InfoBlock[tb].name,4);
 	  wn[4]='\0';
 	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[9]='\0';
+	  wt[8]='\0';
 	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
 		 wn,wt,
 		 /* InfoBlock[tb].name, */
@@ -1407,7 +1396,7 @@ int write_timeless_snapshot(void)
 	  my_strcpy(wn,InfoBlock[tb].name,4);
 	  wn[4]='\0';
 	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[9]='\0';
+	  wt[8]='\0';
 	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
 		 wn,wt,
 		 /* InfoBlock[tb].name, */
@@ -1435,7 +1424,7 @@ int write_timeless_snapshot(void)
 	  my_strcpy(wn,InfoBlock[tb].name,4);
 	  wn[4]='\0';
 	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[9]='\0';
+	  wt[8]='\0';
 	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
 		 wn,wt,
 		 /* InfoBlock[tb].name, */
@@ -1461,7 +1450,7 @@ int write_timeless_snapshot(void)
 	  my_strcpy(wn,InfoBlock[tb].name,4);
 	  wn[4]='\0';
 	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[9]='\0';
+	  wt[8]='\0';
 	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
 		 wn,wt,
 		 /* InfoBlock[tb].name, */
@@ -1487,7 +1476,7 @@ int write_timeless_snapshot(void)
 	  my_strcpy(wn,InfoBlock[tb].name,4);
 	  wn[4]='\0';
 	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[9]='\0';
+	  wt[8]='\0';
 	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
 		 wn,wt,
 		 /* InfoBlock[tb].name, */

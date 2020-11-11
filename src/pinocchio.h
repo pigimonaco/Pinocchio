@@ -56,6 +56,8 @@
 #define TWO_LPT
 #endif
 
+#define UINTLEN 32   // 8*sizeof(unsigned int)
+
 #if defined(RECOMPUTE_DISPLACEMENTS) && defined(THREE_LPT)
 #error RECOMPUTE_DISPLACEMENTS and THREE_LPT should not be used together
 #endif
@@ -155,7 +157,8 @@ typedef struct
   unsigned int GSlocal_k_x, GSlocal_k_y, GSlocal_k_z;
   unsigned int GSstart_k_x, GSstart_k_y, GSstart_k_z;
   unsigned int total_local_size,total_local_size_fft;
-  unsigned int off;
+  unsigned int off, ParticlesPerTask;
+  unsigned long long Ntotal;
   double lower_k_cutoff, upper_k_cutoff, norm, BoxSize, CellSize;
   fftw_plan forward_plan, reverse_plan;
 } grid_data;
@@ -187,7 +190,7 @@ typedef struct
   double Omega0, OmegaLambda, Hubble100, Sigma8, OmegaBaryon, DEw0, DEwa, 
     PrimordialIndex, InterPartDist, BoxSize, BoxSize_htrue, BoxSize_h100, ParticleMass, 
     StartingzForPLC, LastzForPLC, InputSpectrum_UnitLength_in_cm, WDM_PartMass_in_kev, 
-    BoundaryLayerFactor, Largest, MaxMemPerParticle, k_for_GM, PLCAperture,
+    BoundaryLayerFactor, Largest, MaxMemPerParticle, k_for_GM, PredPeakFactor, PLCAperture,
     PLCCenter[3], PLCAxis[3];
   char RunFlag[SBLENGTH],DataDir[SBLENGTH],TabulatedEoSfile[LBLENGTH],ParameterFile[LBLENGTH],
     OutputList[LBLENGTH],FileWithInputSpectrum[LBLENGTH],CTtableFile[LBLENGTH];
@@ -211,8 +214,9 @@ extern output_data outputs;
 
 typedef struct
 {
-  unsigned int safe, Npart;
-  int nbox_x,  nbox_y,  nbox_z_thisslice, nbox_z_allslices;
+  unsigned int safe, Ngood, PredNpeaks, maplength;
+  unsigned long long int Nalloc, Nstored, Npart;
+  int nbox_x,  nbox_y,  nbox_z;
   int mybox_x, mybox_y, mybox_z;
   int Lgrid_x, Lgrid_y, Lgrid_z; 
   int Lgwbl_x, Lgwbl_y, Lgwbl_z; 
@@ -239,28 +243,28 @@ extern int WindowFunctionType;
 typedef struct
 {
   int Mass;
-  double Pos[3],Vel[3];
+  PRODFLOAT Pos[3],Vel[3];
 #ifdef TWO_LPT
-  double Vel_2LPT[3];
+  PRODFLOAT Vel_2LPT[3];
 #ifdef THREE_LPT
-  double Vel_3LPT_1[3], Vel_3LPT_2[3];
+  PRODFLOAT Vel_3LPT_1[3], Vel_3LPT_2[3];
 #endif
 #endif
 #ifdef RECOMPUTE_DISPLACEMENTS
-  double Vel_after[3];
+  PRODFLOAT Vel_after[3];
 #ifdef TWO_LPT
-  double Vel_2LPT_after[3];
+  PRODFLOAT Vel_2LPT_after[3];
 #ifdef THREE_LPT
-  double Vel_3LPT_1_after[3], Vel_3LPT_2_after[3];
+  PRODFLOAT Vel_3LPT_1_after[3], Vel_3LPT_2_after[3];
 #endif
 #endif
 #endif
   int ll, halo_app, mass_at_merger, merged_with, point, bottom, good;
-  double t_appear, t_peak, t_merge;
+  PRODFLOAT t_appear, t_peak, t_merge;
   unsigned long long int name;
   int trackT,trackC;
 #ifdef PLC
-  double Flast;
+  PRODFLOAT Flast;
 #endif
 } group_data;
 extern group_data *groups;
@@ -269,7 +273,7 @@ extern group_data *groups;
 typedef struct
 {
   int i,j,k;
-  double F1,F2;
+  PRODFLOAT F1,F2;
 } replication_data;
 
 typedef struct
@@ -285,15 +289,15 @@ typedef struct
 {
   int Mass;
   unsigned long long int name;
-  double z,x[3],v[3],rhor,theta,phi;
+  PRODFLOAT z,x[3],v[3]; //,rhor,theta,phi;
 } plcgroup_data;
 extern plcgroup_data *plcgroups;
 #endif
 
 extern char date_string[25];
 
-extern int *indices,*group_ID,*linking_list;
-extern int NSlices,ThisSlice;
+extern int *frag_pos,*indices,*indicesY,*sorted_pos,*group_ID,*linking_list;
+extern unsigned int *frag_map, *frag_map_update;
 
 /* fragmentation parameters */
 extern double f_m, f_rm, espo, f_a, f_ra, f_200, sigmaD0;
@@ -306,7 +310,11 @@ typedef struct
 {
   unsigned long long int name;
   int nick, ll, mw, mass, mam;
+#ifdef LIGHT_OUTPUT
+  PRODFLOAT zme, zpe, zap;
+#else
   double zme, zpe, zap;
+#endif
 }  histories_data;
 
 #define DELTAM 0.05
@@ -332,6 +340,14 @@ extern gsl_interp_accel **ACCEL_INVGROW;
 extern double H_over_c;
 #endif
 
+typedef struct
+{
+  size_t prods, fields, fields_to_keep, fft, first_allocated, fmax_total, 
+    frag_prods, frag_arrays, groups, frag_allocated, frag_total, all_allocated, all;
+} memory_data;
+extern memory_data memory;
+
+
 /* prototypes for functions defined in collapse_times.c */
 int compute_collapse_times(int);
 int compute_velocities(int);
@@ -353,11 +369,11 @@ void write_in_rvector(int, double *);
 void write_from_rvector(int, double *);
 
 /* prototypes for functions defined in allocations.c */
+unsigned long long int organize_main_memory(void);
 int allocate_main_memory(void);
 int deallocate_fft_vectors(int);
-int reallocate_memory_for_fragmentation_1();
-int reallocate_memory_for_fragmentation_2(int);
-
+int reallocate_memory_for_fragmentation(void);
+//int rearrange_memory(int);
 
 /* prototypes for functions defined in GenIC.c */
 int GenIC(int);
@@ -369,6 +385,8 @@ int find_start(int, int, int);
 int find_length(int, int, int);
 int set_parameters(void);
 int set_grids(void);
+int set_subboxes(void);
+int set_smoothing(void);
 
 /* prototypes in write_fields.c */
 int write_fields(void);
@@ -433,10 +451,15 @@ int compute_LPT_displacements(int);
 int distribute(void);
 
 /* prototypes for functions defined in fragment.c */
-int fragment(void);
+int fragment_driver(void);
+int get_mapup_bit(unsigned int);
+int get_map_bit(int, int, int);
+void set_mapup_bit(int, int, int);
 
 /* prototypes for functions defined in build_groups.c */
-int build_groups(int,double);
+int build_groups(int,double,int);
+int quick_build_groups(int);
+int update_map(unsigned int *);
 
 #ifdef WHITENOISE
 int read_white_noise(void);

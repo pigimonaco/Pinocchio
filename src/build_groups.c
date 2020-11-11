@@ -43,18 +43,23 @@ int replicate[3];
 double brent_err;
 #define SAFEPLC 3
 
-double condition_PLC(double);
+double condition_PLC(PRODFLOAT);
 double condition_F(double, void *);
-int store_PLC(double);
+int store_PLC(PRODFLOAT);
 double find_brent(double, double);
 #endif
 
-int build_groups(int Npeaks, double zstop)
+int build_groups(int Npeaks, double zstop, int first_call)
 {
 
-  int merge[NV][NV], neigh[NV], fil_list[NV][3];
-  static int iout,Lgridxy,nstep,nstep_p;
-  int nn,ifil,indx,neigrp,nf;
+  int merge[NV][NV], neigh[NV], fil_list[NV][4];
+  static int iout,nstep,nstep_p;
+#ifdef CLASSIC_FRAGMENTATION
+  static int Lgridxy;
+#else
+  int pos;
+#endif
+  int nn,ifil,this_z,neigrp,nf;
   int iz,kk,i1,j1,k1,skip;
   int ig3,small,large,to_group,accgrp,ig1,ig2;
   int accrflag,nmerge,peak_cond;
@@ -62,7 +67,7 @@ int build_groups(int Npeaks, double zstop)
   int merge_flag;
   int ibox,jbox,kbox;
 
-  static int first_call=1,last_iz=0;
+  static int last_z=0;
 
     /*
       counters:
@@ -79,7 +84,7 @@ int build_groups(int Npeaks, double zstop)
   static unsigned int counters[NCOUNTERS],all_counters[NCOUNTERS];
 
 #ifdef PLC
-  static int plc_started=0, last_check_done=0, last_stored=0;
+  static int plc_started=0, last_check_done=0, plc_saved=0;
   int irep, save, mysave, storex, storey, storez;
   static double NextF_PLC, DeltaF_PLC;
   double aa, bb, Fplc;
@@ -89,9 +94,17 @@ int build_groups(int Npeaks, double zstop)
   if (first_call)
     {
       /* Initializations */
-      ngroups=FILAMENT;           /* number of groups + filaments */
+      ngroups=FILAMENT;           /* group list starts from FILAMENTS */
+      /* filaments are not grouped! */
+      for (i1=0; i1<=FILAMENT; i1++)
+	{
+	  groups[i1].point=-1;
+	  groups[i1].bottom=-1;
+	  groups[i1].good=0;
+	}
+#ifdef CLASSIC_FRAGMENTATION
       Lgridxy = subbox.Lgwbl_x * subbox.Lgwbl_y;
-
+#endif
       iout=0;
 
       for (i1=0; i1<NCOUNTERS; i1++)
@@ -100,17 +113,19 @@ int build_groups(int Npeaks, double zstop)
 	  all_counters[i1]=0;
 	}
 
-      groups[FILAMENT].point = groups[FILAMENT].bottom = subbox.Npart; /* filaments are not grouped! */
 
       if (!ThisTask)
 	printf("[%s] Starting the fragmentation process to redshift %7.4f\n",fdate(),zstop);
 
       /* Calculates the number of steps required */
 
+#ifdef CLASSIC_FRAGMENTATION
       nstep=0;
       while (frag[indices[nstep]].Fmax >= outputs.Flast)
 	nstep++;
-
+#else
+      nstep=subbox.Nstored;
+#endif
       nstep_p=nstep/20;
 
 #ifdef PLC
@@ -125,9 +140,8 @@ int build_groups(int Npeaks, double zstop)
       start[1]=(double)subbox.stabl_y;
       start[2]=(double)subbox.stabl_z;
       NextF_PLC=plc.Fstart;
-      DeltaF_PLC=0.9;
-      brent_err = 1.e-3 * params.InterPartDist;
-      last_stored=0;
+      DeltaF_PLC=0.99; // CAPIRE COME FISSARLO
+      brent_err = 1.e-2 * params.InterPartDist;
       plc.Nstored=0;
 #endif
 
@@ -142,48 +156,85 @@ int build_groups(int Npeaks, double zstop)
   /************************************************************************
                         START OF THE CYCLE ON POINTS
    ************************************************************************/
-  for (iz=last_iz; iz<=nstep; iz++)
+  for (this_z=last_z; this_z<nstep; this_z++)
     {
+#ifdef CLASSIC_FRAGMENTATION
+      iz=indices[this_z];
+#else
+      iz=this_z;
+#endif
 
-
-      if (iz<nstep-1 && frag[indices[iz]].Fmax < zstop+1.0)
+      if (frag[iz].Fmax < zstop+1.0)
 	{
 	  if (!ThisTask)
 	    printf("[%s] Pausing fragmentation process\n",fdate());
-	  last_iz=iz;
+	  last_z=this_z;
 	  return 0;
 	}
 
 #ifdef PLC
-      if (frag[indices[iz]].Fmax >= plc.Fstop)
-	/* if relevant, check whether it is time to sync the tasks for PLC output */
-	while (frag[indices[iz]].Fmax < NextF_PLC)
-	  {
-	    save=0;
-	    if (plc.Nstored==plc.Nmax && plc.Fstart==-1)
-	      mysave = 0;
-	    else
-	      mysave = (SAFEPLC * (plc.Nstored - last_stored) > plc.Nmax - plc.Nstored);
-	    MPI_Reduce(&mysave, &save, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-	    MPI_Bcast(&save, 1, MPI_INT, 0, MPI_COMM_WORLD);
+      if (frag[iz].Fmax >= plc.Fstop)
+	{
+	  /* check whether the plc buffer is full so that it is necessary to write the plc catalog */
+	  if (plc.Nmax - plc.Nstored < plc.Nreplications)
+	    {
+	      /* this condition should not be met twice in the same time interval */
+	      if (plc_saved)
+		{
 
-	    if (!ThisTask)
-	      printf("[%s] Syncing tasks...\n",fdate());
+		  printf(" %d %d %f\n",plc.Nmax, plc.Nstored, frag[iz].Fmax);
 
-	    if (save)
-	      {
-		if (write_PLC())
-		  return 1;
-		plc.Nstored=0;
-	      }
+		  printf("ERROR on Task %d: it needs to write PLC halos on the file\n",ThisTask);
+		  printf("                  but this has already been done in this time interval.\n");
+		  printf("                  The run will continue but the PLC will be incomplete.\n");
+		  printf("                  Probably there are too many replications.\n");
 
-	    NextF_PLC *= DeltaF_PLC;
-	    last_stored=plc.Nstored;
-	  }
+		  plc.Nstored=0;
+		}
+	      else
+		{
+
+		  /* if the number of free slots is less than the number
+		     of replications, it is time to store the plc */
+		  mysave=1;
+		  MPI_Reduce(&mysave, &save, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+		  MPI_Bcast(&save, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+		  plc_saved=1;
+
+		  if (write_PLC())
+		    return 1;
+		  plc.Nstored=0;
+
+		}
+
+	    }
+
+	  if (frag[iz].Fmax < NextF_PLC)
+	    {
+
+	      if (!plc_saved)
+		{
+		  /* this task has no need to save halos */
+		  mysave = 0;
+		  MPI_Reduce(&mysave, &save, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+		  MPI_Bcast(&save, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+		  if (save)
+		    {
+		      if (write_PLC())
+			return 1;
+		      plc.Nstored=0;
+		    }
+		}
+	      NextF_PLC *= DeltaF_PLC;
+	      plc_saved=0;
+	    }
+	}
 #endif
 
       /* Give output if relevant */
-      while (frag[indices[iz]].Fmax < outputs.F[iout])
+      while (this_z==nstep-1 || frag[iz].Fmax < outputs.F[iout])
 	{
 	  cputmp=MPI_Wtime();
 
@@ -213,11 +264,11 @@ int build_groups(int Npeaks, double zstop)
 	  cputime.io += MPI_Wtime() - cputmp;
 
 	  iout++;
-	  if (iz==nstep-1)
+	  if (this_z==nstep-1)
 	    break;
 	}
 
-      if (iout==outputs.n)
+      if (this_z==nstep-1 || iout==outputs.n)
 	break;
 
       /* More initializations */
@@ -229,10 +280,15 @@ int build_groups(int Npeaks, double zstop)
 	neigh[i1]=0;          /* number of neighbours */
 
       /* grid coordinates from the indices (sub-box coordinates) */
-      kbox=indices[iz]/Lgridxy;
-      kk=indices[iz]-kbox*Lgridxy;
-      jbox=kk/subbox.Lgwbl_x;
-      ibox=kk-jbox*subbox.Lgwbl_x;
+#ifdef CLASSIC_FRAGMENTATION
+      ibox = iz%subbox.Lgwbl_x;
+      kk   = iz/subbox.Lgwbl_x;
+#else
+      ibox = frag_pos[iz]%subbox.Lgwbl_x;
+      kk   = frag_pos[iz]/subbox.Lgwbl_x;
+#endif
+      jbox = kk%subbox.Lgwbl_y;
+      kbox = kk/subbox.Lgwbl_y;
 
       /* skips if the point is at the border (and PBCs are not active) */
       skip=0;
@@ -306,18 +362,33 @@ int build_groups(int Npeaks, double zstop)
 		  break;
 		}
 
+#ifdef CLASSIC_FRAGMENTATION
 	      neigh[nn] = group_ID[i1 + j1 *subbox.Lgwbl_x + k1 *Lgridxy];
-
+	      peak_cond &= (frag[iz].Fmax > frag[i1 +j1*subbox.Lgwbl_x + k1*Lgridxy].Fmax);
+#else
+	      pos = find_location(i1,j1,k1);
+	      if (pos>=0)
+		{
+		  neigh[nn] = group_ID[indices[pos]];
+		  peak_cond &= (frag[iz].Fmax > frag[indices[pos]].Fmax);
+		}
+	      else
+		neigh[nn] = 0;
+#endif
 	      if (neigh[nn]==FILAMENT)
 		{
 		  neigh[nn]=0;
 		  fil_list[nf][0]=i1;
 		  fil_list[nf][1]=j1;
 		  fil_list[nf][2]=k1;
+#ifdef CLASSIC_FRAGMENTATION
+		  fil_list[nf][3]=i1 + j1*subbox.Lgwbl_x + k1*Lgridxy;
+#else
+		  fil_list[nf][3]=indices[pos];
+#endif
 		  nf++;
 		}
 
-	      peak_cond &= (frag[indices[iz]].Fmax > frag[i1 +j1*subbox.Lgwbl_x + k1*Lgridxy].Fmax);
 	    }
 
 	  /* Cleans the list of neighbouring groups */
@@ -335,7 +406,7 @@ int build_groups(int Npeaks, double zstop)
 	  /* Past light cone on-the-fly reconstruction: */
 
 	  /* is it time to reconstruct the PLC? */
-	  if (frag[indices[iz]].Fmax<plc.Fstart && frag[indices[iz]].Fmax>=plc.Fstop)
+	  if (frag[iz].Fmax<plc.Fstart && frag[iz].Fmax>=plc.Fstop)
 	    {
 
 	      if (!plc_started)
@@ -362,19 +433,19 @@ int build_groups(int Npeaks, double zstop)
 		      thisgroup=neigh[ig1];
 
 		      /* loop on replications */
-		      for (irep=0; irep<plc.Nreplications; irep++)
-			if (!(frag[indices[iz]].Fmax > plc.repls[irep].F1 || 
-			      groups[thisgroup].Flast < plc.repls[irep].F2))
+		      for (irep=0; irep<plc.Nreplications; irep++) // ???
+			if (frag[iz].Fmax < plc.repls[irep].F1 &&
+			    frag[iz].Fmax > plc.repls[irep].F2)
 			  {
 			    replicate[0]=plc.repls[irep].i;
 			    replicate[1]=plc.repls[irep].j;
 			    replicate[2]=plc.repls[irep].k;
-			    bb=condition_PLC(frag[indices[iz]].Fmax);
+			    bb=condition_PLC(frag[iz].Fmax);
 
 			    /* in this unlikely case we catch the group just on the PLC */
 			    if (bb==0.0)
 			      {
-				if (store_PLC(frag[indices[iz]].Fmax))
+				if (store_PLC(frag[iz].Fmax))
 				  return 1;
 			      }
 			    else if (bb>0.)
@@ -384,7 +455,7 @@ int build_groups(int Npeaks, double zstop)
 				if (aa<0.0)
 				  {
 				    /* in this case the group has passed through the PLC since last time */
-				    if ( (Fplc=find_brent(groups[thisgroup].Flast,frag[indices[iz]].Fmax)) == -99.00)
+				    if ( (Fplc=find_brent(groups[thisgroup].Flast,frag[iz].Fmax)) == -99.00)
 				      return 1;
 				    if (store_PLC(Fplc))
 				      return 1;
@@ -393,7 +464,7 @@ int build_groups(int Npeaks, double zstop)
 			  }
 		    }
 		  /* updates the Flast field */
-		  groups[neigh[ig1]].Flast=frag[indices[iz]].Fmax;
+		  groups[neigh[ig1]].Flast=frag[iz].Fmax;
 	      
 		}
 	      /* restoring PBCs */
@@ -402,10 +473,10 @@ int build_groups(int Npeaks, double zstop)
 	      subbox.pbc_z=storez;
 
 	    }
-	  else if (plc.Fstart>0. && frag[indices[iz]].Fmax<plc.Fstart)
+	  else if (plc.Fstart>0. && frag[iz].Fmax<plc.Fstart)
 	    {
 	      for (ig1=0; ig1<neigrp; ig1++)
-		groups[neigh[ig1]].Flast=frag[indices[iz]].Fmax;
+		groups[neigh[ig1]].Flast=frag[iz].Fmax;
 	    }
 
 #endif
@@ -435,62 +506,62 @@ int build_groups(int Npeaks, double zstop)
 	    return 1;
 	  }
 
-	groups[ngroups].t_peak=frag[indices[iz]].Fmax;
+	groups[ngroups].t_peak=frag[iz].Fmax;
 	groups[ngroups].t_appear=-1;
 	groups[ngroups].t_merge=-1;
 	groups[ngroups].Pos[0]=ibox+SHIFT;
 	groups[ngroups].Pos[1]=jbox+SHIFT;
 	groups[ngroups].Pos[2]=kbox+SHIFT;
-	groups[ngroups].Vel[0]=frag[indices[iz]].Vel[0];
-	groups[ngroups].Vel[1]=frag[indices[iz]].Vel[1];
-	groups[ngroups].Vel[2]=frag[indices[iz]].Vel[2];
+	groups[ngroups].Vel[0]=frag[iz].Vel[0];
+	groups[ngroups].Vel[1]=frag[iz].Vel[1];
+	groups[ngroups].Vel[2]=frag[iz].Vel[2];
 #ifdef TWO_LPT
-        groups[ngroups].Vel_2LPT[0]=frag[indices[iz]].Vel_2LPT[0];
-        groups[ngroups].Vel_2LPT[1]=frag[indices[iz]].Vel_2LPT[1];
-        groups[ngroups].Vel_2LPT[2]=frag[indices[iz]].Vel_2LPT[2];
+        groups[ngroups].Vel_2LPT[0]=frag[iz].Vel_2LPT[0];
+        groups[ngroups].Vel_2LPT[1]=frag[iz].Vel_2LPT[1];
+        groups[ngroups].Vel_2LPT[2]=frag[iz].Vel_2LPT[2];
 #ifdef THREE_LPT
-        groups[ngroups].Vel_3LPT_1[0]=frag[indices[iz]].Vel_3LPT_1[0];
-        groups[ngroups].Vel_3LPT_1[1]=frag[indices[iz]].Vel_3LPT_1[1];
-        groups[ngroups].Vel_3LPT_1[2]=frag[indices[iz]].Vel_3LPT_1[2];
-        groups[ngroups].Vel_3LPT_2[0]=frag[indices[iz]].Vel_3LPT_2[0];
-        groups[ngroups].Vel_3LPT_2[1]=frag[indices[iz]].Vel_3LPT_2[1];
-        groups[ngroups].Vel_3LPT_2[2]=frag[indices[iz]].Vel_3LPT_2[2];
+        groups[ngroups].Vel_3LPT_1[0]=frag[iz].Vel_3LPT_1[0];
+        groups[ngroups].Vel_3LPT_1[1]=frag[iz].Vel_3LPT_1[1];
+        groups[ngroups].Vel_3LPT_1[2]=frag[iz].Vel_3LPT_1[2];
+        groups[ngroups].Vel_3LPT_2[0]=frag[iz].Vel_3LPT_2[0];
+        groups[ngroups].Vel_3LPT_2[1]=frag[iz].Vel_3LPT_2[1];
+        groups[ngroups].Vel_3LPT_2[2]=frag[iz].Vel_3LPT_2[2];
 #endif
 #endif
 #ifdef RECOMPUTE_DISPLACEMENTS
-	groups[ngroups].Vel_after[0]=frag[indices[iz]].Vel_after[0];
-	groups[ngroups].Vel_after[1]=frag[indices[iz]].Vel_after[1];
-	groups[ngroups].Vel_after[2]=frag[indices[iz]].Vel_after[2];
+	groups[ngroups].Vel_after[0]=frag[iz].Vel_after[0];
+	groups[ngroups].Vel_after[1]=frag[iz].Vel_after[1];
+	groups[ngroups].Vel_after[2]=frag[iz].Vel_after[2];
 #ifdef TWO_LPT
-        groups[ngroups].Vel_2LPT_after[0]=frag[indices[iz]].Vel_2LPT_after[0];
-        groups[ngroups].Vel_2LPT_after[1]=frag[indices[iz]].Vel_2LPT_after[1];
-        groups[ngroups].Vel_2LPT_after[2]=frag[indices[iz]].Vel_2LPT_after[2];
+        groups[ngroups].Vel_2LPT_after[0]=frag[iz].Vel_2LPT_after[0];
+        groups[ngroups].Vel_2LPT_after[1]=frag[iz].Vel_2LPT_after[1];
+        groups[ngroups].Vel_2LPT_after[2]=frag[iz].Vel_2LPT_after[2];
 #ifdef THREE_LPT
-        groups[ngroups].Vel_3LPT_1_after[0]=frag[indices[iz]].Vel_3LPT_1_after[0];
-        groups[ngroups].Vel_3LPT_1_after[1]=frag[indices[iz]].Vel_3LPT_1_after[1];
-        groups[ngroups].Vel_3LPT_1_after[2]=frag[indices[iz]].Vel_3LPT_1_after[2];
-        groups[ngroups].Vel_3LPT_2_after[0]=frag[indices[iz]].Vel_3LPT_2_after[0];
-        groups[ngroups].Vel_3LPT_2_after[1]=frag[indices[iz]].Vel_3LPT_2_after[1];
-        groups[ngroups].Vel_3LPT_2_after[2]=frag[indices[iz]].Vel_3LPT_2_after[2];
+        groups[ngroups].Vel_3LPT_1_after[0]=frag[iz].Vel_3LPT_1_after[0];
+        groups[ngroups].Vel_3LPT_1_after[1]=frag[iz].Vel_3LPT_1_after[1];
+        groups[ngroups].Vel_3LPT_1_after[2]=frag[iz].Vel_3LPT_1_after[2];
+        groups[ngroups].Vel_3LPT_2_after[0]=frag[iz].Vel_3LPT_2_after[0];
+        groups[ngroups].Vel_3LPT_2_after[1]=frag[iz].Vel_3LPT_2_after[1];
+        groups[ngroups].Vel_3LPT_2_after[2]=frag[iz].Vel_3LPT_2_after[2];
 #endif
 #endif
 #endif
 	groups[ngroups].Mass=1;
 	groups[ngroups].name=particle_name;
 	groups[ngroups].good = good_particle;
-        groups[ngroups].point = indices[iz];
-        groups[ngroups].bottom = indices[iz];
+        groups[ngroups].point = iz;
+        groups[ngroups].bottom = iz;
         groups[ngroups].ll=ngroups;
         groups[ngroups].halo_app=ngroups;
 #ifdef PLC
-	if (frag[indices[iz]].Fmax > plc.Fstart)
+	if (frag[iz].Fmax > plc.Fstart)
 	  groups[ngroups].Flast=plc.Fstart;
 	else
-	  groups[ngroups].Flast=frag[indices[iz]].Fmax;
+	  groups[ngroups].Flast=frag[iz].Fmax;
 #endif
 
-        group_ID[indices[iz]]=ngroups;
-        linking_list[indices[iz]]=indices[iz];
+        group_ID[iz]=ngroups;
+        linking_list[iz]=iz;
 
        }
      else if (neigrp==1)
@@ -502,8 +573,8 @@ int build_groups(int Npeaks, double zstop)
 
 	 /* if the points touches only one group, check whether to accrete the point on it */
 
-	 condition_for_accretion(ibox,jbox,kbox,indices[iz]
-		   ,frag[indices[iz]].Fmax,neigh[0],&d2,&r2);
+	 condition_for_accretion(ibox,jbox,kbox,iz
+		   ,frag[iz].Fmax,neigh[0],&d2,&r2);
 
 	   if (d2<r2)
 	     {
@@ -516,7 +587,7 @@ int build_groups(int Npeaks, double zstop)
 		 counters[7]++;
 	       accrflag=1;
 	       to_group=neigh[0];
-	       accretion(to_group,ibox,jbox,kbox,indices[iz],frag[indices[iz]].Fmax);
+	       accretion(to_group,ibox,jbox,kbox,iz,frag[iz].Fmax);
 	     }
 	   else
 	     {
@@ -525,8 +596,8 @@ int build_groups(int Npeaks, double zstop)
 	        *********/
 
 	       groups[FILAMENT].Mass++;
-	       group_ID[indices[iz]]=FILAMENT;
-	       linking_list[indices[iz]]=indices[iz];
+	       group_ID[iz]=FILAMENT;
+	       linking_list[iz]=iz;
 	     }
 
        }
@@ -546,8 +617,8 @@ int build_groups(int Npeaks, double zstop)
 	 accgrp=-1;
 	 for (ig1=0; ig1<neigrp; ig1++)
 	   {
-	     condition_for_accretion(ibox,jbox,kbox,indices[iz]
-		       ,frag[indices[iz]].Fmax,neigh[ig1],&d2,&r2);
+	     condition_for_accretion(ibox,jbox,kbox,iz
+		       ,frag[iz].Fmax,neigh[ig1],&d2,&r2);
 	       ratio=d2/r2;
 	     if (ratio<1.0 && ratio<best_ratio)
 	     {
@@ -564,7 +635,7 @@ int build_groups(int Npeaks, double zstop)
 	       counters[8]++;
 	     accrflag=1;
 	     to_group=neigh[accgrp];
-	     accretion(neigh[accgrp],ibox,jbox,kbox,indices[iz],frag[indices[iz]].Fmax);
+	     accretion(neigh[accgrp],ibox,jbox,kbox,iz,frag[iz].Fmax);
 	   }
 
 	 /* Then checks whether the groups must be merged together */
@@ -574,7 +645,7 @@ int build_groups(int Npeaks, double zstop)
 	   for (ig2=0; ig2<ig1; ig2++)
 	     {
 	       merge[ig1][ig2]=0;
-	       condition_for_merging(frag[indices[iz]].Fmax,neigh[ig1],neigh[ig2],&merge_flag);
+	       condition_for_merging(frag[iz].Fmax,neigh[ig1],neigh[ig2],&merge_flag);
 	       if (merge_flag)
 		 {
 		   merge[ig1][ig2]=1;
@@ -598,13 +669,13 @@ int build_groups(int Npeaks, double zstop)
 		       counters[10]++;
 		     if (groups[neigh[ig1]].Mass > groups[neigh[ig2]].Mass)
 		       {
-			 merge_groups(neigh[ig1],neigh[ig2],frag[indices[iz]].Fmax);
+			 merge_groups(neigh[ig1],neigh[ig2],frag[iz].Fmax);
 			 large=neigh[ig1];
 			 small=neigh[ig2];
 		       }
                     else
 		      {
-			merge_groups(neigh[ig2],neigh[ig1],frag[indices[iz]].Fmax);
+			merge_groups(neigh[ig2],neigh[ig1],frag[iz].Fmax);
 			small=neigh[ig1];
 			large=neigh[ig2];
 		      }
@@ -634,8 +705,8 @@ int build_groups(int Npeaks, double zstop)
 	     accgrp=-1;
 	     for (ig1=0; ig1<neigrp; ig1++)
 	       {
-		 condition_for_accretion(ibox,jbox,kbox,indices[iz]
-			   ,frag[indices[iz]].Fmax,neigh[ig1],&d2,&r2);
+		 condition_for_accretion(ibox,jbox,kbox,iz
+			   ,frag[iz].Fmax,neigh[ig1],&d2,&r2);
 		   ratio=d2/r2;
 		 if (ratio<best_ratio)
 		   {
@@ -652,7 +723,7 @@ int build_groups(int Npeaks, double zstop)
 		   counters[9]++;
 		 accrflag=1;
 		 to_group=neigh[accgrp];
-		 accretion(neigh[accgrp],ibox,jbox,kbox,indices[iz],frag[indices[iz]].Fmax);
+		 accretion(neigh[accgrp],ibox,jbox,kbox,iz,frag[iz].Fmax);
 	       }
 	     else
 	       {
@@ -665,8 +736,8 @@ int build_groups(int Npeaks, double zstop)
 		 if (good_particle)
 		   counters[12]++;
 		 groups[FILAMENT].Mass++;
-		 group_ID[indices[iz]]=FILAMENT;
-		 linking_list[indices[iz]]=indices[iz];
+		 group_ID[iz]=FILAMENT;
+		 linking_list[iz]=iz;
 	       }
 	   }
        }
@@ -676,8 +747,8 @@ int build_groups(int Npeaks, double zstop)
                                  FOURTH CASE: FILAMENTS
 	  **********************************************************************/
 	 groups[FILAMENT].Mass++;
-	 group_ID[indices[iz]]=FILAMENT;
-	 linking_list[indices[iz]]=indices[iz];
+	 group_ID[iz]=FILAMENT;
+	 linking_list[iz]=iz;
 
 	 /* end of cases */
 
@@ -689,16 +760,13 @@ int build_groups(int Npeaks, double zstop)
       	for (ifil=0; ifil<nf; ifil++)
       	  {
 
-      	    indx=fil_list[ifil][0] + fil_list[ifil][1]*subbox.Lgwbl_x +
-      	      fil_list[ifil][2]*Lgridxy;
-
 	    condition_for_accretion(fil_list[ifil][0], fil_list[ifil][1],fil_list[ifil][2],
-				    indx,frag[indices[iz]].Fmax,to_group, &d2,&r2);
+				    fil_list[ifil][3],frag[iz].Fmax,to_group, &d2,&r2);
 
 	    if (d2<r2)
 	      {
 		accretion(to_group, fil_list[ifil][0], fil_list[ifil][1],
-			  fil_list[ifil][2],indx,frag[indices[iz]].Fmax);
+			  fil_list[ifil][2],fil_list[ifil][3],frag[iz].Fmax);
 		groups[FILAMENT].Mass--;
 	      }
       	  }
@@ -706,8 +774,14 @@ int build_groups(int Npeaks, double zstop)
 #ifdef PLC
       /* if this is the end of the cycle for PLC, it performs a last check on all halos */
       if (plc.Fstart>0 && !last_check_done &&
-	  (iz==nstep-1 || frag[indices[iz]].Fmax<plc.Fstop))
+	  (this_z==nstep-1 || frag[iz].Fmax<plc.Fstop))
 	{
+
+	  /* first write to disc what you have */
+	  if (write_PLC())
+	    return 1;
+	  plc.Nstored=0;
+
 	  /* switching PBCs off for the check */
 	  storex=subbox.pbc_x;
 	  storey=subbox.pbc_y;
@@ -718,14 +792,14 @@ int build_groups(int Npeaks, double zstop)
 	  for (ig1=FILAMENT+1; ig1<=ngroups; ig1++)
 	    {
 	      /* is the group alive, good and massive enough? */
-	      if (groups[ig1].point > 0 && groups[ig1].good &&
+	      if (groups[ig1].point >= 0 && groups[ig1].good &&
 		  groups[ig1].Mass >= params.MinHaloMass)
 		{
 		  thisgroup=ig1;
 
 		  /* loop on replications */
 		  for (irep=0; irep<plc.Nreplications; irep++)
-		    if (groups[ig1].Flast > plc.repls[irep].F2)
+		    if (groups[ig1].Flast > plc.repls[irep].F2)  // CAPIRE SE VA BENE
 		      {
 			replicate[0]=plc.repls[irep].i;
 			replicate[1]=plc.repls[irep].j;
@@ -763,7 +837,7 @@ int build_groups(int Npeaks, double zstop)
 	  subbox.pbc_z=storez;
 
 	  if (!ThisTask)
-	    printf("[%s] PLC: Last check on groups done, Task 0 stored %d halos (expected:%d)\n",
+	    printf("[%s] PLC: Last check on groups done, Task 0 stored %d halos (max:%d)\n",
 		   fdate(),plc.Nstored,plc.Nmax);
 	  cputime.plc += MPI_Wtime()-cputmp;
 
@@ -778,17 +852,17 @@ int build_groups(int Npeaks, double zstop)
        ************************************************************************/
 
       /* Fraction of steps done */     
-      if (!ThisTask && !(iz%nstep_p))
+      if (!ThisTask && !(this_z%nstep_p))
         printf("[%s] *** %3d%% done, F = %6.2f,  z = %6.2f\n",fdate(),
-	       iz/(nstep_p)*5,frag[indices[iz]].Fmax,
-	       frag[indices[iz]].Fmax-1.0
+	       this_z/(nstep_p)*5,frag[iz].Fmax,
+	       frag[iz].Fmax-1.0
 	       );
 
     }
 
   /* Counters */
   for (ig1=FILAMENT+1; ig1<=ngroups; ig1++)
-    if (groups[ig1].point > 0 && groups[ig1].good) 
+    if (groups[ig1].point >= 0 && groups[ig1].good) 
       counters[14]++;
 
   MPI_Reduce(counters, all_counters, NCOUNTERS, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
@@ -851,19 +925,19 @@ void clean_list(int *arr)
 
 #define RMS0 1.0
 
-double virial(int grp,double F,int flag)
+PRODFLOAT virial(int grp,PRODFLOAT F,int flag)
 {
   /* Gives the SQUARE OF the "virial radius" of a group */
 
-  double r2,rlag,sigmaD;
+  PRODFLOAT r2,rlag,sigmaD;
 
   rlag = pow((double)grp,0.333333333333333);
   int S=Smoothing.Nsmooth-1;
   sigmaD = sqrt(Smoothing.TrueVariance[S]) * 
 #ifdef SCALE_DEPENDENT
-    GrowingMode(F-1.,Smoothing.k_GM_dens[S]); //  ATTENZIONE, QUESTO NON E` DEL TUTTO CORRETTO IN MG
+    GrowingMode((double)F-1.,Smoothing.k_GM_dens[S]); //  ATTENZIONE, QUESTO NON E` DEL TUTTO CORRETTO IN MG
 #else
-    GrowingMode(F-1.,params.k_for_GM);
+    GrowingMode((double)F-1.,params.k_for_GM);
 #endif
   if (!flag)
     /*  merging */
@@ -877,7 +951,7 @@ double virial(int grp,double F,int flag)
 
 /* ACCRETION AND MERGING */
 
-void merge_groups(int grp1,int grp2,double time)
+void merge_groups(int grp1,int grp2,PRODFLOAT time)
 {
   /* Merges grp2 into grp1 */
 
@@ -948,7 +1022,7 @@ void merge_groups(int grp1,int grp2,double time)
 }
 
 
-void update_history(int g1,int g2,double time)
+void update_history(int g1,int g2,PRODFLOAT time)
 {
   /* UPGRADE THE SUBSTRUCTURE OF A GROUP: M(G1)>M(G2) IE G2 --> G1 */
 
@@ -1005,7 +1079,7 @@ void update_history(int g1,int g2,double time)
 }
 
 
-void accretion(int group,int i,int j,int k,int indx,double F)
+void accretion(int group,int i,int j,int k,int indx,PRODFLOAT F)
 {
   /* Accretes the point (i,j,k) on the group */
 
@@ -1048,7 +1122,7 @@ void accretion(int group,int i,int j,int k,int indx,double F)
 /* CONDITIONS */
 
 
-void condition_for_accretion(int i,int j,int k,int ind,double Fmax, int grp,double *dd,double *rr)
+void condition_for_accretion(int i,int j,int k,int ind,PRODFLOAT Fmax, int grp,double *dd,double *rr)
 {
   /* Condition for accretion */
 
@@ -1080,7 +1154,7 @@ void condition_for_accretion(int i,int j,int k,int ind,double Fmax, int grp,doub
 }
 
 
-void condition_for_merging(double Fmax,int grp1,int grp2,int *merge_flag)
+void condition_for_merging(PRODFLOAT Fmax,int grp1,int grp2,int *merge_flag)
 {
   /* Checks whether two groups must be merged */
 
@@ -1114,7 +1188,7 @@ void condition_for_merging(double Fmax,int grp1,int grp2,int *merge_flag)
 
 /* DISPLACEMENTS */
 
-void set_obj(int grp,double F,pos_data *myobj)
+void set_obj(int grp,PRODFLOAT F,pos_data *myobj)
 {
   int i;
 
@@ -1127,7 +1201,7 @@ void set_obj(int grp,double F,pos_data *myobj)
      should be computed with a different scale */
 
   /* Lagrangian radius of the object */
-  myobj->R=pow((double)(myobj->M)*3./4./PI,1./3.)*params.InterPartDist;
+  myobj->R=pow((double)(myobj->M)*3./4./PI,1./3.)*params.InterPartDist;  // COSTANTE GIUSTA?
   double interp=(1.-myobj->R/Smoothing.Rad_GM[0])*(double)(Smoothing.Nsmooth-1);
   interp=(interp<0.?0.:interp);
   int indx=(int)interp;
@@ -1196,7 +1270,7 @@ void set_obj(int grp,double F,pos_data *myobj)
 
 }
 
-void set_obj_vel(int grp,double F,pos_data *myobj)
+void set_obj_vel(int grp,PRODFLOAT F,pos_data *myobj)
 {
 
 #ifdef SCALE_DEPENDENT
@@ -1239,7 +1313,7 @@ void set_obj_vel(int grp,double F,pos_data *myobj)
 }
 
 
-void set_point(int i,int j,int k,int ind,double F,pos_data *myobj)
+void set_point(int i,int j,int k,int ind,PRODFLOAT F,pos_data *myobj)
 {
 
   myobj->z=F-1.0;
@@ -1353,13 +1427,13 @@ void set_group(int grp,pos_data *myobj)
 }
 
 
-double q2x(int i,pos_data *myobj,int order)
+PRODFLOAT q2x(int i,pos_data *myobj,int order)
 {
   /* it moves an object from the Lagrangian to the Eulerian space,
    in sub-box coordinates */
 
   int p;
-  double L,pos;
+  PRODFLOAT L,pos;
 
 #ifndef RECOMPUTE_DISPLACEMENTS
 
@@ -1417,10 +1491,10 @@ double q2x(int i,pos_data *myobj,int order)
 
 
 
-double vel(int i,pos_data *myobj)
+PRODFLOAT vel(int i,pos_data *myobj)
 {
   /* it gives the velocity of a group in km/s */
-  double vv,fac;
+  PRODFLOAT vv,fac;
 
   fac=Hubble(myobj->z)/(1.+myobj->z)*params.InterPartDist;
 
@@ -1452,9 +1526,9 @@ double vel(int i,pos_data *myobj)
 }
 
 
-double distance(int i,pos_data *obj1,pos_data *obj2)
+PRODFLOAT distance(int i,pos_data *obj1,pos_data *obj2)
 {
-  double d,L;
+  PRODFLOAT d,L;
   int p;
 
   switch (i)
@@ -1567,14 +1641,12 @@ void update(pos_data *obj1, pos_data *obj2)
 #ifdef PLC
 #define MAX_ITER 100
 
-void coord_transformation_cartesian_polar(double *, double *, double *, double *);
-
 double condition_F(double F, void *p)
 {
-  return condition_PLC(F);
+  return condition_PLC((PRODFLOAT)F);
 }
 
-double condition_PLC(double F)
+double condition_PLC(PRODFLOAT F)
 {
   /* Condition for the identification of groups in past light cone */
 
@@ -1591,16 +1663,17 @@ double condition_PLC(double F)
       condition+=diff1*diff1;
     }
 
-  condition = sqrt(condition) - ComovingDistance(F-1.0)/params.InterPartDist;
+  condition = sqrt(condition) - ComovingDistance((double)F-1.0)/params.InterPartDist;
 
   return condition;
 }
 
 
-int store_PLC(double F)
+int store_PLC(PRODFLOAT F)
 {
   int i,ii;
-  double x[3],rhor,theta,phi;
+  PRODFLOAT x[3];
+  double rhor,theta,phi;
 
   if (plc.Nstored==plc.Nmax)
     {
@@ -1619,8 +1692,8 @@ int store_PLC(double F)
       x[i] = params.InterPartDist * 
 	( q2x(i,&obj1,ORDER_FOR_CATALOG) + start[i] - ( plc.center[i] - Lgrid[i]*replicate[i] ) );
     }
-  coord_transformation_cartesian_polar(x,&rhor,&theta,&phi);
 
+  coord_transformation_cartesian_polar(x,&rhor,&theta,&phi);
   if (90.-theta<params.PLCAperture)
     {
 
@@ -1641,9 +1714,9 @@ int store_PLC(double F)
 	  plcgroups[plc.Nstored].x[ii] = x[i];
 	  plcgroups[plc.Nstored].v[ii] = vel(i,&obj1);
 	}
-      plcgroups[plc.Nstored].rhor=rhor;
-      plcgroups[plc.Nstored].theta=theta;
-      plcgroups[plc.Nstored].phi=phi;
+      /* plcgroups[plc.Nstored].rhor=rhor; */
+      /* plcgroups[plc.Nstored].theta=theta; */
+      /* plcgroups[plc.Nstored].phi=phi; */
 
       plc.Nstored++;
     }
@@ -1651,7 +1724,7 @@ int store_PLC(double F)
   return 0;
 }
 
-void coord_transformation_cartesian_polar(double *x, double *rho, double *theta, double *phi)
+void coord_transformation_cartesian_polar(PRODFLOAT *x, double *rho, double *theta, double *phi)
 {
   /* transformation from cartesian coordinates to polar */
 
@@ -1669,6 +1742,7 @@ void coord_transformation_cartesian_polar(double *x, double *rho, double *theta,
       *phi=0.0;
     }
 }
+
 
 double find_brent(double x_hi, double x_lo)
 {
@@ -1691,15 +1765,466 @@ double find_brent(double x_hi, double x_lo)
       
       if (fabs(condition_PLC(r)) < brent_err)
 	return r;
+
       else
 	status=GSL_CONTINUE;
 
     }
   while (status == GSL_CONTINUE && iter < MAX_ITER);
 
-  printf("ERROR on task %d: find_brent could not converge\n",ThisTask);
+  printf("ERROR on task %d: find_brent could not converge - %f %f\n",ThisTask,x_hi,x_lo);
   return -99.0;
 
 }
 
 #endif
+
+/* Quick construction of groups */
+int quick_build_groups(int Npeaks)
+{
+  /* limited and quick version of build_groups:
+     no PLC, no counters, no outputs */
+  int merge[NV][NV], neigh[NV], fil_list[NV][4];
+  int nn,ifil,neigrp,pos;
+  int iz,kk,i1,j1,k1,skip;
+  int ig3,small,large,nf,to_group,accgrp,ig1,ig2;
+  int accrflag,nstep,nmerge,nstep_p,peak_cond;
+  double ratio,best_ratio,d2,r2;
+  int merge_flag;
+  int ibox,jbox,kbox;
+
+  /* Initializations */
+
+  ngroups=FILAMENT;           // number of groups + filaments
+  groups[FILAMENT].point = groups[FILAMENT].bottom = subbox.Nstored; // filaments are not grouped!
+  for (i1=0; i1<FILAMENT; i1++)  // this is probably unnecessary, but better add it
+    {
+      groups[i1].point=-1;
+      groups[i1].good=0;
+    }
+
+  if (!ThisTask)
+    printf("[%s] Starting the quick fragmentation process\n",fdate());
+
+  /* Calculates the number of steps required */
+
+  nstep=subbox.Nstored;
+  nstep_p=nstep/5;
+
+  /************************************************************************
+                        START OF THE CYCLE ON POINTS
+   ************************************************************************/
+  for (iz=0; iz<nstep; iz++)
+    {
+      /* More initializations */
+
+      neigrp=0;               // number of neighbouring groups
+      nf=0;                   // number of neighbouring filament points
+      accrflag=0;             // if =1 all the neighbouring filaments are accreted
+      for (i1=0; i1<NV; i1++)
+	neigh[i1]=0;          // number of neighbours
+
+      /* grid coordinates from the indices (sub-box coordinates) */
+      ibox = frag_pos[iz]%subbox.Lgwbl_x;
+      kk   = frag_pos[iz]/subbox.Lgwbl_x;
+      jbox = kk%subbox.Lgwbl_y;
+      kbox = kk/subbox.Lgwbl_y;
+
+      /* skips if the point is at the border (and PBCs are not active) */
+      skip=0;
+      if ( !subbox.pbc_x && (ibox==0 || ibox==subbox.Lgwbl_x-1) ) ++skip;
+      if ( !subbox.pbc_y && (jbox==0 || jbox==subbox.Lgwbl_y-1) ) ++skip;
+      if ( !subbox.pbc_z && (kbox==0 || kbox==subbox.Lgwbl_z-1) ) ++skip;
+
+      /* particle coordinates in the box, imposing PBCs */
+      global_x = ibox + subbox.stabl_x;
+      if (global_x<0) global_x+=MyGrids[0].GSglobal_x;
+      if (global_x>=MyGrids[0].GSglobal_x) global_x-=MyGrids[0].GSglobal_x;
+      global_y = jbox + subbox.stabl_y;
+      if (global_y<0) global_y+=MyGrids[0].GSglobal_y;
+      if (global_y>=MyGrids[0].GSglobal_y) global_y-=MyGrids[0].GSglobal_y;
+      global_z = kbox + subbox.stabl_z;
+      if (global_z<0) global_z+=MyGrids[0].GSglobal_z;
+      if (global_z>=MyGrids[0].GSglobal_z) global_z-=MyGrids[0].GSglobal_z;
+#ifdef ROTATE_BOX
+      particle_name=(long long)global_x + 
+	  ( (long long)global_z + 
+	    (long long)global_y * (long long)MyGrids[0].GSglobal_z ) * 
+	  (long long)MyGrids[0].GSglobal_x;
+#else
+      particle_name=(long long)global_x + 
+	  ( (long long)global_y + 
+	    (long long)global_z * (long long)MyGrids[0].GSglobal_y ) * 
+	  (long long)MyGrids[0].GSglobal_x;
+#endif
+      good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
+			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
+			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
+
+      if (!skip)
+	{
+	  peak_cond=1;	 
+	  /* checks whether the neighbouring particles collapse later */
+	  for (nn=0; nn<NV; nn++)
+	    {
+	      switch (nn)
+		{
+		case 0:
+		  i1=( subbox.pbc_x && ibox==0 ? subbox.Lgwbl_x-1 : ibox-1 );
+		  j1=jbox;
+		  k1=kbox;
+		  break;
+		case 1:
+		  i1=( subbox.pbc_x && ibox==subbox.Lgwbl_x-1 ? 0 : ibox+1 );
+		  j1=jbox;
+		  k1=kbox;
+		  break;
+		case 2:
+		  i1=ibox;
+		  j1=( subbox.pbc_y && jbox==0 ? subbox.Lgwbl_y-1 : jbox-1 );
+		  k1=kbox;
+		  break;
+		case 3:
+		  i1=ibox;
+		  j1=( subbox.pbc_y && jbox==subbox.Lgwbl_y-1 ? 0 : jbox+1 );
+		  k1=kbox;
+		  break;
+		case 4:
+		  i1=ibox;
+		  j1=jbox;
+		  k1=( subbox.pbc_z && kbox==0 ? subbox.Lgwbl_z-1 : kbox-1 );
+		  break;
+		case 5:
+		  i1=ibox;
+		  j1=jbox;
+		  k1=( subbox.pbc_z && kbox==subbox.Lgwbl_z-1 ? 0 : kbox+1 );
+		  break;
+		}
+
+	      pos = find_location(i1,j1,k1);
+	      if (pos>=0)
+		{
+		  neigh[nn] = group_ID[indices[pos]];
+		  peak_cond &= (frag[iz].Fmax > frag[indices[pos]].Fmax);
+		}
+	      else
+		neigh[nn] = 0;
+
+	      if (neigh[nn]==FILAMENT)
+		{
+		  neigh[nn]=0;
+		  fil_list[nf][0]=i1;
+		  fil_list[nf][1]=j1;
+		  fil_list[nf][2]=k1;
+		  fil_list[nf][3]=indices[pos];
+		  nf++;
+		}
+
+	    }
+
+	  /* Cleans the list of neighbouring groups */
+	  clean_list(neigh);
+
+	  /* Number of neighbouring groups */
+	  for (nn=neigrp=0; nn<NV; nn++)
+	    if (neigh[nn]>FILAMENT)
+	      neigrp++;
+	}
+      else
+	{
+	  peak_cond=0;
+	  neigrp=0;
+	}
+
+
+      /* Is the point a peak? */
+      if (peak_cond)
+       {
+	 /**********************************************************************
+                                   FIRST CASE: PEAK
+	 **********************************************************************/
+	 /* New group */
+        ngroups++;
+	groups[ngroups].t_peak=frag[iz].Fmax;
+	groups[ngroups].t_appear=-1;
+	groups[ngroups].t_merge=-1;
+	groups[ngroups].Pos[0]=ibox+SHIFT;
+	groups[ngroups].Pos[1]=jbox+SHIFT;
+	groups[ngroups].Pos[2]=kbox+SHIFT;
+	groups[ngroups].Vel[0]=frag[iz].Vel[0];
+	groups[ngroups].Vel[1]=frag[iz].Vel[1];
+	groups[ngroups].Vel[2]=frag[iz].Vel[2];
+#ifdef TWO_LPT
+        groups[ngroups].Vel_2LPT[0]=frag[iz].Vel_2LPT[0];
+        groups[ngroups].Vel_2LPT[1]=frag[iz].Vel_2LPT[1];
+        groups[ngroups].Vel_2LPT[2]=frag[iz].Vel_2LPT[2];
+#ifdef THREE_LPT
+        groups[ngroups].Vel_3LPT_1[0]=frag[iz].Vel_3LPT_1[0];
+        groups[ngroups].Vel_3LPT_1[1]=frag[iz].Vel_3LPT_1[1];
+        groups[ngroups].Vel_3LPT_1[2]=frag[iz].Vel_3LPT_1[2];
+        groups[ngroups].Vel_3LPT_2[0]=frag[iz].Vel_3LPT_2[0];
+        groups[ngroups].Vel_3LPT_2[1]=frag[iz].Vel_3LPT_2[1];
+        groups[ngroups].Vel_3LPT_2[2]=frag[iz].Vel_3LPT_2[2];
+#endif
+#endif
+	groups[ngroups].Mass=1;
+	groups[ngroups].name=particle_name;
+	groups[ngroups].good = good_particle;
+        groups[ngroups].point = iz;
+        groups[ngroups].bottom = iz;
+        groups[ngroups].ll=ngroups;
+        groups[ngroups].halo_app=ngroups;
+        group_ID[iz]=ngroups;
+        linking_list[iz]=iz;
+
+       }
+     else if (neigrp==1)
+       {
+
+	 /**********************************************************************
+                                  SECOND CASE: 1 GROUP
+	  **********************************************************************/
+	 /* if the points touches only one group, check whether to accrete the point on it */
+
+	 condition_for_accretion(ibox,jbox,kbox,iz,frag[iz].Fmax,neigh[0],&d2,&r2);
+	 if (d2<r2)
+	     {
+	       accrflag=1;
+	       to_group=neigh[0];
+	       accretion(to_group,ibox,jbox,kbox,iz,frag[iz].Fmax);
+	     }
+	   else
+	     {
+	       groups[FILAMENT].Mass++;
+	       group_ID[iz]=FILAMENT;
+	       linking_list[iz]=iz;
+	     }
+       }
+     else if (neigrp>1)
+       {
+	 /**********************************************************************
+                                   THIRD CASE: >1 GROUP
+	  **********************************************************************/
+	 /* In this case the point touches more than one group */
+
+	 best_ratio=pow(10.*subbox.Lgwbl_x,2.0);
+	 accgrp=-1;
+	 for (ig1=0; ig1<neigrp; ig1++)
+	   {
+	     condition_for_accretion(ibox,jbox,kbox,iz,frag[iz].Fmax,neigh[ig1],&d2,&r2);
+	       ratio=d2/r2;
+	     if (ratio<1.0 && ratio<best_ratio)
+	     {
+	       best_ratio=ratio;
+	       accgrp=ig1;
+	     }
+	   }
+	 if (accgrp>=0)
+	   {
+	     accrflag=1;
+	     to_group=neigh[accgrp];
+	     accretion(neigh[accgrp],ibox,jbox,kbox,iz,frag[iz].Fmax);
+	   }
+	 /* Then checks whether the groups must be merged together */
+	 nmerge=0;
+	 for (ig1=0; ig1<neigrp; ig1++)
+	   for (ig2=0; ig2<ig1; ig2++)
+	     {
+	       merge[ig1][ig2]=0;
+	       condition_for_merging(frag[iz].Fmax,neigh[ig1],neigh[ig2],&merge_flag);
+	       if (merge_flag)
+		 {
+		   merge[ig1][ig2]=1;
+		   nmerge++;
+		 }
+	     }
+
+	 /******************
+          merging of groups!
+	  ******************/
+
+	 /* The group number of the largest group is preserved */
+
+	 if (nmerge>0)
+	   {
+	     for (ig1=0; ig1<neigrp; ig1++)
+	       for (ig2=0; ig2<ig1; ig2++)
+		 if (merge[ig1][ig2]==1 && neigh[ig1]!=neigh[ig2])
+		   {
+		     if (groups[neigh[ig1]].Mass > groups[neigh[ig2]].Mass)
+		       {
+			 merge_groups(neigh[ig1],neigh[ig2],frag[iz].Fmax);
+			 large=neigh[ig1];
+			 small=neigh[ig2];
+		       }
+                    else
+		      {
+			merge_groups(neigh[ig2],neigh[ig1],frag[iz].Fmax);
+			small=neigh[ig1];
+			large=neigh[ig2];
+		      }
+		     if (to_group==small) 
+		       to_group=large;
+		     for (ig3=0; ig3<neigrp; ig3++)
+		       if (neigh[ig3]==small) 
+			 neigh[ig3]=large;
+		   }
+	   }
+
+	 /* If relevant, it tries again to accrete the particle */
+
+	 if (accgrp==-1)
+	   {
+	     clean_list(neigh);
+
+	     /* Number of neighbouring groups */
+	     for (nn=neigrp=0; nn<NV; nn++)
+	       if (neigh[nn]>FILAMENT)
+		 neigrp++;
+
+	     best_ratio=pow(10.*subbox.Lgwbl_x,2.0);
+	     accgrp=-1;
+	     for (ig1=0; ig1<neigrp; ig1++)
+	       {
+		 condition_for_accretion(ibox,jbox,kbox,iz,frag[iz].Fmax,neigh[ig1],&d2,&r2);
+		   ratio=d2/r2;
+		 if (ratio<best_ratio)
+		   {
+		     best_ratio=ratio;
+		     accgrp=ig1;
+		   }
+	       }
+
+	     if (best_ratio<1)
+	       {
+		 accrflag=1;
+		 to_group=neigh[accgrp];
+		 accretion(neigh[accgrp],ibox,jbox,kbox,iz,frag[iz].Fmax);
+	       }
+	     else
+	       {
+		 /* If the point has not been accreted at all: */
+		 groups[FILAMENT].Mass++;
+		 group_ID[iz]=FILAMENT;
+		 linking_list[iz]=iz;
+	       }
+	   }
+       }
+     else
+       {
+	 /**********************************************************************
+                                 FOURTH CASE: FILAMENTS
+	  **********************************************************************/
+	 groups[FILAMENT].Mass++;
+	 group_ID[iz]=FILAMENT;
+	 linking_list[iz]=iz;
+
+	 /* end of cases */
+       }
+
+      /* Checks whether to accrete all the neighbouring filaments */
+
+      if (accrflag && nf && !skip)
+      	for (ifil=0; ifil<nf; ifil++)
+      	  {
+	    condition_for_accretion(fil_list[ifil][0], fil_list[ifil][1],fil_list[ifil][2],
+				    fil_list[ifil][3],frag[iz].Fmax,to_group, &d2,&r2);
+
+	    if (d2<r2)
+	      {
+		accretion(to_group, fil_list[ifil][0], fil_list[ifil][1],
+			  fil_list[ifil][2],fil_list[ifil][3],frag[iz].Fmax);
+		groups[FILAMENT].Mass--;
+	      }
+      	  }
+
+      /************************************************************************
+                          END OF DO-CYCLE ON COLLAPSED POINTS
+       ************************************************************************/
+
+      /* Fraction of steps done */
+      if (!ThisTask && !(iz%nstep_p))
+        printf("[%s] *** %3d%% done, F = %6.2f,  z = %6.2f\n",fdate(),
+	       iz/(nstep_p)*20,frag[iz].Fmax,
+	       frag[iz].Fmax-1.0
+	       );
+
+    }
+
+  return 0;
+}
+
+
+int update_map(unsigned int *nadd)
+{
+
+  int group,ig,jg,kg,size,size2,rr,i,j,k,i1,j1,k1;
+  memset(frag_map_update, 0, subbox.maplength*sizeof(unsigned int));
+  nadd[0]=nadd[1]=0;
+
+  for (group=FILAMENT+1; group<ngroups; group++)
+    {
+      ig=(int)(groups[group].Pos[0]+0.5);
+      jg=(int)(groups[group].Pos[1]+0.5);
+      kg=(int)(groups[group].Pos[2]+0.5);
+      size=(int)(params.BoundaryLayerFactor*pow((double)groups[group].Mass/4.188790205,0.333333333333333)+0.5);
+      size2=size*size;
+      
+      for (i1=ig-size; i1<ig+size; i1++)
+	{
+	  if (i1<0 || i1>=subbox.Lgwbl_x)
+		{
+		  if (subbox.pbc_x)
+		    i = ( i1<0 ? i1+subbox.Lgwbl_x : i1-subbox.Lgwbl_x );
+		  else
+		    i = -1;
+		}
+	      else
+		i=i1;
+
+	  for (j1=jg-size; j1<jg+size; j1++)
+	    {
+	      if (j1<0 || j1>=subbox.Lgwbl_y)
+		{
+		  if (subbox.pbc_y)
+		    j = ( j1<0 ? j1+subbox.Lgwbl_y : j1-subbox.Lgwbl_y );
+		  else
+		    j = -1;
+		}
+	      else
+		j=j1;
+	      
+	      for (k1=kg-size; k1<kg+size; k1++)
+		{
+		  if (k1<0 || k1>=subbox.Lgwbl_z)
+		    {
+		      if (subbox.pbc_z)
+			k = ( k1<0 ? k1+subbox.Lgwbl_z : k1-subbox.Lgwbl_z );
+		      else
+			k = -1;
+		    }
+		  else
+		    k=k1;
+
+		  if (i<0 || j<0 || k<0)
+		    {
+		      nadd[1]++;
+		      continue;
+		    }
+
+		  if (!get_map_bit(i,j,k))
+		    {
+		      rr=(i1-ig)*(i1-ig)+(j1-jg)*(j1-jg)+(k1-kg)*(k1-kg);
+		      if (rr<=size2)
+			{
+			  set_mapup_bit(i,j,k);
+			  nadd[0]++;
+			}
+		    }
+		}
+	    }
+	}
+    }
+
+  return 0;
+}

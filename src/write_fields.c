@@ -28,8 +28,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#define FORTRAN
-//#define ASCII_WRITE
+//#define FORTRAN
+#define ASCII_WRITE
 
 int check_DataDir(void);
 

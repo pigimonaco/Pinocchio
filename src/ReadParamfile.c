@@ -214,6 +214,10 @@ int read_parameter_file()
       addr[nt] = &(params.MaxMemPerParticle);
       id[nt++] = DOUBLE;
 
+      strcpy(tag[nt], "PredPeakFactor");
+      addr[nt] = &(params.PredPeakFactor);
+      id[nt++] = DOUBLE;
+
 #ifdef READ_PK_TABLE
       strcpy(tag[nt], "CAMBMatterFileTag");
       addr[nt] = params.camb.MatterFile;

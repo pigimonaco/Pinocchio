@@ -35,6 +35,9 @@ typedef struct
 
 static int largest_size;
 static product_data *sub_plane;
+#ifndef CLASSIC_FRAGMENTATION
+static size_t frag_offset;
+#endif
 
 int find_task(int, int, int, int, int *, int *, int *);
 int send_data(comm_struct *);
@@ -56,12 +59,17 @@ int distribute(void)
   /* let's synchronize the tasks here */
   fflush(stdout);
   MPI_Barrier(MPI_COMM_WORLD);
+  
+#ifndef CLASSIC_FRAGMENTATION
+  /* these are the already stored particles */
+  frag_offset=subbox.Nstored;
+#endif
 
 #ifdef VERBOSE
   printf("\n");
-  printf("task %d, plan of sub-boxes:  %d %d %d - %d %d %d/%d - %d %d %d - %d %d %d - %d %d %d - %d %d %d - %d %d %d\n",
+  printf("task %d, plan of sub-boxes:  %d %d %d - %d %d %d - %d %d %d - %d %d %d - %d %d %d - %d %d %d - %d %d %d\n",
 	 ThisTask,MyGrids[0].GSlocal_x,MyGrids[0].GSlocal_y,MyGrids[0].GSlocal_z,
-	 subbox.nbox_x, subbox.nbox_y, subbox.nbox_z_thisslice, subbox.nbox_z_allslices,
+	 subbox.nbox_x, subbox.nbox_y, subbox.nbox_z,
 	 subbox.mybox_x,subbox.mybox_y,subbox.mybox_z,
 	 subbox.Lgrid_x,subbox.Lgrid_y,subbox.Lgrid_z,
 	 subbox.start_x,subbox.start_y,subbox.start_z,
@@ -107,9 +115,8 @@ int distribute(void)
 
   for (global_z = i3=count_send=count_recv=count_keep=0; global_z<MyGrids[0].GSglobal_z; global_z++)
     {
-      /* updates the z-sub-box index if necessary
-         NB: i3 is related to the complete box, with all slices */
-      if (i3<subbox.nbox_z_allslices-1 && global_z==find_start(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,i3+1))
+      /* updates the z-sub-box index if necessary */
+      if (i3<subbox.nbox_z-1 && global_z==find_start(MyGrids[0].GSglobal_z,subbox.nbox_z,i3+1))
         i3++;
 
        /* loop on all sub-planes, that is sub-boxes on the plane */
@@ -151,7 +158,7 @@ int distribute(void)
   for (global_z = i3=count_send=count_recv=count_keep=0; global_z<MyGrids[0].GSglobal_z; global_z++)
     {
       /* updates the z-sub-box index if necessary */
-      if (i3<subbox.nbox_z_allslices-1 && global_z==find_start(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,i3+1))
+      if (i3<subbox.nbox_z-1 && global_z==find_start(MyGrids[0].GSglobal_z,subbox.nbox_z,i3+1))
         i3++;
 
        /* loop on all sub-planes, that is sub-boxes on the plane */
@@ -359,6 +366,12 @@ int distribute(void)
 	}
     }
 
+  /* updates the number of stored particles */
+#ifdef CLASSIC_FRAGMENTATION
+  subbox.Nstored=subbox.Npart;
+#else
+  subbox.Nstored=frag_offset;
+#endif
 
   /* check that all wanted communications have been performed */
   for (i=0; i<count_keep; i++)
@@ -395,25 +408,25 @@ int find_task(int global_z, int i1, int i2, int i3, int *second_task, int *box_z
   int main_task,i3bis,TL;
 
   /* sub-planes are distributed to tasks first in z, then in y and x */
-  if (i3>=subbox.nbox_z_thisslice*ThisSlice && i3<subbox.nbox_z_thisslice*(ThisSlice+1))
-    main_task=subbox.nbox_z_thisslice*(i1*subbox.nbox_y+i2)+(i3-subbox.nbox_z_thisslice*ThisSlice);
+  if (i3>=0 && i3<subbox.nbox_z)
+    main_task=subbox.nbox_z*(i1*subbox.nbox_y+i2)+i3;
   else
     main_task=-1;
 
   /* this is the local z variable in the subbox-system WITHOUT the boundary layer */
-  *box_z=global_z-find_start(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,i3);
-  TL=find_length(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,i3);
+  *box_z=global_z-find_start(MyGrids[0].GSglobal_z,subbox.nbox_z,i3);
+  TL=find_length(MyGrids[0].GSglobal_z,subbox.nbox_z,i3);
 
   /* the second task to communicate the sub_plane to is decided using box_z */
   if (*box_z<subbox.safe_z)            // lower border, second task is the previous in z
     {
       i3bis=i3-1;
       if (i3bis<0)
-	i3bis+=subbox.nbox_z_allslices;
-      if (i3bis>=subbox.nbox_z_thisslice*ThisSlice && i3bis<subbox.nbox_z_thisslice*(ThisSlice+1))
+	i3bis+=subbox.nbox_z;
+      if (i3bis>=0 && i3bis<subbox.nbox_z)
 	{
-	  *second_task = subbox.nbox_z_thisslice*(i1*subbox.nbox_y+i2)+(i3bis-subbox.nbox_z_thisslice*ThisSlice);
-	  *second_z = find_length(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,i3bis) + *box_z;
+	  *second_task = subbox.nbox_z*(i1*subbox.nbox_y+i2)+i3bis;
+	  *second_z = find_length(MyGrids[0].GSglobal_z,subbox.nbox_z,i3bis) + *box_z;
 	}
       else
 	{
@@ -424,11 +437,11 @@ int find_task(int global_z, int i1, int i2, int i3, int *second_task, int *box_z
   else if (*box_z>=TL-subbox.safe_z)   // upper border, second task is the next in z
     {
       i3bis=i3+1;
-      if (i3bis>=subbox.nbox_z_allslices)
-	i3bis-=subbox.nbox_z_allslices;
-      if (i3bis>=subbox.nbox_z_thisslice*ThisSlice && i3bis<subbox.nbox_z_thisslice*(ThisSlice+1))
+      if (i3bis>=subbox.nbox_z)
+	i3bis-=subbox.nbox_z;
+      if (i3bis>=0 && i3bis<subbox.nbox_z)
 	{
-	  *second_task = subbox.nbox_z_thisslice*(i1*subbox.nbox_y+i2)+(i3bis-subbox.nbox_z_thisslice*ThisSlice);
+	  *second_task = subbox.nbox_z*(i1*subbox.nbox_y+i2)+i3bis;
 	  *second_z = *box_z - TL;
 	}
       else
@@ -465,9 +478,6 @@ int send_data(comm_struct *comm_data)
   int Lgrid_x, Lgrid_y, offset;
   size_t size;
 
-#ifdef VERBOSE
-  printf("SEND_DATA: Task %d sending to %d\n",ThisTask,comm_data->task);
-#endif
 
   Lgrid_x = find_length(MyGrids[0].GSglobal_x,subbox.nbox_x,comm_data->box_x) + 2.*subbox.safe_x;
   Lgrid_y = find_length(MyGrids[0].GSglobal_y,subbox.nbox_y,comm_data->box_y) + 2.*subbox.safe_y;
@@ -503,6 +513,10 @@ int send_data(comm_struct *comm_data)
 	}
     }
 
+#ifdef VERBOSE
+  printf("SEND_DATA: Task %d sending %d products to %d\n",ThisTask,size,comm_data->task);
+#endif
+
   /* sending sub_plane to the receiver */
   if (MPI_Send((void*)sub_plane, size * sizeof(product_data), 
 	       MPI_BYTE, comm_data->task, 0, MPI_COMM_WORLD) != MPI_SUCCESS)
@@ -525,10 +539,6 @@ int recv_data(comm_struct *comm_data)
   size_t size;
   MPI_Status status;
 
-#ifdef VERBOSE
-  printf("RECV_DATA: Task %d receiving from %d\n",ThisTask,comm_data->task);
-#endif
-
   /* allocates the plane for communications */
   size = subbox.Lgwbl_x * subbox.Lgwbl_y;
   if (size>largest_size)   /* questo poi si toglie */
@@ -536,6 +546,10 @@ int recv_data(comm_struct *comm_data)
       printf("ASSURDO: size>largest_size in RECV_DATA!!!\n");
       return 1;
     }
+
+#ifdef VERBOSE
+  printf("RECV_DATA: Task %d receiving %d products from %d\n",ThisTask,size,comm_data->task);
+#endif
 
   /* receiving information from the sender */
   if (MPI_Recv((void*)sub_plane, size * sizeof(product_data), 
@@ -546,11 +560,33 @@ int recv_data(comm_struct *comm_data)
       return 1;
     }
 
+#ifdef CLASSIC_FRAGMENTATION
   /* copying information onto the frag structure */
   offset = comm_data->bz * size;
   for (i=0; i<size; i++)
     *(frag + i + offset) = *(sub_plane+i);
-  
+#else
+  /* copying information onto the frag structure */
+  offset = comm_data->bz * size;
+  for (i=0; i<size; i++)
+    if (get_mapup_bit((unsigned int)(i+offset)) && sub_plane[i].Fmax>=outputs.Flast)
+      {
+	frag_pos[frag_offset]=i+offset;
+	*(frag + frag_offset++) = *(sub_plane+i);
+
+	/* // LEVARE */
+	/* printf("recv_data, Task %d, index %d, F=%f, frag_offset:%d\n", */
+	/*        ThisTask, i+offset, frag[frag_offset-1].Fmax, frag_offset); */
+
+	if (frag_offset > subbox.Nalloc)
+	  {
+	    printf("ERROR in Task %d: it stored more particles than allocated (%d)\n",
+		   ThisTask,(int)subbox.Nalloc);
+	    printf("Please increase MaxMemPerParticle and start again\n");
+	    return 1;
+	  }
+      }
+#endif
   /* done */
   return 0;
 }
@@ -575,8 +611,29 @@ int keep_data(comm_struct *comm_data)
 	  if (k1<0) k1+=MyGrids[0].GSlocal_x;
 	  if (k1>=MyGrids[0].GSlocal_x) k1-=MyGrids[0].GSlocal_x;
 
+#ifdef CLASSIC_FRAGMENTATION
 	  *(frag + j1 + j2*subbox.Lgwbl_x + offrag) =
 	    *(products + k1 + MyGrids[0].GSlocal_x * k2 + offmax);
+#else
+	  if (get_mapup_bit((unsigned int)(j1 + j2*subbox.Lgwbl_x + offrag)) && products[k1 + MyGrids[0].GSlocal_x * k2 + offmax].Fmax>=outputs.Flast)
+	    {
+	      frag_pos[frag_offset]=j1 + j2*subbox.Lgwbl_x + offrag;
+	      *(frag + frag_offset++) =
+		*(products + k1 + MyGrids[0].GSlocal_x * k2 + offmax);
+
+	      /* // LEVARE */
+	      /* printf("keep_data, Task %d, index %d, F=%f, frag_offset:%d\n", */
+	      /* 	     ThisTask, frag_pos[frag_offset], frag[frag_offset-1].Fmax, frag_offset); */
+
+	      if (frag_offset > subbox.Nalloc)
+		{
+		  printf("ERROR in Task %d: it stored more particles than allocated (%d)\n",
+			 ThisTask,(int)subbox.Nalloc);
+		  printf("Please increase MaxMemPerParticle and start again\n");
+		  return 1;
+		}
+	    }
+#endif
 	}
     }
 

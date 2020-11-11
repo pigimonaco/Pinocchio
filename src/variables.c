@@ -72,11 +72,9 @@ group_data *groups;
 
 char date_string[25];
 
-int *indices,*group_ID,*linking_list;
+int *frag_pos,*indices,*indicesY,*sorted_pos,*group_ID,*linking_list;
+unsigned int *frag_map, *frag_map_update;
 double f_m, f_rm, espo, f_a, f_ra, f_200, sigmaD0;
-int NSlices,ThisSlice;
-
-//SDGM_data SDGM;
 
 #ifdef SCALE_DEPENDENT
 ScaleDep_data ScaleDep;
@@ -97,3 +95,5 @@ gsl_interp_accel **ACCEL_INVGROW;
 #ifdef MOD_GRAV_FR
 double H_over_c;
 #endif
+
+memory_data memory;

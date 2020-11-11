@@ -83,7 +83,7 @@ int compute_collapse_times(int ismooth)
   double Fnew,diff_ten[6],delta,local_average,local_variance,global_average,global_variance,Np;
   double lambda1,lambda2,lambda3;
 
-  /* initialize the variance of the slice */
+  /* initialize the variance */
   local_variance = 0.0;
   local_average  = 0.0;
 
@@ -111,7 +111,7 @@ int compute_collapse_times(int ismooth)
 #endif
       }
 
-  /* loop on all particles in the slice */
+  /* loop on all particles */
   for (local_z=0; local_z < MyGrids[0].GSlocal_z; local_z++)
     {
       for (local_y=0; local_y < MyGrids[0].GSlocal_y; local_y++)
@@ -284,7 +284,7 @@ int compute_velocities(int ismooth)
 
   int local_x, local_y, local_z, index, i;
 
-  /* loop on all particles in the slice */
+  /* loop on all particles */
   for (local_z=0; local_z < MyGrids[0].GSlocal_z; local_z++)
     for (local_y=0; local_y < MyGrids[0].GSlocal_y; local_y++)
       for (local_x=0; local_x < MyGrids[0].GSlocal_x; local_x++)

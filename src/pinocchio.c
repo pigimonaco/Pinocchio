@@ -182,7 +182,7 @@ int main(int argc, char **argv, char **envp)
   MPI_Barrier(MPI_COMM_WORLD);
 
   /* fragmentation of the collapsed medium */
-  if (fragment())
+  if (fragment_driver())
     abort_code();
 
   fflush(stdout);
@@ -259,6 +259,9 @@ void greetings(void)
 #endif
 #ifdef TIMELESS_SNAPSHOT
       printf("Production of the timeless snapshot has been activated\n");
+#endif
+#ifdef LIGHT_OUTPUT
+      printf("Catalogs will be written in the light version\n");
 #endif
 
 #ifdef TABULATED_CT

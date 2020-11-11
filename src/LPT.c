@@ -35,7 +35,7 @@ int compute_LPT_displacements(int ismooth)
   int ia;
 #endif
 #ifdef THREE_LPT
-  int ib,ider;
+  int ia,ib,ider;
 #endif
   double time;
 

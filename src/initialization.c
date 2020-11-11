@@ -27,9 +27,7 @@
 #include "pinocchio.h"
 
 int init_cosmology(void);
-int set_smoothing(void);
 int generate_densities(void);
-int set_subboxes(void);
 int set_plc(void);
 #ifdef SCALE_DEPENDENT
 int set_scaledep_GM(void);
@@ -68,24 +66,19 @@ int initialization()
   if (initialize_MassVariance())
     return 1;
   
+  /* initializes quantities needed for the on-the-fly reconstruction of PLC */
+  if (set_plc())
+    return 1;
+
   /* computes the number of sub-boxes for fragmentation */
   if (set_subboxes())
-    {
-      if (!ThisTask)
-	printf("Pinocchio done!\n");
-      MPI_Finalize();
-      exit (0);
-    }
+    return 1;
 
 #ifdef SCALE_DEPENDENT
   /* computes the growth rates for displacements */
   if (set_scaledep_GM())
     return 1;
 #endif
-
-  /* initializes quantities needed for the on-the-fly reconstruction of PLC */
-  if (set_plc())
-    return 1;
 
   /* this barrier is set to have correct stdout in case the run cannot start */
   fflush(stdout);
@@ -247,7 +240,6 @@ int set_parameters()
 	}
       printf("\n");
 
-      printf("\n");
       printf("GENIC parameters:\n");
       printf("InputSpectrum_UnitLength_in_cm %f\n",params.InputSpectrum_UnitLength_in_cm);
       printf("FileWithInputSpectrum          %s\n",params.FileWithInputSpectrum);
@@ -283,9 +275,11 @@ int set_smoothing()
     }
 
   if (!ThisTask)
-    printf("Min variance: %f12.6, max variance: %f12.6, number of smoothing radii: %d\n",
-	   var_min,var_max,Smoothing.Nsmooth);
-
+    {
+      printf("\nSMOOTHING RADII\n");
+      printf("Min variance: %f12.6, max variance: %f12.6, number of smoothing radii: %d\n",
+	     var_min,var_max,Smoothing.Nsmooth);
+    }
   Smoothing.Radius      =(double*)malloc(Smoothing.Nsmooth * sizeof(double));
   Smoothing.Variance    =(double*)malloc(Smoothing.Nsmooth * sizeof(double));
   Smoothing.TrueVariance=(double*)malloc(Smoothing.Nsmooth * sizeof(double));
@@ -365,6 +359,10 @@ int set_grids()
   MyGrids[0].GSglobal_x = params.GridSize[0];
   MyGrids[0].GSglobal_y = params.GridSize[1];
   MyGrids[0].GSglobal_z = params.GridSize[2];
+  
+  MyGrids[0].Ntotal = (unsigned long long)MyGrids[0].GSglobal_x * 
+    (unsigned long long)MyGrids[0].GSglobal_y * 
+    (unsigned long long)MyGrids[0].GSglobal_z;
 
   MyGrids[0].BoxSize = params.BoxSize_htrue;
   MyGrids[0].lower_k_cutoff=0.;
@@ -392,6 +390,26 @@ int set_grids()
   for (igrid=0; igrid<Ngrids; igrid++)
     if (set_one_grid(igrid))
       return 1;
+
+  /* Task 0 broadcasts its number of fft particles, that becomes the reference */
+  unsigned int PPT;
+  if (!ThisTask)
+    {
+      PPT=MyGrids[0].total_local_size;
+    }
+  MPI_Bcast(&PPT, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
+  MyGrids[0].ParticlesPerTask=PPT;
+
+  if ((int)(PPT * params.MaxMemPerParticle / MBYTE + 1.0) > params.MaxMem)
+    {
+      if (!ThisTask)
+	{
+	  printf("ERROR: MaxMem of %d Mb per task is insufficient to store %d bytes per particle\n",
+		 params.MaxMem, (int)params.MaxMemPerParticle);
+	  printf("       please increase MaxMem to at least %d\n",(int)(PPT * params.MaxMemPerParticle / MBYTE + 1.0));
+	}
+      return 1;
+    }
 
   return 0;
 }
@@ -584,11 +602,11 @@ int set_plc(void)
 	plc.repls[this].F2=1.0;
     }
 
-  plc.Nmax = subbox.Npart / 10;
+  plc.Nmax = (int)(MyGrids[0].ParticlesPerTask/6 * params.PredPeakFactor);
 
   if (!ThisTask)
     {
-      printf("The Past Light Cone will be reconstruct from z=%f to z=%f\n",
+      printf("\nThe Past Light Cone will be reconstruct from z=%f to z=%f\n",
 	     params.StartingzForPLC,params.LastzForPLC);
       if (params.PLCProvideConeData)
 	printf("Cone data have been provided in the parameter file\n");
@@ -785,181 +803,188 @@ int set_plc()
 int set_subboxes()
 {
 
-  int i,j,k, i1,j1,k1, i2,j2,k2,NS2, NN,NN1,N1,N2,N3,ssafe;
-  double tdis,size,this,BytesPerParticle,FmaxBPP,FragG_BPP,FragP_BPP,
-    TotalNP,TotalNP_pertask,ratio,smallest,cc,MemPerTask;
-
-  /* typical displacement at zlast */
-  tdis = GrowingMode(outputs.zlast,params.k_for_GM) * sqrt( DisplVariance(params.InterPartDist) );
+  int i,j,k, i1,j1,k1, NN,NN1,N1,N2,N3;
+  unsigned long long int surface,this,tt;
+  double size,sizeG,cc;
 
   /* mass of the largest halo expected in the box */
   params.Largest=1.e18;
   cc=1./pow(params.BoxSize_htrue,3.0);
-
   double aa=AnalyticMassFunction(params.Largest,outputs.zlast);
   while (aa*params.Largest<cc)
     {
-      params.Largest*=0.99; 
+      params.Largest*=0.99;
       aa=AnalyticMassFunction(params.Largest,outputs.zlast);
     }
-
-  /* boundary layer */
   size=SizeForMass(params.Largest);
-  subbox.SafetyBorder = params.BoundaryLayerFactor * size;
-  subbox.safe = (int)(subbox.SafetyBorder/params.InterPartDist)+1;
+  sizeG=size/params.InterPartDist;
 
-  if (!ThisTask)
-    {
-      printf("\n");
-      printf("Determination of the boundary layer\n");
-      printf("   growing mode at z=%f: %f\n",outputs.zlast, GrowingMode( outputs.zlast, params.k_for_GM));
-      printf("   largest halo expected in this box at z=%f: %e Msun\n",
-	     outputs.zlast, params.Largest);
-      printf("   its Lagrangian size: %f Mpc\n",size);
-      printf("   typical displacement: %f \n",tdis);
-      printf("   the boundary layer will be %f, a factor of %f with respect to the typical displacement\n",
-	     subbox.SafetyBorder, subbox.SafetyBorder/tdis);
-    }
+  /*  
+      The number of loadable subbox particles is equal 
+      to the number allowed by the specified MaxMemPerParticle.
+      The boundary layer is set to its maximum value.
+  */
 
-  /* finds the optimal number of sub-boxes to use for the fragmentation */
-  ssafe=2.*subbox.safe;
-  FmaxBPP = (double)sizeof(product_data) + 10.0*(double)sizeof(double) + 
-    (double)sizeof(int) * (double)NTasks / (double)MyGrids[0].GSglobal_z;
-  TotalNP = (double)MyGrids[0].GSglobal_x * (double)MyGrids[0].GSglobal_y * (double)MyGrids[0].GSglobal_z;
-  TotalNP_pertask = TotalNP/(double)NTasks;
+  /* the optimal number of sub-boxes to use for the fragmentation
+     is the number that offers the best volume/surface ratio */
+  surface=MyGrids[0].ParticlesPerTask;
+  for (k=1; k<=NTasks; k++)
+    for (j=1; j<=NTasks/k; j++)
+      for (i=1; i<=NTasks/k/j; i++)
+	/* the three indices must be exact divisors of the three grid lengths */
+	if (i*j*k==NTasks)
+	  {
+	    /* number of particles in the sub-box */
+	    N1 = find_length(MyGrids[0].GSglobal_x,i,0);
+	    N2 = find_length(MyGrids[0].GSglobal_y,j,0);
+	    N3 = find_length(MyGrids[0].GSglobal_z,k,0);
 
-  FragP_BPP=(double)sizeof(product_data);
-  FragG_BPP=3.0*(double)sizeof(int)+(double)(sizeof(group_data) +sizeof(histories_data))/10.0;
-#ifdef PLC
-  FragG_BPP+=(double)sizeof(plcgroup_data)/10.;
-#endif
+	    this = (unsigned long long int)(i>1? 2*(N2*N3) : 0) + 
+	      (unsigned long long int)(j>1? 2*(N1*N3) : 0) +
+	      (unsigned long long int)(k>1? 2*(N1*N2) : 0);
+	    tt=this;
+	    if (N1/2 < sizeG)
+	      this+=(unsigned long long int)((double)tt*pow(2*sizeG/(double)N1,2.0));
+	    if (N2/2 < sizeG)
+	      this+=(unsigned long long int)((double)tt*pow(2*sizeG/(double)N2,2.0));
+	    if (N3/2 < sizeG)
+	      this+=(unsigned long long int)((double)tt*pow(2*sizeG/(double)N3,2.0));
 
-  smallest=1.e10;
-  NSlices=0;
-
-  do
-    {
-      ++NSlices;
-
-      BytesPerParticle=1.e10;
-      for (k=1; k<=NTasks; k++)
-	for (j=1; j<=NTasks/k; j++)
-	  for (i=1; i<=NTasks/k/j; i++)
-	    /* the three indices must be exact divisors of the three grid lengths */
-	    if (i*j*k==NTasks)
+	    if (this<surface)
 	      {
-		/* number of particles in the sub-box */
-		N1 = find_length(MyGrids[0].GSglobal_x,i,0);
-		N2 = find_length(MyGrids[0].GSglobal_y,j,0);
-		N3 = find_length(MyGrids[0].GSglobal_z,k*NSlices,0);
-		if (N1<ssafe || N2<ssafe || N3<ssafe)
-		  continue;
-		NN = (N1 + (i==1? 0 : ssafe))
-		  *  (N2 + (j==1? 0 : ssafe)) 
-		  *  (N3 + (k*NSlices==1? 0 : ssafe));
-
-		ratio = (double)NN/TotalNP_pertask;
-		if (NSlices>1)
-		  this=(double)sizeof(product_data) + ratio * (FragP_BPP + FragG_BPP);
-		else		    
-		  this=( (double)sizeof(product_data) > ratio * FragG_BPP ?
-			 (double)sizeof(product_data) : ratio * FragG_BPP) +
-		    ratio * FragP_BPP;
-		if (this<FmaxBPP)
-		  this=FmaxBPP;
-		
-		if (this<smallest)
-		  {
-		    smallest=this;
-		    i2=i; j2=j; k2=k; NS2=NSlices;
-		  }
-
-		if (this < BytesPerParticle)
-		  {
-		    BytesPerParticle=this;
-		    NN1=NN;
-		    i1=i;
-		    j1=j;
-		    k1=k;
-		  }
+		surface=this;
+		i1=i; 
+		j1=j; 
+		k1=k; 
 	      }
-      if (BytesPerParticle>1000.)
-	break;
-    }
-  while (BytesPerParticle>params.MaxMemPerParticle);
-
-
-  if (BytesPerParticle>1000.)
-    {
-      if (!ThisTask)
-	{
-	  printf("ERROR: no possible division of sub-boxes found up to Nslices=%d\n", 
-		 NSlices);
-	  printf("lowest possible value of memory per particle is %f ",smallest);
-	  printf("found on a subdivision %d-%d-%d on %d slices\n",i2,j2,k2,NS2);
-	  printf("please decrease BoundaryLayerFactor or increase MaxMemPerParticle\n");
-	  fflush(stdout);
-	}
-      return 1;
-    }
+	  }
 
   subbox.nbox_x=i1;
   subbox.nbox_y=j1;
-  subbox.nbox_z_thisslice=k1;
-  subbox.nbox_z_allslices=k1*NSlices;
+  subbox.nbox_z=k1;
 
-  subbox.safe_x = (subbox.nbox_x>1 ? subbox.safe : 0);
-  subbox.safe_y = (subbox.nbox_y>1 ? subbox.safe : 0);
-  subbox.safe_z = (subbox.nbox_z_allslices>1 ? subbox.safe : 0);
-
-  subbox.pbc_x = (subbox.nbox_x==1);
-  subbox.pbc_y = (subbox.nbox_y==1);
-  subbox.pbc_z = (subbox.nbox_z_allslices==1);
-
-  /* this will be mybox for the first slice */
-  NN=subbox.nbox_y*subbox.nbox_z_thisslice;
+  /* mybox is the box assigned to the task */
+  NN=subbox.nbox_y*subbox.nbox_z;
   subbox.mybox_x=ThisTask/NN;
   NN1=ThisTask-subbox.mybox_x*NN;
-  subbox.mybox_y=NN1/subbox.nbox_z_thisslice;
-  subbox.mybox_z=NN1-subbox.mybox_y*subbox.nbox_z_thisslice;
+  subbox.mybox_y=NN1/subbox.nbox_z;
+  subbox.mybox_z=NN1-subbox.mybox_y*subbox.nbox_z;
 
   subbox.Lgrid_x = find_length(MyGrids[0].GSglobal_x,subbox.nbox_x,subbox.mybox_x);
   subbox.Lgrid_y = find_length(MyGrids[0].GSglobal_y,subbox.nbox_y,subbox.mybox_y);
-  subbox.Lgrid_z = find_length(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,subbox.mybox_z);
+  subbox.Lgrid_z = find_length(MyGrids[0].GSglobal_z,subbox.nbox_z,subbox.mybox_z);
+
+  subbox.pbc_x = (subbox.nbox_x==1);
+  subbox.pbc_y = (subbox.nbox_y==1);
+  subbox.pbc_z = (subbox.nbox_z==1);
+
+  /* the boundary layer is as large as BoundaryLayerFactor * sizeG 
+     but the total subbox size cannot be larger than GSglobal - 2 */
+  int warn=0;
+  if (subbox.pbc_x)
+    subbox.safe_x=0;
+  else
+    {
+      subbox.safe_x = params.BoundaryLayerFactor * sizeG +0.5;
+      if (2*subbox.safe_x + subbox.Lgrid_x > MyGrids[0].GSglobal_x - 2)
+	{
+	  subbox.safe_x = (MyGrids[0].GSglobal_x - subbox.Lgrid_x)/2 -1;
+	  warn=1;
+	}
+    }
+  if (subbox.pbc_y)
+    subbox.safe_y=0;
+  else
+    {
+      subbox.safe_y = params.BoundaryLayerFactor * sizeG +0.5;
+      if (2*subbox.safe_y + subbox.Lgrid_y > MyGrids[0].GSglobal_y - 2)
+	{
+	  subbox.safe_y = (MyGrids[0].GSglobal_y - subbox.Lgrid_y)/2 -1;
+	  warn=1;
+	}
+    }
+  if (subbox.pbc_z)
+    subbox.safe_z=0;
+  else
+    {
+      subbox.safe_z = params.BoundaryLayerFactor * sizeG +0.5;
+      if (2*subbox.safe_z + subbox.Lgrid_z > MyGrids[0].GSglobal_z - 2)
+	{
+	  subbox.safe_z = (MyGrids[0].GSglobal_z - subbox.Lgrid_z)/2 -1;
+	  warn=1;
+	}
+    }
 
   subbox.Lgwbl_x = subbox.Lgrid_x + 2*subbox.safe_x; 
   subbox.Lgwbl_y = subbox.Lgrid_y + 2*subbox.safe_y;
   subbox.Lgwbl_z = subbox.Lgrid_z + 2*subbox.safe_z;
 
-  subbox.Npart = subbox.Lgwbl_x * subbox.Lgwbl_y * subbox.Lgwbl_z;
-
   subbox.start_x = find_start(MyGrids[0].GSglobal_x,subbox.nbox_x,subbox.mybox_x);
   subbox.start_y = find_start(MyGrids[0].GSglobal_y,subbox.nbox_y,subbox.mybox_y);
-  subbox.start_z = find_start(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,subbox.mybox_z);
+  subbox.start_z = find_start(MyGrids[0].GSglobal_z,subbox.nbox_z,subbox.mybox_z);
 
   subbox.stabl_x = subbox.start_x - subbox.safe_x;
   subbox.stabl_y = subbox.start_y - subbox.safe_y;
   subbox.stabl_z = subbox.start_z - subbox.safe_z;
 
-  subbox.overhead=(double)subbox.Npart/(double)(subbox.Lgrid_x * subbox.Lgrid_y * subbox.Lgrid_z);
+  /* 
+     Npart: total number of particles in the whole sub-volume 
+     Ngood: total number of particles in the well reconstructed region
+     Npredpeaks: a guess of the maximum number of peaks in the subbox
+     Nalloc: number of particles for which memory has been allocated (set in organize_main_memory)
+     Nstored: number of actually stored particles
+  */
 
-  MemPerTask  = BytesPerParticle * TotalNP_pertask / 1024. / 1024. / 1024.;
-
-  /* NSlices>1 is incompatible with WriteSnapshot */
-  if (NSlices>1 && params.WriteSnapshot)
-    {
-      params.WriteSnapshot=0;
-      if (!ThisTask)
-	printf("Sorry, but snapshots cannot be written if fragmentation is done in slices\n");
-    }
-#ifdef TIMELESS_SNAPSHOT
-  if (NSlices>1 && params.WriteTimelessSnapshot)
-    {
-      params.WriteTimelessSnapshot=0;
-      if (!ThisTask)
-	printf("Sorry, but timeless snapshots cannot be written if fragmentation is done in slices\n");
-    }
+  subbox.Npart = subbox.Lgwbl_x * subbox.Lgwbl_y * subbox.Lgwbl_z;
+  subbox.Ngood = subbox.Lgrid_x * subbox.Lgrid_y * subbox.Lgrid_z;
+  /* this is a prediction of the number of peaks that will be found,
+   modulated by PredPeakFactor parameter */
+  subbox.PredNpeaks = (int)(MyGrids[0].ParticlesPerTask/6 * params.PredPeakFactor);
+  subbox.Nstored = 0;
+#ifndef CLASSIC_FRAGMENTATION
+  /* this is the size of frag_map*/
+  subbox.maplength = subbox.Npart/UINTLEN + (subbox.Npart%UINTLEN!=0);
+#else
+  subbox.maplength = 0;
 #endif
+
+  /* this function returns the number of particles that can be allocated, 0 if memory is insufficient */
+  subbox.Nalloc = organize_main_memory();
+
+  /* messagges */
+  if (!ThisTask)
+    {
+      printf("\n");
+      printf("FRAGMENTATION:\n");
+      printf("Reference number of particles:         %d\n",MyGrids[0].ParticlesPerTask);
+      printf("Max memory per particle:               %d (requested %d)\n",(int)((double)memory.all/(double)MyGrids[0].ParticlesPerTask+0.5),(int)params.MaxMemPerParticle);
+      printf("Number of sub-boxes per dimension:     %d %d %d\n",subbox.nbox_x,subbox.nbox_y,subbox.nbox_z);
+      printf("Periodic boundary conditions:          %d %d %d\n",subbox.pbc_x,subbox.pbc_y,subbox.pbc_z);
+      printf("Core 0 will work on a grid:            %d %d %d\n",subbox.Lgwbl_x,subbox.Lgwbl_y,subbox.Lgwbl_z);
+      printf("The resolved box will be:              %d %d %d\n",subbox.Lgrid_x,subbox.Lgrid_y,subbox.Lgrid_z);
+      printf("Boundary layer:                        %d %d %d\n",subbox.safe_x,subbox.safe_y,subbox.safe_z);
+      printf("Boundary layer factor:                 %f\n",params.BoundaryLayerFactor);
+      printf("Number of total particles for core 0:  %llu\n",subbox.Npart);
+      printf("Number of good particles for core 0:   %d\n",subbox.Ngood);
+      printf("Particles that core 0 will allocate:   %llu\n",subbox.Nalloc);
+      printf("Allowed overhead:                      %f\n",(float)subbox.Nalloc/(float)subbox.Ngood);
+      printf("Largest halo expected in this box at z=%f: %e Msun\n",
+  	     outputs.zlast, params.Largest);
+      printf("   its Lagrangian size: %f Mpc (%6.2f grid points)\n",size,sizeG);
+      printf("   this requires a boundary layer of %6.2f grid points \n",sizeG*params.BoundaryLayerFactor);
+      if (warn)
+	{
+	  printf("WARNING: the boundary layer on some dimension is smaller than required\n");
+	  printf("         times the BoundaryLayerFactor, the most massive halos may be inaccurate\n");
+	}
+    }
+
+  if ( !subbox.Nalloc )
+    {
+      if (!ThisTask)
+	printf("ERROR: as you will notice, organize_main_memory returned an invalid Nalloc, exiting\n");
+      return 1;
+    }
 
   /* initialization of quantities required by compute_mf */
    if (params.OutputInH100)
@@ -980,32 +1005,10 @@ int set_subboxes()
   /* messages */
   if (!ThisTask)
     {
-      printf("\n");
-      printf("FRAGMENTATION:\n");
-      if (NSlices>1)
-	printf("The box will be fragmented in %d slices\n",NSlices);
-      else
-	printf("The box will be fragmented in one go\n");
-      printf("Number of sub-boxes per dimension: %d %d %d\n",subbox.nbox_x,subbox.nbox_y,subbox.nbox_z_allslices);
-      printf("Boundary layer (true Mpc):         %f\n",subbox.SafetyBorder);
-      printf("Boundary layer (gridpoints):       %d\n",subbox.safe);
-      printf("Core 0 will work on a grid:        %d %d %d\n",subbox.Lgwbl_x,subbox.Lgwbl_y,subbox.Lgwbl_z);
-      printf("Number of particles for core 0:    %d\n",subbox.Npart);
-      printf("The resolved box will be:          %d %d %d\n",subbox.Lgrid_x,subbox.Lgrid_y,subbox.Lgrid_z);
-      printf("Periodic boundary conditions:      %d %d %d\n",subbox.pbc_x,subbox.pbc_y,subbox.pbc_z);
-      printf("Required bytes per fft particle:   %f\n",BytesPerParticle);
-      printf("The overhead for fragmentation is: %f\n",subbox.overhead);
-      printf("Required memory per task:          %4.0fMb - Maxmem=%dMb\n", MemPerTask*1024.,params.MaxMem);
       printf("\nThe mass function will be computed from Log M=%f to Log M=%f (%d bins)\n",
       	     mf.mmin, mf.mmax, mf.NBIN);
       printf("\n");
-    }
-
-  if (MemPerTask > params.MaxMem/1024.0)
-    {
-      if (!ThisTask)
-      printf("ERROR: your requirements overshoot the available memory per MPI task\n");
-      return 1;
+      fflush(stdout);      
     }
 
   return 0;
@@ -1059,7 +1062,7 @@ int find_length(int L, int n, int ibox)
 #define SMALLDIFF ((double)1.e-5)
 #define TOLERANCE ((double)1.e-4)
 #define MAXITER 20
-//#define DEBUG
+#define DEBUG
 
 double ThisRadius;
 double Time;
@@ -1324,7 +1327,7 @@ int set_scaledep_GM()
 	}
 
 #ifdef DEBUG
-      printf("density, smoothing %d, iter=%d\n",ismooth,iter); // LEVARE
+      printf("density, smoothing %d, iter=%d\n",ismooth,iter);
       if (!ThisTask)
 	for (i=0; i<NBINS; i++)
 	  {
@@ -1625,7 +1628,7 @@ int set_scaledep_GM()
 	}
 
 #ifdef DEBUG
-      printf("velocities, smoothing %d, iter=%d\n",ismooth,iter); // LEVARE
+      printf("velocities, smoothing %d, iter=%d\n",ismooth,iter);
       Time=1.0;
       gsl_integration_qags (&Function2, -4., 2., 0.0, TOLERANCE, NWINT, workspace, &result, &error);
       normGM1=sqrt(result);
