@@ -72,8 +72,8 @@ endif
 
 
 # included libraries, shared libraries 
-INC =  $(FFTW_INCL) $(PFFT_INCL) $(MPI_INCL) $(GSL_INCL)
-LIB =  -lm $(FFTW_LIBR) $(PFFT_LIBR) $(MPI_LIBR) $(GSL_LIBR)
+INC =  $(PFFT_INCL) $(FFTW_INCL) $(MPI_INCL) $(GSL_INCL)
+LIB =  -lm $(PFFT_LIBR) $(FFTW_LIBR) $(MPI_LIBR) $(GSL_LIBR)
 
 
 # compiler options : choose from CDEBUG or COPTIMIZED
@@ -82,9 +82,9 @@ COPTS = $(CDEBUG)
 
 # source files:
 OBJECTS = fmax.o variables.o initialization.o collapse_times.o fmax-pfft.o GenIC_large.o \
-	ReadParamfile.o ReadWhiteNoise.o write_fields.o allocations.o LPT.o distribute.o \
+	ReadParamfile.o write_fields.o allocations.o LPT.o distribute.o \
 	fragment.o build_groups.o write_halos.o write_snapshot.o cosmo.o
-
+#ReadWhiteNoise.o
 
 # rules
 %.o: %.c Makefile pinocchio.h fragment.h def_splines.h

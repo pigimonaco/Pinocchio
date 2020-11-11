@@ -26,7 +26,7 @@
 
 #include "pinocchio.h"
 
-#ifdef PRECISE_TIMING  // NON SONO SICURO CHE VALGA LA PENA DI MANTENERLO
+#ifdef PRECISE_TIMING  // SI PUO` TOGLIERE
 
 #define SET_WTIME cputime.partial = MPI_Wtime();
 #define ASSIGN_WTIME(INIT, ACC) do { double ttt= MPI_Wtime(); cputime.ACC = ttt - cputime.INIT; } while(0)
@@ -37,6 +37,7 @@
 #define ACCUMULATE_WTIME(INIT, ACC)
 #endif
 
+int initialize_fft(void);
 int init_cosmology(void);
 int generate_densities(void);
 int set_plc(void);
@@ -62,49 +63,12 @@ int initialization()
   if (set_parameters())
     return 1;
 
-// CAPIRE DOVE E` MEGLIO METTERE QUESTO QUI SOTTO, FORSE DOPO LA COSMOLOGIA
-#ifdef USE_FFT_THREADS
-  if ( internal.nthreads > 1 )
-    dprintf(VMSG, 0, "Using %d threads for FFTs\n", internal.nthreads );
-#endif
-  
-  /* Initialize pfft */
-  pfft_init();
-
-  /* Inititalize fftw */
-#ifdef USE_FFT_THREADS
-    fftw_init_threads();
-#endif
-
-  fftw_mpi_init();    
-
-  
-  if(set_fft_decomposition())
-    return 1;
-
-  if(ThisTask == 0)
-    dprintf(VMSG, ThisTask, "cube subdivision [%d dim]: %d x %d x %d = %d processes\n",
-	    internal.tasks_subdivision_dim,
-	    internal.tasks_subdivision_3D[0],
-	    internal.tasks_subdivision_3D[1],
-	    internal.tasks_subdivision_3D[2],
-	    internal.tasks_subdivision_3D[0] *
-	    internal.tasks_subdivision_3D[1] *
-	    internal.tasks_subdivision_3D[2]);
-  
-  if( pfft_create_procmesh(internal.tasks_subdivision_dim, MPI_COMM_WORLD, internal.tasks_subdivision_3D, &FFT_Comm) )
-    {
-      int all = 1;
-      for(int iii = 0; iii < internal.tasks_subdivision_dim; iii++)
-  	all *= internal.tasks_subdivision_3D[iii];
-      
-      pfft_fprintf(MPI_COMM_WORLD, stderr, "Error while creating communicator and mesh with %d processes\n", all);
-      return 1;
-    }
-
-
   /* call to cosmo.c: initialization of cosmological functions */
   if (initialize_cosmology())
+    return 1;
+
+  /* initialize pfft and fftw functions */
+  if (initialize_fft())
     return 1;
 
   /* set the properties of grids and initialize FFTW quantities, including vectors */
@@ -155,7 +119,7 @@ int initialization()
 
   /* initialization of fft plans */
   SET_WTIME;
-  if (initialize_fft())
+  if (compute_fft_plans())
     return 1;
   ASSIGN_WTIME(partial, fft_initialization);
 
@@ -181,6 +145,52 @@ int initialization()
 }
 
 
+int initialize_fft(void)
+{
+
+#ifdef USE_FFT_THREADS
+  if ( internal.nthreads_fft < 0 )
+    internal.nthreads_fft = internal.nthreads_omp;
+  if ( internal.nthreads_fft > 1 )
+    dprintf(VMSG, 0, "Using %d threads for FFTs\n", internal.nthreads_fft );
+#endif
+  
+  /* Initialize pfft */
+  pfft_init();
+
+  /* Inititalize fftw */
+#ifdef USE_FFT_THREADS
+    fftw_init_threads();
+#endif
+  fftw_mpi_init();
+
+  if(set_fft_decomposition())
+    return 1;
+
+  if (!ThisTask)
+    dprintf(VMSG, ThisTask, "cube subdivision [%d dim]: %d x %d x %d = %d processes\n",
+	    internal.tasks_subdivision_dim,
+	    internal.tasks_subdivision_3D[0],
+	    internal.tasks_subdivision_3D[1],
+	    internal.tasks_subdivision_3D[2],
+	    internal.tasks_subdivision_3D[0] *
+	    internal.tasks_subdivision_3D[1] *
+	    internal.tasks_subdivision_3D[2]);
+  
+  if ( pfft_create_procmesh(internal.tasks_subdivision_dim, MPI_COMM_WORLD, internal.tasks_subdivision_3D, &FFT_Comm) )
+    {
+      int all = 1;
+      for(int iii = 0; iii < internal.tasks_subdivision_dim; iii++)
+  	all *= internal.tasks_subdivision_3D[iii];
+      
+      pfft_fprintf(MPI_COMM_WORLD, stderr, "Error while creating communicator and mesh with %d processes\n", all);
+      return 1;
+    }
+
+  return 0;
+}
+
+
 int set_parameters()
 {
   int i;
@@ -198,7 +208,7 @@ int set_parameters()
   internal.tasks_subdivision_3D[0]         = 0;
   internal.tasks_subdivision_3D[1]         = 0;
   internal.tasks_subdivision_3D[2]         = 0;
-  internal.nthreads                        = 1;
+  //internal.nthreads_fft                    = 1;
   
   if(read_parameter_file())
     return 1;

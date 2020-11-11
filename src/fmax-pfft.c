@@ -108,7 +108,7 @@ int set_one_grid(int ThisGrid)
   GRID.total_local_size_fft = 2 * alloc_local;
   GRID.total_local_size     = GRID.GSlocal[_x_] * GRID.GSlocal[_y_] * GRID.GSlocal[_z_];  
   
-  MyGrids[0].off = 0;  
+  MyGrids[0].off = 0;
   // order the sub-blocks by row-major order (i, j, k), k first, then j, then i
 
   /* int           i; */
@@ -134,7 +134,7 @@ int set_one_grid(int ThisGrid)
 
 
 
-int initialize_fft()
+int compute_fft_plans()
 {
   ptrdiff_t DIM[3];
   int       pfft_flags;
@@ -155,8 +155,8 @@ int initialize_fft()
       if(params.use_transposed_fft)
 	pfft_flags |= PFFT_TRANSPOSED_OUT;
 #ifdef USE_FFT_THREADS
-      fftw_plan_with_nthreads(internal.nthreads);
-      pfft_plan_with_nthreads(internal.nthreads);
+      fftw_plan_with_nthreads(internal.nthreads_fft);
+      pfft_plan_with_nthreads(internal.nthreads_fft);
 #endif
       GRID.forward_plan = pfft_plan_dft_r2c_3d(DIM, rvector_fft[ThisGrid], cvector_fft[ThisGrid],
 					       FFT_Comm, PFFT_FORWARD, pfft_flags);
@@ -172,8 +172,8 @@ int initialize_fft()
       if(params.use_transposed_fft)
 	pfft_flags |= PFFT_TRANSPOSED_IN;
 #ifdef USE_FFT_THREADS
-      fftw_plan_with_nthreads(internal.nthreads);      
-      pfft_plan_with_nthreads(internal.nthreads);
+      fftw_plan_with_nthreads(internal.nthreads_fft);
+      pfft_plan_with_nthreads(internal.nthreads_fft);
 #endif
       GRID.reverse_plan = pfft_plan_dft_c2r_3d(DIM, cvector_fft[ThisGrid], rvector_fft[ThisGrid], 
 					       FFT_Comm, PFFT_BACKWARD, pfft_flags);

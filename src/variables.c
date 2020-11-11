@@ -27,13 +27,12 @@
 #include "pinocchio.h"
 
 int ThisTask,NTasks;
-int num_omp_th = 1;
 
 //int            pfft_flags_c2r, pfft_flags_r2c;
 MPI_Comm        FFT_Comm;
 internal_data   internal;
 
-void *main_memory, *wheretoplace_mycat;
+char *main_memory, *wheretoplace_mycat;
 product_data *products, *frag;
 unsigned int **seedtable;  // QUESTO RIMANE?
 unsigned int   *cubes_ordering;

@@ -51,11 +51,12 @@ int main(int argc, char **argv, char **envp)
   cputime.total=MPI_Wtime();
   greetings();
 
-#ifdef _OPENMP  // E QUESTO COSA FA?
+#ifdef _OPENMP
+  /* initialization of OpemMP */
 #pragma omp parallel
   {
 #pragma omp master
-    num_omp_th = omp_get_num_threads();
+    internal_data.nthreads_omp = omp_get_num_threads();
   }
 #endif
 
@@ -76,7 +77,6 @@ int main(int argc, char **argv, char **envp)
   strcpy(params.ParameterFile,argv[1]);
   if (initialization())
     abort_code();
-
 
   fflush(stdout);
   MPI_Barrier(MPI_COMM_WORLD);
@@ -280,7 +280,7 @@ void greetings(void)
     {
       printf("[%s] This is pinocchio V4.XX, running on %d MPI tasks\n\n",fdate(),NTasks);
 #ifdef _OPENMP
-      printf( "Using %d OpenMP threads\n", num_omp_th );
+      printf( "Using %d OpenMP threads\n", internal_data.nthreads_omp );
 #endif
 
 #ifdef USE_FFT_THREADS

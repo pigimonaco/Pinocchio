@@ -24,17 +24,18 @@
  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 */
 
-// L'INLINING NON FUNZIONA!!!
-
 #include "pinocchio.h"
 #include <gsl/gsl_interp2d.h>
 #include <gsl/gsl_spline2d.h>
 
-int    inline v_inverse_collapse_time ( dvec dtensor[6], dvec_u , dvec , dvec_u *, dvec_u *, dvec_u *, dvec_u *) __attribute__((always_inline));
-double inline inverse_collapse_time   ( double *, double *, double *, double *, int *) __attribute__((always_inline));
-double inline ell                     ( double, double, double) __attribute__((always_inline));
-double inline ell_classic             ( double, double, double) __attribute__((always_inline));
-double inline ell_sng                 ( double, double, double) __attribute__((always_inline));
+// LUCA: per il momento ho tolto l'inline, non mi compilava
+#ifndef TABULATED_CT
+int     v_inverse_collapse_time ( dvec dtensor[6], dvec_u , dvec , dvec_u *, dvec_u *, dvec_u *, dvec_u *); //__attribute__((always_inline));
+#endif
+double  inverse_collapse_time   ( double *, double *, double *, double *, int *); //__attribute__((always_inline));
+double  ell                     ( double, double, double); //__attribute__((always_inline));
+double  ell_classic             ( double, double, double); //__attribute__((always_inline));
+double  ell_sng                 ( double, double, double); //__attribute__((always_inline));
 
 void ord(double *,double *,double *);
 
@@ -54,7 +55,7 @@ int fails;
 
 // PER LUCA: controlliamo che sto aggiungendo bene le funzioni
 #ifdef TABULATED_CT
-double inline interpolate_collapse_time(double, double, double) __attribute__((always_inline));
+double  interpolate_collapse_time(double, double, double) //__attribute__((always_inline));
 
 // quanto segue alla fine potra` essere spostato giu` dove inizia la parte TABULATED_CT
 
@@ -179,6 +180,8 @@ int compute_collapse_times(int IS)
 	    int idx_y = (idx_x + local_y) * MyGrids[0].GSlocal[_z_];
 	    int mysize = DVEC_SIZE * MyGrids[0].GSlocal[_z_] / DVEC_SIZE;
 	    int local_z = 0;
+
+#ifndef TABULATED_CT
 	    for ( ; local_z < mysize; local_z += DVEC_SIZE)
 	      {
 		int index = idx_y + local_z;
@@ -186,11 +189,12 @@ int compute_collapse_times(int IS)
 
 		/* sum all contributions */
 		dvec elements[6] __attribute__((aligned(32)));
-	      
-#if !(defined(__aarch64__) || defined(__arm__))
-		for (int i = 0; i < 6; i++)
-		  elements[i] = _mm256_load_pd(&second_derivatives[0][i][index]);
-#else
+
+// LUCA: quella funzione non mi compila	      
+//#if !(defined(__aarch64__) || defined(__arm__))
+//		for (int i = 0; i < 6; i++)
+//		  elements[i] = _mm256_load_pd(&second_derivatives[0][i][index]);
+//#else
 		dvec_u ld_elements[6] __attribute__((aligned(32)));
 		for (int i = 0; i < 6; i++)
 		  {
@@ -200,7 +204,7 @@ int compute_collapse_times(int IS)
 		    ld_elements[i].v[3] = second_derivatives[0][i][index + 3];
 		    elements[i] = ld_elements[i].V;
 		  }
-#endif
+//#endif
 
 		/* Computation of the variance of the linear density field */
 		dvec_u delta __attribute__((aligned(32)));
@@ -237,8 +241,10 @@ int compute_collapse_times(int IS)
 		      }
 		  }
 	      }
+#endif
 
-	    // MA QUI LA PARTE VETTORIALIZZATA E QUELLA NON VETTORIALIZZATA STANNO UNA DOPO L'ALTRA?
+	    /* this is for all particles if vectorialization is switched off 
+	       or for remaining particles otherwise */
 	    for ( ; local_z < MyGrids[0].GSlocal[_z_]; local_z++)
 	      {
 		int index = idx_y + local_z;
@@ -311,9 +317,9 @@ int compute_collapse_times(int IS)
 
 #if defined (_OPENMP)
 #pragma omp atomic
-    cputime.invcoll += invcoll_update/num_omp_th;
+    cputime.invcoll += invcoll_update/internal_data.nthreads_omp;
 #pragma omp atomic	
-    cputime.ell     += ell_update/num_omp_th;
+    cputime.ell     += ell_update/internal_data.nthreads_omp;
 #pragma omp atomic
     all_fails       += fails;
 #endif
@@ -357,8 +363,9 @@ if (all_fails)
 }
 
 
-
-int inline v_inverse_collapse_time(dvec dtensor[6], dvec_u delta, dvec delta_2, dvec_u * restrict x1, dvec_u * restrict x2, dvec_u * restrict x3, dvec_u * restrict res)
+#ifndef TABULATED_CT
+/* vectorialization is not used for the interpolation */
+int v_inverse_collapse_time(dvec dtensor[6], dvec_u delta, dvec delta_2, dvec_u * restrict x1, dvec_u * restrict x2, dvec_u * restrict x3, dvec_u * restrict res) // inline
 {
 
   dvec   mu2;
@@ -413,14 +420,14 @@ int inline v_inverse_collapse_time(dvec dtensor[6], dvec_u delta, dvec delta_2, 
   double inv_3 = 1.0/3.0;
   dvec   vinv_3 = {1.0/3.0, 1.0/3.0, 1.0/3.0, 1.0/3.0};
   dvec_u sq;
-#if !(defined(__aarch64__) || defined(__arm__) )  
-  sq.V = 2.0 * _mm256_sqrt_pd(q.V);
-#else
+//#if !(defined(__aarch64__) || defined(__arm__) ) LUCA: questa chiamata non me la compila
+//  sq.V = 2.0 * _mm256_sqrt_pd(q.V);
+//#else
   sq.v[0] = 2.0 * sqrt(q.v[0]);
   sq.v[1] = 2.0 * sqrt(q.v[1]);
   sq.v[2] = 2.0 * sqrt(q.v[2]);
   sq.v[3] = 2.0 * sqrt(q.v[3]);
-#endif
+//#endif
   dvec_u delta_inv_3;
   delta_inv_3.V = delta.V * vinv_3;
   
@@ -463,9 +470,9 @@ int inline v_inverse_collapse_time(dvec dtensor[6], dvec_u delta, dvec delta_2, 
   return 0;
 }
 
+#endif
 
-
-double inline inverse_collapse_time(double * restrict deformation_tensor, double * restrict x1, double * restrict x2, double * restrict x3, int * restrict fail)
+double inverse_collapse_time(double * restrict deformation_tensor, double * restrict x1, double * restrict x2, double * restrict x3, int * restrict fail) // inline
 {
 
   double mu1, mu2, mu3;
@@ -538,7 +545,6 @@ double inline inverse_collapse_time(double * restrict deformation_tensor, double
 #ifdef TABULATED_CT
   double t = interpolate_collapse_time(*x1,*x2,*x3);
 
-// Per ora sto portando la parte di debug nella versione non vettorializzata, da verificare che funzioni
 #ifdef DEBUG
   double t2=ell(*x1,*x2,*x3);
   if (t2>0.9)
@@ -555,7 +561,7 @@ double inline inverse_collapse_time(double * restrict deformation_tensor, double
 
 #else
   double t = ell(*x1,*x2,*x3);
-#endif  
+#endif
 
   cputime_ell += MPI_Wtime() - tmp;
   
@@ -862,7 +868,7 @@ int compare_search(const void *A, const void *B)
 
 
 
-double inline interpolate_collapse_time(double l1, double l2, double l3)
+double interpolate_collapse_time(double l1, double l2, double l3) //inline
 {
   int ix, iy;
   double ampl, d, x, y;
@@ -1088,7 +1094,7 @@ void write_CTtable_header()
 
 #define SMALL ((double)1.e-20)
 
-double inline ell(double l1, double l2, double l3)
+double ell(double l1, double l2, double l3) //inline
 {
 #ifdef ELL_CLASSIC
   double bc=ell_classic(l1, l2, l3);
@@ -1172,7 +1178,7 @@ int sng_system(double t, const double y[], double f[], void *sng_par)
 }
 
 
-double inline ell_sng(double l1, double l2, double l3)
+double  ell_sng(double l1, double l2, double l3) //inline
 {
   /* call of ODE solution for SNG ellipsoidal collapse */
   double ode_param, hh=1.e-6;
@@ -1224,7 +1230,7 @@ double inline ell_sng(double l1, double l2, double l3)
 }
 
 
-double inline ell_classic(double l1, double l2, double l3)
+double  ell_classic(double l1, double l2, double l3) //inline
 {
 
   /*

@@ -239,6 +239,8 @@ int compute_LPT_displacements()
     
     /* assigns displacement to particles whose collapse time has just been updated */
     
+
+// CHECK: verificare che i pencil sono in x e y
 #pragma omp for nowait
     for (int local_z = 0; local_z < MyGrids[0].GSlocal[_z_]; local_z++)
       {

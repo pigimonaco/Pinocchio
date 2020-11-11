@@ -112,7 +112,6 @@
 #endif
 
 extern int ThisTask,NTasks;
-extern int num_omp_th;
 
 /* pfft-related variables */
 /* extern int pfft_flags_c2r, pfft_flags_r2c; */
@@ -146,7 +145,8 @@ typedef struct
   int dump_seedplane;                        // logical
   int dump_kdensity;                         // logical
   int large_plane;                      /* select the new generation of ICs */
-  int nthreads;                         /* number of OMP threads */
+  int nthreads_omp;                     /* number of OMP threads */
+  int nthreads_fft;                     /* number of FFT threads */
   
 } internal_data;
 extern internal_data internal;
@@ -439,7 +439,7 @@ int reset_collapse_times(int);
 
 /* prototypes for functions defined in fmax-fftw.c */
 int set_one_grid(int);
-int initialize_fft();
+int compute_fft_plans();
 double forward_transform(int);
 double reverse_transform(int);
 int finalize_fft();
@@ -547,9 +547,10 @@ int build_groups(int,double,int);
 int quick_build_groups(int);
 int update_map(unsigned int *);
 
-#ifdef WHITENOISE
-int read_white_noise(void);
-#endif
+// RIMETTERE LA LETTURA DEL WHITE NOISE
+//#ifdef WHITENOISE
+//int read_white_noise(void);
+//#endif
 
 
 //LEVARE

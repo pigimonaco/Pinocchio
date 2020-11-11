@@ -242,27 +242,27 @@ int read_parameter_file()
       id[nt++] = STRING;
 #endif
 
-      strcpy(tag[nt], "UseTransposedFFT");
+      strcpy(tag[nt], "UseTransposedFFT");   // LEVARE
       addr[nt] = &(params.use_transposed_fft);
       id[nt++] = LOGICAL;
 
-      strcpy(tag[nt], "DumpVectors");
+      strcpy(tag[nt], "DumpVectors");        // LEVARE
       addr[nt] = &(internal.dump_vectors);
       id[nt++] = LOGICAL;
 
-      strcpy(tag[nt], "DumpSeedPlane");
+      strcpy(tag[nt], "DumpSeedPlane");      // LEVARE
       addr[nt] = &(internal.dump_seedplane);
       id[nt++] = INT_SKIP;
 
-      strcpy(tag[nt], "DumpKDensity");
+      strcpy(tag[nt], "DumpKDensity");       // LEVARE
       addr[nt] = &(internal.dump_kdensity);
       id[nt++] = INT_SKIP;
 
-      strcpy(tag[nt], "UseInPlaceFFT");
+      strcpy(tag[nt], "UseInPlaceFFT");      // LEVARE
       addr[nt] = &(params.use_inplace_fft);
       id[nt++] = LOGICAL;
 
-      strcpy(tag[nt], "VerboseLevel");
+      strcpy(tag[nt], "VerboseLevel");       // LEVARE
       addr[nt] = &(internal.verbose_level);
       id[nt++] = INT_SKIP;
 
@@ -270,6 +270,10 @@ int read_parameter_file()
       addr[nt] = &(internal.mimic_original_seedtable);
       id[nt++] = LOGICAL;
       
+      strcpy(tag[nt], "LargePlane");         // LASCIARE DI DEFAULT?
+      addr[nt] = &(internal.large_plane);
+      id[nt++] = LOGICAL;
+
       strcpy(tag[nt], "Constrain_dim0");
       addr[nt] = &(internal.constrain_task_decomposition[0]);
       id[nt++] = INT_SKIP;
@@ -282,13 +286,10 @@ int read_parameter_file()
       addr[nt] = &(internal.constrain_task_decomposition[2]);
       id[nt++] = INT_SKIP;
       
-      strcpy(tag[nt], "LargePlane");
-      addr[nt] = &(internal.large_plane);
-      id[nt++] = LOGICAL;
 
-#ifdef USE_FFT_THREADS      
+#ifdef USE_FFT_THREADS
       strcpy(tag[nt], "NThreads");
-      addr[nt] = &(internal.nthreads);
+      addr[nt] = &(internal.nthreads_fft);
       id[nt++] = INT;
 #endif      
       
