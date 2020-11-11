@@ -27,10 +27,16 @@
 #include "pinocchio.h"
 
 int ThisTask,NTasks;
+int num_omp_th = 1;
+
+//int            pfft_flags_c2r, pfft_flags_r2c;
+MPI_Comm        FFT_Comm;
+internal_data   internal;
 
 void *main_memory, *wheretoplace_mycat;
 product_data *products, *frag;
-unsigned int **seedtable;
+unsigned int **seedtable;  // QUESTO RIMANE?
+unsigned int   *cubes_ordering;
 double **kdensity;
 double **density;
 double ***first_derivatives;
@@ -53,7 +59,7 @@ smoothing_data Smoothing;
 grid_data *MyGrids;
 int Ngrids;
 
-fftw_complex **cvector_fft;
+pfft_complex **cvector_fft;
 double **rvector_fft;
 
 param_data params={0};

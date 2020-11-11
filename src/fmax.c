@@ -46,11 +46,11 @@ int compute_fmax(void)
   /*
     TO EXTEND TO MULTIPLE GRIDS here we should
 
-    1) initialize fftw for the large-scale grid (the same as the small-scale one?)
+    1) initialize fft for the large-scale grid (the same as the small-scale one?)
     2) compute first derivatives of the large grid
     3) compute second derivatives of the large grid
     4) distribute to all processors and store the few used grid points
-    5) re-initialize fftw for the small-scale grid
+    5) re-initialize fft for the small-scale grid
   */
 
 #ifdef SCALE_DEPENDENT
@@ -63,23 +63,22 @@ int compute_fmax(void)
    ****************************/
   for (ismooth=0; ismooth<Smoothing.Nsmooth; ismooth++)
     {
-
-      cpusm=MPI_Wtime();
-
       if (!ThisTask)
 	printf("\n[%s] Starting smoothing radius %d of %d (R=%9.5f, sigma=%9.5f)\n", 
 	       fdate(), ismooth+1, Smoothing.Nsmooth, Smoothing.Radius[ismooth],
 	       sqrt(Smoothing.Variance[ismooth]) );
+
+      cpusm=MPI_Wtime();
 
       /* 
 	 Part 1:
 	 Compute second derivatives of the potential
       */
 
-      cputmp=MPI_Wtime();
-
       if (!ThisTask)
 	printf("[%s] Computing second derivatives\n",fdate());
+
+      cputmp=MPI_Wtime();
 
       if (compute_second_derivatives(Smoothing.Radius[ismooth] ,ThisGrid))
 	return 1;
@@ -87,16 +86,17 @@ int compute_fmax(void)
       cputmp=MPI_Wtime()-cputmp;
       if (!ThisTask)
 	printf("[%s] Done second derivatives, cpu time = %f s\n",fdate(),cputmp);
+      cputime.deriv += cputmp;
 
       /* 
 	 Part 2:
 	 Compute collapse times
       */
 
-      cputmp=MPI_Wtime();
-
       if (!ThisTask)
 	printf("[%s] Computing collapse times\n",fdate());
+
+      cputmp=MPI_Wtime();
 
 #ifdef TABULATED_CT
       /* initialize spline for interpolating collapse times */
@@ -160,7 +160,7 @@ int compute_fmax(void)
   if (!ThisTask)
     printf("[%s] Computing LPT displacements\n",fdate());
 
-  if (compute_LPT_displacements(ismooth))
+  if (compute_LPT_displacements())
     return 1;
 
   cputmp=MPI_Wtime()-cputmp;
@@ -191,7 +191,7 @@ int compute_fmax(void)
   if (!ThisTask)
     printf("[%s] Storing velocities\n",fdate());
 
-  if (compute_velocities(ismooth))
+  if (compute_velocities())
     return 1;
 
   cputmp=MPI_Wtime()-cputmp;
@@ -213,12 +213,16 @@ int compute_fmax(void)
 
   cputime.io+=MPI_Wtime()-cputmp;
 
-  if (finalize_fftw())
+  if (finalize_fft())
     return 1;
 
   cputime.fmax = MPI_Wtime() - cputime.fmax;
   if (!ThisTask)
-    printf("[%s] Finishing fmax, total cpu time = %14.6f\n", fdate(), cputime.fmax);
+    printf("[%s] Finishing fmax, total fmax cpu time = %14.6f\n"
+	   "\t\t IO       : %14.6f (%14.6f total time without I/O)\n"
+	   "\t\t FFT      : %14.6f\n"
+	   "\t\t COLLAPSE : %14.6f\n",
+	   fdate(), cputime.fmax, cputime.io, cputime.fmax-cputime.io, cputime.fft, cputime.coll);
 
   return 0;
 }
@@ -228,26 +232,30 @@ int compute_first_derivatives(double R, int ThisGrid)
 {
   /* computes second derivatives of the potential */
 
-  int ia;
-
+  double timetmp = 0;
+  
   /* smoothing radius in grid units */
   Rsmooth = R / MyGrids[ThisGrid].CellSize;
 
-  for (ia=1; ia<=3; ia++)
+  for (int ia=1; ia<=3; ia++)
     {
 
       if (!ThisTask)
 	printf("[%s] Computing 1st derivative: %d\n",fdate(),ia);
 
+      double tmp = MPI_Wtime();
       write_in_cvector(ThisGrid, kdensity[ThisGrid]);
-
+      timetmp += MPI_Wtime() - tmp;
+      
       if (compute_derivative(ThisGrid,ia,0))
 	return 1;
 
+      tmp = MPI_Wtime();
       write_from_rvector(ThisGrid, first_derivatives[ThisGrid][ia-1]);
-
+      timetmp += MPI_Wtime() - tmp;
     }
 
+  cputime.mem_transf += timetmp;
   return 0;
 }
 
@@ -257,29 +265,33 @@ int compute_second_derivatives(double R, int ThisGrid)
 
   /* computes second derivatives of the potential */
 
-  int ia,ib,ider;
-
+  double timetmp = 0;
+  
   /* smoothing radius in grid units */
   Rsmooth = R / MyGrids[ThisGrid].CellSize;
 
-  for (ia=1; ia<=3; ia++)
-    for (ib=ia; ib<=3; ib++)
+  for ( int ia = 1; ia <= 3; ia++ )
+    for ( int ib = ia; ib <= 3; ib++ )
       {
 
-	ider=( ia==ib? ia : ia+ib+1 );
+	int ider=( ia == ib ? ia : ia+ib+1 );
 
 	if (!ThisTask)
 	  printf("[%s] Computing 2nd derivative: %d\n",fdate(),ider);
 
+	double tmp = MPI_Wtime();
 	write_in_cvector(ThisGrid, kdensity[ThisGrid]);
+	timetmp += MPI_Wtime() - tmp;
 
 	if (compute_derivative(ThisGrid,ia,ib))
 	  return 1;
 
+	tmp = MPI_Wtime();
 	write_from_rvector(ThisGrid, second_derivatives[ThisGrid][ider-1]);
-
+	timetmp += MPI_Wtime() - tmp;
       }
 
+  cputime.mem_transf += timetmp;
   return 0;
 }
 

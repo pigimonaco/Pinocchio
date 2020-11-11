@@ -25,18 +25,10 @@
 */
 
 #include "pinocchio.h"
-
 #ifdef TWO_LPT
 
-int compute_LPT_displacements(int ismooth)
+int compute_LPT_displacements()
 {
-  int local_x,local_y,local_z,index;
-#if !defined(RECOMPUTE_DISPLACEMENTS) && !defined(THREE_LPT)
-  int ia;
-#endif
-#ifdef THREE_LPT
-  int ia,ib,ider;
-#endif
   double time;
 
   /*  
@@ -56,42 +48,52 @@ int compute_LPT_displacements(int ismooth)
 
   /* Computes the source for 2 LPT, 3LPT_1 and 3LPT_2 term */
   /* loop on all local particles */
-  for (local_z=0; local_z < MyGrids[0].GSlocal_z; local_z++)
-    for (local_y=0; local_y < MyGrids[0].GSlocal_y; local_y++)
-      for (local_x=0; local_x < MyGrids[0].GSlocal_x; local_x++)
-	{
+#pragma omp parallel
+  {
+    unsigned int fact = MyGrids[0].GSlocal[_x_] * MyGrids[0].GSlocal[_y_];
 
-	  index = local_x + (MyGrids[0].GSlocal_x) * 
-	    (local_y + local_z * MyGrids[0].GSlocal_y);
-
-	  /* NB: QUI BISOGNERA` SOMMARE I CONTRIBUTI DELLE DUE GRIGLIE QUANDO USIAMO LE GRIGLIE MULTIPLE */
-
-	  /* source term for 2LPT */
-	  source_2LPT[index] = 
-	    second_derivatives[0][0][index] * second_derivatives[0][1][index] +
-	    second_derivatives[0][0][index] * second_derivatives[0][2][index] +
-	    second_derivatives[0][1][index] * second_derivatives[0][2][index] -
-	    second_derivatives[0][3][index] * second_derivatives[0][3][index] -
-	    second_derivatives[0][4][index] * second_derivatives[0][4][index] -
-	    second_derivatives[0][5][index] * second_derivatives[0][5][index];
-
+#pragma omp for nowait
+    for (int local_z = 0; local_z < MyGrids[0].GSlocal[_z_]; local_z++)
+      {
+	int idx_z = local_z * fact;
+	for ( int local_y = 0; local_y < MyGrids[0].GSlocal[_y_]; local_y++)
+	  {
+	    int idx_y = local_y * MyGrids[0].GSlocal[_x_] + idx_z;
+	    for ( int local_x = 0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)	  
+	      {	  
+		int index = idx_y + local_x;
+	      
+	      /* NB: QUI BISOGNERA` SOMMARE I CONTRIBUTI DELLE DUE GRIGLIE QUANDO USIAMO LE GRIGLIE MULTIPLE */
+	      
+	      /* source term for 2LPT */
+		  source_2LPT[index] = 
+		  second_derivatives[0][0][index] * second_derivatives[0][1][index] +
+		  second_derivatives[0][0][index] * second_derivatives[0][2][index] +
+		  second_derivatives[0][1][index] * second_derivatives[0][2][index] -
+		  second_derivatives[0][3][index] * second_derivatives[0][3][index] -
+		  second_derivatives[0][4][index] * second_derivatives[0][4][index] -
+		  second_derivatives[0][5][index] * second_derivatives[0][5][index];
+		
 #ifdef THREE_LPT
-	  source_3LPT_1[index] = 3.0 *(second_derivatives[0][0][index]*
-				  (second_derivatives[0][1][index]*second_derivatives[0][2][index]
-				   -second_derivatives[0][5][index]*second_derivatives[0][5][index])
-				  - second_derivatives[0][3][index]*
-				  (second_derivatives[0][3][index]*second_derivatives[0][2][index]
-				   -second_derivatives[0][4][index]*second_derivatives[0][5][index])
-				  + second_derivatives[0][4][index]*
-				  (second_derivatives[0][3][index]*second_derivatives[0][5][index]
-				   -second_derivatives[0][4][index]*second_derivatives[0][1][index]));
-
-	  source_3LPT_2[index] = 2.0 *     /* this factor is needed because nabla2phi is half the theoretical one */
-	    (second_derivatives[0][0][index] + second_derivatives[0][1][index] + second_derivatives[0][2][index]) * 
-	    source_2LPT[index];
+		source_3LPT_1[index] = 3.0 *(second_derivatives[0][0][index]*
+					     (second_derivatives[0][1][index]*second_derivatives[0][2][index]
+					      -second_derivatives[0][5][index]*second_derivatives[0][5][index])
+					     - second_derivatives[0][3][index]*
+					     (second_derivatives[0][3][index]*second_derivatives[0][2][index]
+					      -second_derivatives[0][4][index]*second_derivatives[0][5][index])
+					     + second_derivatives[0][4][index]*
+					     (second_derivatives[0][3][index]*second_derivatives[0][5][index]
+					      -second_derivatives[0][4][index]*second_derivatives[0][1][index]));
+		
+		source_3LPT_2[index] = 2.0 *     /* this factor is needed because nabla2phi is half the theoretical one */
+		  (second_derivatives[0][0][index] + second_derivatives[0][1][index] + second_derivatives[0][2][index]) * 
+		  source_2LPT[index];
 #endif
-	}
-
+	      }
+	  }
+      }
+  }
+  
   /* forward FFT for 2LPT source */
   write_in_rvector(0, source_2LPT);
 
@@ -103,17 +105,16 @@ int compute_LPT_displacements(int ismooth)
   if (!ThisTask)
     printf("[%s] compute_sources_for_LPT: done fft, cputime = %f\n",fdate(),time);
 
-  cputime.fft+=time;
+  cputime.fft += time;
 
   write_from_cvector(0, kvector_2LPT);
 
 #ifdef THREE_LPT
   /* second derivatives of second-order potential */
-  for (ia=1; ia<=3; ia++)
-    for (ib=ia; ib<=3; ib++)
+  for ( int ia = 1; ia <= 3; ia++ )
+    for ( int ib = ia; ib <= 3; ib++ )
       {
-
-	ider=( ia==ib? ia : ia+ib+1 );
+	int ider = ( ia==ib? ia : ia+ib+1 );
 
 	if (!ThisTask)
 	  printf("[%s] Computing 2nd derivative of 2LPT source: %d\n",fdate(),ia);
@@ -123,17 +124,29 @@ int compute_LPT_displacements(int ismooth)
 	if (compute_derivative(0,ia,ib))
 	  return 1;
 
-	/* this substitutes write_from_rvector: it adds to the 3LPT_2 source term the mixed products of the two second derivative tensors */
-	for (local_z=0; local_z<MyGrids[0].GSlocal_z; local_z++)
-	  for (local_y=0; local_y<MyGrids[0].GSlocal_y; local_y++)
-	    for (local_x=0; local_x<MyGrids[0].GSlocal_x; local_x++)
-	      {
-		index = local_x + MyGrids[0].GSlocal_x * (local_y + local_z * MyGrids[0].GSlocal_y);
-
-		source_3LPT_2[index] -= 2.0 * (ider<=3? 1.0 : 2.0) *    /* the first 2 factor is needed because nabla2phi is half the theoretical one */
-		  *(rvector_fft[0] + local_x + (MyGrids[0].GSlocal_x + MyGrids[0].off) * (local_y + local_z * MyGrids[0].GSlocal_y))
-		  * second_derivatives[0][ider-1][index];
-	      }
+#pragma omp parallel
+	{
+	  unsigned int fact = MyGrids[0].GSlocal[_x_] * MyGrids[0].GSlocal[_y_];
+	  
+	  /* this substitutes write_from_rvector: it adds to the 3LPT_2 source term the mixed products of the two second derivative tensors */
+#pragma omp for nowait
+	  for (int local_z = 0; local_z < MyGrids[0].GSlocal[_z_]; local_z++)
+	    {
+	      int idx_z = local_z * fact;
+	      for ( int local_y = 0; local_y < MyGrids[0].GSlocal[_y_]; local_y++)
+		{
+		  int idx_y = local_y * MyGrids[0].GSlocal[_x_] + idx_z;
+		  for ( int local_x = 0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)	  
+		    {	  
+		      int index = idx_y + local_x;
+		      
+		      source_3LPT_2[index] -= 2.0 * (ider<=3? 1.0 : 2.0) *    /* the first 2 factor is needed because nabla2phi is half the theoretical one */
+			*(rvector_fft[0] + local_x + (MyGrids[0].GSlocal[_x_]) * (local_y + local_z * MyGrids[0].GSlocal[_y_]))
+			* second_derivatives[0][ider-1][index];
+		    }
+		}
+	    }
+	}
       }
 #endif
 
@@ -146,7 +159,7 @@ int compute_LPT_displacements(int ismooth)
 
   Rsmooth=0.0;
 
-  for (ia=1; ia<=3; ia++)
+  for ( int ia = 1; ia <= 3; ia++ )
     {
       if (!ThisTask)
 	printf("[%s] Computing 1st derivative of 2LPT source: %d\n",fdate(),ia);
@@ -159,20 +172,29 @@ int compute_LPT_displacements(int ismooth)
       write_from_rvector(0, first_derivatives[0][ia-1]);
     }
 
-  /* assigns displacement to particles */
-  for (local_z=0; local_z < MyGrids[0].GSlocal_z; local_z++)
-    for (local_y=0; local_y < MyGrids[0].GSlocal_y; local_y++)
-      for (local_x=0; local_x < MyGrids[0].GSlocal_x; local_x++)
-	{
-
-	  index = local_x + (MyGrids[0].GSlocal_x) * 
-	    (local_y + local_z * MyGrids[0].GSlocal_y);
-
-	  for (ia=0; ia<3; ia++)
-	    products[index].Vel_2LPT[ia]=first_derivatives[0][ia][index];
-
-	}
-
+#pragma omp parallel
+  {
+    unsigned int fact = MyGrids[0].GSlocal[_x_] * MyGrids[0].GSlocal[_y_];
+    
+    /* assigns displacement to particles */
+    
+#pragma omp for nowait
+    for (int local_z = 0; local_z < MyGrids[0].GSlocal[_z_]; local_z++)
+      {
+	int idx_z = local_z * fact;
+	for ( int local_y = 0; local_y < MyGrids[0].GSlocal[_y_]; local_y++)
+	  {
+	    int idx_y = local_y * MyGrids[0].GSlocal[_x_] + idx_z;
+	    for ( int local_x = 0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)	  
+	      {	  
+		int index = idx_y + local_x;
+		for ( int ia = 0; ia < 3; ia++ )
+		  products[index].Vel_2LPT[ia] = first_derivatives[0][ia][index];
+		    
+	      }
+	  }
+      }
+  }
 #endif
 
 #ifdef THREE_LPT
@@ -198,7 +220,7 @@ int compute_LPT_displacements(int ismooth)
   if (!ThisTask)
     printf("[%s] Computing 3LPT_1 displacements\n",fdate());
 
-  for (ia=1; ia<=3; ia++)
+  for ( int ia = 1; ia <= 3; ia++ )
     {
       if (!ThisTask)
 	printf("[%s] Computing 1st derivative of 3LPT_1 source: %d\n",fdate(),ia);
@@ -211,18 +233,28 @@ int compute_LPT_displacements(int ismooth)
       write_from_rvector(0, first_derivatives[0][ia-1]);
     }
 
-  for (local_z=0; local_z < MyGrids[0].GSlocal_z; local_z++)
-    for (local_y=0; local_y < MyGrids[0].GSlocal_y; local_y++)
-      for (local_x=0; local_x < MyGrids[0].GSlocal_x; local_x++)
-	{
-
-	  index = local_x + (MyGrids[0].GSlocal_x) * 
-	    (local_y + local_z * MyGrids[0].GSlocal_y);
-
-	  for (ia=0; ia<3; ia++)
-	    products[index].Vel_3LPT_1[ia]=first_derivatives[0][ia][index];
-
-	}
+#pragma omp parallel
+  {
+    unsigned int fact = MyGrids[0].GSlocal[_x_] * MyGrids[0].GSlocal[_y_];
+    
+    /* assigns displacement to particles whose collapse time has just been updated */
+    
+#pragma omp for nowait
+    for (int local_z = 0; local_z < MyGrids[0].GSlocal[_z_]; local_z++)
+      {
+	int idx_z = local_z * fact;
+	for ( int local_y = 0; local_y < MyGrids[0].GSlocal[_y_]; local_y++)
+	  {
+	    int idx_y = local_y * MyGrids[0].GSlocal[_x_] + idx_z;
+	    for ( int local_x = 0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)	  
+	      {	  
+		int index = idx_y + local_x;	  
+		for ( int ia = 0; ia < 3; ia++ )
+		  products[index].Vel_3LPT_1[ia]=first_derivatives[0][ia][index];
+	      }
+	  }
+      }
+  }
 #endif
 
   /* forward FFT for 3LPT_2 source */
@@ -246,7 +278,7 @@ int compute_LPT_displacements(int ismooth)
   if (!ThisTask)
     printf("[%s] Computing 3LPT_2 displacements\n",fdate());
 
-  for (ia=1; ia<=3; ia++)
+  for ( int ia=1; ia <= 3; ia++ )
     {
       if (!ThisTask)
 	printf("[%s] Computing 1st derivative of 3LPT_2 source: %d\n",fdate(),ia);
@@ -259,18 +291,28 @@ int compute_LPT_displacements(int ismooth)
       write_from_rvector(0, first_derivatives[0][ia-1]);
     }
 
-  for (local_z=0; local_z < MyGrids[0].GSlocal_z; local_z++)
-    for (local_y=0; local_y < MyGrids[0].GSlocal_y; local_y++)
-      for (local_x=0; local_x < MyGrids[0].GSlocal_x; local_x++)
-	{
-
-	  index = local_x + (MyGrids[0].GSlocal_x) * 
-	    (local_y + local_z * MyGrids[0].GSlocal_y);
-
-	  for (ia=0; ia<3; ia++)
-	    products[index].Vel_3LPT_2[ia]=first_derivatives[0][ia][index];
-
-	}
+#pragma omp parallel
+  {
+    unsigned int fact = MyGrids[0].GSlocal[_x_] * MyGrids[0].GSlocal[_y_];
+    
+    /* assigns displacement to particles whose collapse time has just been updated */
+    
+#pragma omp for nowait
+    for (int local_z = 0; local_z < MyGrids[0].GSlocal[_z_]; local_z++)
+      {
+	int idx_z = local_z * fact;
+	for ( int local_y = 0; local_y < MyGrids[0].GSlocal[_y_]; local_y++)
+	  {
+	    int idx_y = local_y * MyGrids[0].GSlocal[_x_] + idx_z;
+	    for ( int local_x = 0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)	  
+	      {	  
+		int index = idx_y + local_x;	  
+		for ( int ia = 0; ia < 3; ia++ )
+		  products[index].Vel_3LPT_2[ia]=first_derivatives[0][ia][index];
+	      }
+	  }
+      }
+  }
 #endif
 #endif
 

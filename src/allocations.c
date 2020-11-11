@@ -28,9 +28,10 @@
 
 //#define VERBOSE
 
+#define ALIGN_MEMORY_BLOCK(M) while( (M) % ALIGN ) M++
 #define FRAGFIELDS 6
 
-unsigned long long int organize_main_memory()
+int organize_main_memory()
 {
 
   /* here it computes the size of required memory 
@@ -46,12 +47,12 @@ unsigned long long int organize_main_memory()
 
      first_derivatives and density will share the same memory as second_derivatives
 
-     these will be allocated by fftw routines:
+     these will be allocated by pfft routines:
 
      cvector_fft         1 double = 8              MyGrids[*].total_local_size_fft
      rvector_fft         1 double = 8              MyGrids[*].total_local_size_fft
 
-     Total for ZEL: 76 + 16 = 92 + overhead for fragmentation + smaller things (seedtable etc)
+     Total for ZEL: 76 + 16 = 92 + overhead for fragmentation + smaller things // (seedtable etc)
 
      2LPT/3LPT DISPLACEMENTS
 
@@ -68,11 +69,11 @@ unsigned long long int organize_main_memory()
      first_derivatives and density will share the same memory as second_derivatives
      source_?LPT* will share the same memory as kvector_?LPT*
 
-     This is needed by GenIC:
+     // QUESTO E` STATO SPOSTATO IN GENIC
+     //This is needed by GenIC:
+     //seedtable           1 int = 4                 MyGrids[*].GSglobal[0] * MyGrids[*].GSglobal[1]
 
-     seedtable           1 int = 4                 MyGrids[*].GSglobal_x * MyGrids[*].GSglobal_y
-
-     These will be allocated by fftw routines:
+     These will be allocated by pfft routines:
 
      cvector_fft         1 double = 8              MyGrids[*].total_local_size_fft
      rvector_fft         1 double = 8              MyGrids[*].total_local_size_fft
@@ -99,9 +100,9 @@ unsigned long long int organize_main_memory()
 
      memory.prods:            fmax products in fft space
      memory.fields_to_keep    kdensities
-     memory.fields            second_derivatives, seedtable
+     memory.fields            second_derivatives, // seedtable
      memory.first_allocated:  the three above
-     memory.fft:              needed by fftw vectors
+     memory.fft:              needed by pfft vectors
      memory.fmax_total:       needed by fmax, the sum of fft and first_allocated 
      memory.frag_prods:       fmax products in subbox space
      memory.frag_arrays:      linking list and group ID
@@ -114,34 +115,51 @@ unsigned long long int organize_main_memory()
    */
 
   int igrid;
-  unsigned long long int Nalloc=0;
+  unsigned int myNalloc, Nalloc;
 
   /***********************************************/
   /* COLLAPSE TIMES PART                         */
   /* this is the memory needed to store products */
   memory.prods = MyGrids[0].total_local_size * sizeof(product_data);       /* products */
+  ALIGN_MEMORY_BLOCK( memory.prods );
   memory.fields = memory.fields_to_keep = 0;
 
   /* these fields are needed after Fmax if displacements are recomputed */
   for (igrid=0; igrid<Ngrids; igrid++)
-    memory.fields_to_keep += MyGrids[igrid].total_local_size_fft * sizeof(double); /* kdensity */
+    {
+      memory.fields_to_keep += MyGrids[igrid].total_local_size_fft * sizeof(double); /* kdensity */
+      ALIGN_MEMORY_BLOCK( memory.fields_to_keep );
+    }
 #ifdef TWO_LPT
-  memory.fields_to_keep += MyGrids[0].total_local_size_fft * sizeof(double);       /* kvector_2LPT */
+  memory.fields_to_keep += MyGrids[0].total_local_size_fft * sizeof(double);    /* kvector_2LPT */
+  ALIGN_MEMORY_BLOCK( memory.fields_to_keep );
 #ifdef THREE_LPT
-  memory.fields_to_keep += 2 * MyGrids[0].total_local_size_fft * sizeof(double);   /* kvector_3LPT_* */
+  memory.fields_to_keep += MyGrids[0].total_local_size_fft * sizeof(double);    /* kvector_3LPT_1 */
+  ALIGN_MEMORY_BLOCK( memory.fields_to_keep );
+  memory.fields_to_keep += MyGrids[0].total_local_size_fft * sizeof(double);    /* kvector_3LPT_2 */
+  ALIGN_MEMORY_BLOCK( memory.fields_to_keep );
 #endif
 #endif
 
   /* these fields are needed only by Fmax */
   for (igrid=0; igrid<Ngrids; igrid++)
-    memory.fields += 6 * MyGrids[igrid].total_local_size * sizeof(double); /* second_derivatives */
+    for (int dim=0; dim<6; dim++)
+      {
+	memory.fields += MyGrids[igrid].total_local_size * sizeof(double); /* second_derivatives */
+	ALIGN_MEMORY_BLOCK( memory.fields );
+      }
 
-  for (igrid=0; igrid<Ngrids; igrid++)
-    memory.fields += MyGrids[igrid].GSglobal_x * MyGrids[igrid].GSglobal_y * sizeof(unsigned int);  /* seedtable */
+  /* for (igrid=0; igrid<Ngrids; igrid++) */
+  /*   memory.fields += MyGrids[igrid].GSglobal[0] * MyGrids[igrid].GSglobal[1] * sizeof(unsigned int);  /\* seedtable *\/ */
 
-  /* memory allocated by FFTW */
+  /* memory allocated by PFFT */
   for (igrid=0, memory.fft=0; igrid<Ngrids; igrid++)
-    memory.fft += 2 * MyGrids[igrid].total_local_size_fft * sizeof(double);
+    {
+      memory.fft += MyGrids[igrid].total_local_size_fft * sizeof(double);
+      ALIGN_MEMORY_BLOCK( memory.fft );
+      memory.fft += MyGrids[igrid].total_local_size_fft * sizeof(double);
+      ALIGN_MEMORY_BLOCK( memory.fft );
+    }
 
   memory.first_allocated = memory.prods + memory.fields_to_keep + memory.fields;
   memory.fmax_total = memory.first_allocated + memory.fft;
@@ -150,57 +168,20 @@ unsigned long long int organize_main_memory()
   /* FRAGMENTATION PART                                                           */
   /* this is the memory needed to fragment the collapsed medium, including PLC data
      and the map for needed particles on the boundary */
-  memory.groups = subbox.PredNpeaks * (sizeof(group_data) + sizeof(histories_data)) +
-    2*subbox.maplength*sizeof(unsigned int);
+  memory.groups = subbox.PredNpeaks * sizeof(group_data);
+  ALIGN_MEMORY_BLOCK( memory.groups );
+  memory.groups += subbox.PredNpeaks *  + sizeof(histories_data);
+  ALIGN_MEMORY_BLOCK( memory.groups );
 #ifdef PLC
   memory.groups += plc.Nmax * sizeof(plcgroup_data);
+  ALIGN_MEMORY_BLOCK( memory.groups );
 #endif
-
-#ifdef CLASSIC_FRAGMENTATION
-  /************************************************************************/
-  /*                          CLASSIC FRAGMENTATION                       */
-
-  /* Allocate space for all particles and check that memory is sufficient */
-
-  Nalloc = subbox.Npart;
-#ifndef RECOMPUTE_DISPLACEMENTS
-  memory.frag_prods  = Nalloc * sizeof(product_data);
-  memory.frag_arrays = Nalloc * FRAGFIELDS * sizeof(int);
-  /* this is the memory occupied by fragmentation */
-  memory.frag_allocated = memory.prods + memory.frag_prods + memory.groups + memory.frag_arrays;
-  memory.frag_total = memory.frag_allocated;
-#else
-  memory.frag_prods  = Nalloc * sizeof(product_data);
-  memory.frag_arrays = Nalloc * FRAGFIELDS * sizeof(int);
-  /* this is the memory occupied by fragmentation */
-  memory.frag_allocated = memory.prods + memory.fields_to_keep + memory.frag_prods + memory.groups + memory.frag_arrays;
-  memory.frag_total = memory.frag_allocated + memory.fft;
-#endif
-
-  /* this is the largest amount of memory needed by the code */
-  memory.all_allocated = (memory.first_allocated > memory.frag_allocated ? memory.first_allocated : memory.frag_allocated);
-  memory.all = (memory.fmax_total > memory.frag_total ? memory.fmax_total : memory.frag_total);
-
-  if ( (double)memory.all > (double)MyGrids[0].ParticlesPerTask * params.MaxMemPerParticle -1.0) 
-    {
-      if (!ThisTask)
-	{
-	  printf("ERROR: the run needs %8.1f bytes per particle, please increase MaxMemPerParticle\n",
-		 (double)memory.all/(double)MyGrids[0].ParticlesPerTask);
-	  fflush(stdout);
-	}
-      return (size_t)0;
-    }
-
-  return Nalloc;
-
-#else
-  /***************************************************************************/
-  /*                          UPDATED FRAGMENTATION                          */
+  memory.groups += subbox.maplength*sizeof(unsigned int);
+  ALIGN_MEMORY_BLOCK( memory.groups );
+  memory.groups += subbox.maplength*sizeof(unsigned int);
+  ALIGN_MEMORY_BLOCK( memory.groups );
 
   /* Here it computes the number of particles it can allocate for the subbox */
-
-  unsigned long long int myNalloc=0;
 #ifndef RECOMPUTE_DISPLACEMENTS
 
    /* -1 is to compensate for remainder in integer division */
@@ -211,8 +192,8 @@ unsigned long long int organize_main_memory()
 		- memory.prods - memory.groups) / (sizeof(product_data) + FRAGFIELDS * sizeof(int)) -1;
 
   /* Nalloc will be the smallest among all tasks */
-  MPI_Reduce(&myNalloc, &Nalloc, 1, MPI_LONG_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&Nalloc, 1, MPI_LONG_LONG, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&myNalloc, &Nalloc, 1, MPI_UNSIGNED_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&Nalloc, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
 
   memory.frag_prods  = Nalloc * sizeof(product_data);
   memory.frag_arrays = Nalloc * FRAGFIELDS * sizeof(int);
@@ -222,17 +203,17 @@ unsigned long long int organize_main_memory()
 
 #else
 
-   /* -1 is to compensate for remainder in integer division */
+   /* -10 is to compensate for memory alignments */
   if (memory.prods + memory.groups + memory.fields_to_keep + memory.fft > 
       MyGrids[0].ParticlesPerTask * params.MaxMemPerParticle)
     myNalloc=0;
   else
     myNalloc = (MyGrids[0].ParticlesPerTask*params.MaxMemPerParticle - memory.fields_to_keep - memory.fft
-	      - memory.prods - memory.groups) / (sizeof(product_data) + FRAGFIELDS * sizeof(int)) -1;
+	      - memory.prods - memory.groups) / (sizeof(product_data) + FRAGFIELDS * sizeof(int)) -10;
 
   /* Nalloc will be the smallest among all tasks */
-  MPI_Reduce(&myNalloc, &Nalloc, 1, MPI_LONG_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&Nalloc, 1, MPI_LONG_LONG, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&myNalloc, &Nalloc, 1, MPI_UNSIGNED_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&Nalloc, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
 
   memory.frag_prods  = Nalloc * sizeof(product_data);
   memory.frag_arrays = Nalloc * FRAGFIELDS * sizeof(int);
@@ -262,9 +243,16 @@ unsigned long long int organize_main_memory()
 	}
     }
 
-  return Nalloc;
+  // QUESTO DOVREBBE ESSERE INUTILE!!!
+  /* it tests that the required memory for ThisTask is lower than the specified limit */
+  if ((double)memory.all/MBYTE > params.MaxMem+1)
+    {
+      printf("ERROR on task %d: the run requires %f Mb, more than the MaxMem value\n",ThisTask,(double)memory.all/MBYTE);
+      fflush(stdout);
+      return (size_t)0;
+    }
 
-#endif
+  return Nalloc;
 }
 
 
@@ -290,7 +278,7 @@ int allocate_main_memory()
 #endif
 
   /* map of memory usage for all tasks */
-  mymap.lz=MyGrids[0].GSlocal_z;
+  mymap.lz=MyGrids[0].GSlocal[2];
   mymap.am=(double)memory.all/MBYTE;
   mymap.oh=(double)subbox.Nalloc/(double)MyGrids[0].ParticlesPerTask;
   mymap.m1=(double)memory.prods/(double)MyGrids[0].ParticlesPerTask;
@@ -327,7 +315,7 @@ int allocate_main_memory()
     }
 
   /* it tests than there is enough space to allocate all needed memory */
-  main_memory=(void*)calloc(memory.all,sizeof(char));
+  main_memory=(char*)calloc(memory.all,sizeof(char));
   if (main_memory==0x0)
     {
       printf("ERROR on task %d: I cannot allocate memory\n",ThisTask);
@@ -337,7 +325,7 @@ int allocate_main_memory()
   free(main_memory);
 
   /* allocates main memory */
-  main_memory=(void*)calloc(memory.first_allocated,sizeof(char));
+  main_memory=(char*)calloc(memory.first_allocated,sizeof(char));
   if (main_memory==0x0)
     {
       printf("ERROR on taks %d: I cannot allocate memory after first successful attempt\n", ThisTask);
@@ -348,20 +336,25 @@ int allocate_main_memory()
   /* sets pointers to the allocated memory */
   products = (product_data *)main_memory;
   count_memory = MyGrids[0].total_local_size * sizeof(product_data);
+  ALIGN_MEMORY_BLOCK( count_memory );
   for (igrid=0; igrid<Ngrids; igrid++)
     {
       kdensity[igrid] = (double *)(main_memory + count_memory);
       count_memory += MyGrids[igrid].total_local_size_fft * sizeof(double);
+      ALIGN_MEMORY_BLOCK( count_memory );
     }
 #ifdef TWO_LPT
   kvector_2LPT = (double *)(main_memory + count_memory);
   count_memory += MyGrids[0].total_local_size_fft * sizeof(double);
+  ALIGN_MEMORY_BLOCK( count_memory );
   source_2LPT = kvector_2LPT;
 #ifdef THREE_LPT
   kvector_3LPT_1 = (double *)(main_memory + count_memory);
   count_memory += MyGrids[0].total_local_size_fft * sizeof(double);
+  ALIGN_MEMORY_BLOCK( count_memory );
   kvector_3LPT_2 = (double *)(main_memory + count_memory);
   count_memory += MyGrids[0].total_local_size_fft * sizeof(double);
+  ALIGN_MEMORY_BLOCK( count_memory );
   source_3LPT_1 = kvector_3LPT_1;
   source_3LPT_2 = kvector_3LPT_2;
 #endif
@@ -372,22 +365,23 @@ int allocate_main_memory()
 	{
 	  second_derivatives[igrid][i] = (double *)(main_memory + count_memory);
 	  count_memory += MyGrids[igrid].total_local_size * sizeof(double);	  
+	  ALIGN_MEMORY_BLOCK( count_memory );
 	}
       for (i=0; i<3; i++)
 	first_derivatives[igrid][i] = second_derivatives[igrid][i];
       density[igrid] = second_derivatives[igrid][0];
     }
+//  for (igrid=0; igrid<Ngrids; igrid++)
+//    {
+//      seedtable[igrid] = (unsigned int*)(main_memory + count_memory);
+//      count_memory += MyGrids[igrid].GSglobal[0] * MyGrids[igrid].GSglobal[1] * sizeof(unsigned int);
+//    }
+//
+  /* allocates fft vectors */
   for (igrid=0; igrid<Ngrids; igrid++)
     {
-      seedtable[igrid] = (unsigned int*)(main_memory + count_memory);
-      count_memory += MyGrids[igrid].GSglobal_x * MyGrids[igrid].GSglobal_y * sizeof(unsigned int);
-    }
-
-  /* allocates fftw vectors */
-  for (igrid=0; igrid<Ngrids; igrid++)
-    {
-      rvector_fft[igrid] = fftw_alloc_real(MyGrids[igrid].total_local_size_fft);
-      cvector_fft[igrid] = fftw_alloc_complex(MyGrids[igrid].total_local_size_fft/2);
+      rvector_fft[igrid] = pfft_alloc_real(MyGrids[igrid].total_local_size_fft);
+      cvector_fft[igrid] = pfft_alloc_complex(MyGrids[igrid].total_local_size_fft/2);
       if (rvector_fft[igrid] == 0x0 || cvector_fft[igrid] == 0x0)
 	{
 	  printf("ERROR on taks %d: I cannot allocate memory for fft vectors\n", ThisTask);
@@ -423,8 +417,9 @@ int allocate_main_memory()
   bcast[n++]=(size_t)((void*)second_derivatives[0][0]-(void*)kdensity[Ngrids-1]);
   for (igrid=1; igrid<Ngrids; igrid++)
     bcast[n++]=(size_t)((void*)second_derivatives[igrid][0]-(void*)second_derivatives[igrid-1][0]);
-  for (igrid=1; igrid<Ngrids; igrid++)
-    bcast[n++]=(size_t)((void*)seedtable[igrid]-(void*)seedtable[igrid-1]);
+  /* for (igrid=1; igrid<Ngrids; igrid++) */
+  /*   bcast[n++]=(size_t)((void*)seedtable[igrid]-(void*)seedtable[igrid-1]); */
+  bcast[n++]=0;
   bcast[n++]=(size_t)(last-(void*)seedtable[Ngrids-1]);
   bcast[n++]=(size_t)(last-(void*)products);
   bcast[n++]=memory.fft;
@@ -442,7 +437,7 @@ int allocate_main_memory()
 #endif
 #endif
   for (igrid=0; igrid<Ngrids; igrid++)
-    bcast[n++]=MyGrids[igrid].GSglobal_x * MyGrids[igrid].GSglobal_y * sizeof(unsigned int);
+    bcast[n++]=MyGrids[igrid].GSglobal[0] * MyGrids[igrid].GSglobal[1] * sizeof(unsigned int);
   bcast[n++]=count_memory;
   bcast[n++]=memory.all;
 
@@ -501,8 +496,8 @@ int allocate_main_memory()
 int deallocate_fft_vectors(int ThisGrid)
 {
 
-  fftw_free(cvector_fft[ThisGrid]);
-  fftw_free(rvector_fft[ThisGrid]);
+  pfft_free(cvector_fft[ThisGrid]);
+  pfft_free(rvector_fft[ThisGrid]);
 
   return 0;
 }
@@ -546,7 +541,7 @@ int reallocate_memory_for_fragmentation()
   density=0x0;
   first_derivatives=0x0;
   second_derivatives=0x0;
-  seedtable=0x0;
+  //seedtable=0x0;
 
   /* products in the sub-box are stored in the memory that has been freed */
 
@@ -575,40 +570,53 @@ int reallocate_memory_for_fragmentation()
   /* the frag structure is located just after memory products */
   frag = (product_data *)(main_memory + memory.prods);
   count_memory = memory.prods + memory.frag_prods;
+  ALIGN_MEMORY_BLOCK( count_memory );
 
 #else
 
   /* including fields_to_keep in this case */
   frag = (product_data *)(main_memory + memory.prods + memory.fields_to_keep);
   count_memory = memory.prods + memory.fields_to_keep + memory.frag_prods;
+  ALIGN_MEMORY_BLOCK( count_memory );
 
 #endif
 
   groups = (group_data *)(main_memory + count_memory);
   count_memory += subbox.PredNpeaks*sizeof(group_data);
+  ALIGN_MEMORY_BLOCK( count_memory );
   wheretoplace_mycat = (void*)(main_memory + count_memory);
   count_memory += subbox.PredNpeaks*sizeof(histories_data);
+  ALIGN_MEMORY_BLOCK( count_memory );
 #ifdef PLC
   plcgroups = (plcgroup_data *)(main_memory + count_memory);
   count_memory+=plc.Nmax*sizeof(plcgroup_data);
+  ALIGN_MEMORY_BLOCK( count_memory );
 #endif
   group_ID = (int*)(main_memory+count_memory);
   count_memory+=subbox.Nalloc*sizeof(int);
+  ALIGN_MEMORY_BLOCK( count_memory );
   linking_list = (int*)(main_memory+count_memory);
   count_memory+=subbox.Nalloc*sizeof(int);
+  ALIGN_MEMORY_BLOCK( count_memory );
 
   frag_pos = (int*)(main_memory+count_memory);
   count_memory+=subbox.Nalloc*sizeof(int);
+  ALIGN_MEMORY_BLOCK( count_memory );
   indices = (int*)(main_memory+count_memory);
   count_memory+=subbox.Nalloc*sizeof(int);
+  ALIGN_MEMORY_BLOCK( count_memory );
   indicesY = (int*)(main_memory+count_memory);
   count_memory+=subbox.Nalloc*sizeof(int);
+  ALIGN_MEMORY_BLOCK( count_memory );
   sorted_pos = (int*)(main_memory+count_memory);
   count_memory+=subbox.Nalloc*sizeof(int);
+  ALIGN_MEMORY_BLOCK( count_memory );
   frag_map = (unsigned int*)(main_memory+count_memory);
   count_memory+=subbox.maplength*sizeof(unsigned int);
+  ALIGN_MEMORY_BLOCK( count_memory );
   frag_map_update = (unsigned int*)(main_memory+count_memory);
   count_memory+=subbox.maplength*sizeof(unsigned int);
+  ALIGN_MEMORY_BLOCK( count_memory );
 
   return 0;
 }

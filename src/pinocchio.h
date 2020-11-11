@@ -39,6 +39,20 @@
 #include <gsl/gsl_odeiv2.h>
 #include <gsl/gsl_spline.h>
 #include <fftw3-mpi.h>
+#include <pfft.h>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+#ifdef USE_GPERFTOOLS
+#include <gperftools/profiler.h>
+#endif
+
+/* this library is used to vectorize the computation of collapse times */
+#if !(defined(__aarch64__) || defined(__arm__))
+#include <immintrin.h>
+#endif
+
+#define ALIGN 32
 
 #define NYQUIST 1.
 #define PI      3.14159265358979323846 
@@ -48,7 +62,7 @@
 #define MBYTE 1048576.0
 #define alloc_verbose 0
 #define MAXOUTPUTS 100
-#define SPEEDOFLIGHT ((double)299792.458)
+#define SPEEDOFLIGHT ((double)299792.458) /* km/s */
 #define GRAVITY ((double)4.30200e-9)      /*  (M_sun^-1 (km/s)^2 Mpc)  */
 #define NBINS 210   /* number of time bins in cosmological quantities */
 
@@ -56,7 +70,26 @@
 #define TWO_LPT
 #endif
 
-#define UINTLEN 32   // 8*sizeof(unsigned int)
+// SI PUO` NON MANTENERE
+#define _x_ 0
+#define _y_ 1
+#define _z_ 2
+
+#define DECOMPOSITION_LIMIT_FACTOR_2D 1    /* smallest allowed side lenght of rectangular pencils in */
+                                           /* 2D decomposition of FFT */
+
+// dprintf veramente serve?
+#define dprintf(LEVEL, TASK, ...) do{if( ((LEVEL) <= internal.verbose_level) && (ThisTask == (TASK))) fprintf(stdout, __VA_ARGS__);} while(1 == 0)
+#define VDBG  4   // verbose level for debug
+#define VDIAG 2   // verbose level for diagnostics
+#define VMSG  1   // verbose level for flow messages
+#define VXX   0   // essential messages
+#define VERR  VXX // non letal errors
+#define VXERR -1  // letal errors
+
+#define SWAP_INT( A, B ) (A) ^= (B), (B) ^= (A), (A) ^= (B);
+
+#define UINTLEN 32   /* 8*sizeof(unsigned int) */
 
 #if defined(RECOMPUTE_DISPLACEMENTS) && defined(THREE_LPT)
 #error RECOMPUTE_DISPLACEMENTS and THREE_LPT should not be used together
@@ -79,6 +112,48 @@
 #endif
 
 extern int ThisTask,NTasks;
+extern int num_omp_th;
+
+/* pfft-related variables */
+/* extern int pfft_flags_c2r, pfft_flags_r2c; */
+extern MPI_Comm FFT_Comm;
+
+/* vectorialization */
+#define DVEC_SIZE 4
+
+typedef double dvec __attribute__ ((vector_size (DVEC_SIZE*sizeof(double))));
+typedef long int ivec __attribute__ ((vector_size (DVEC_SIZE*sizeof(long int))));
+typedef union
+{
+  dvec   V;
+  double v[DVEC_SIZE];
+} dvec_u;
+
+typedef union
+{
+  ivec V;
+  int  v[DVEC_SIZE];
+} ivec_u;
+
+typedef struct
+{
+  int tasks_subdivision_dim;            /* 1, 2 or 3 to divide in slabs, pencils and volumes */
+  int tasks_subdivision_3D[4];          /* ??? */
+  int constrain_task_decomposition[3];  /* constraints on the number of subdivisions for each dimension */
+  int verbose_level;                    /* for dprintf */
+  int mimic_original_seedtable;         /* logical, set to 1 to reproduce exactly GenIC */
+  int dump_vectors;                          // logical
+  int dump_seedplane;                        // logical
+  int dump_kdensity;                         // logical
+  int large_plane;                      /* select the new generation of ICs */
+  int nthreads;                         /* number of OMP threads */
+  
+} internal_data;
+extern internal_data internal;
+
+typedef unsigned int uint;
+typedef unsigned long long int UL;
+
 
 #ifdef DOUBLE_PRECISION_PRODUCTS
 #define MPI_PRODFLOAT MPI_DOUBLE
@@ -88,7 +163,7 @@ typedef double PRODFLOAT;
 typedef float PRODFLOAT;
 #endif
 
-typedef struct
+typedef struct  // RIALLINEARE?
 {
   int Rmax;
   PRODFLOAT Fmax,Vel[3];
@@ -112,11 +187,14 @@ typedef struct
 #ifdef TIMELESS_SNAPSHOT
   PRODFLOAT zacc;
 #endif
-} product_data;
 
-extern void *main_memory, *wheretoplace_mycat;
+} product_data __attribute__((aligned (ALIGN)));  // VERIFICARE
+
+extern char *main_memory, *wheretoplace_mycat;
 
 extern product_data *products, *frag;
+
+extern unsigned int *cubes_ordering;
 
 extern unsigned int **seedtable;
 
@@ -151,20 +229,20 @@ extern smoothing_data Smoothing;
 extern int Ngrids;
 typedef struct
 {
-  unsigned int GSglobal_x, GSglobal_y, GSglobal_z;
-  unsigned int GSlocal_x, GSlocal_y, GSlocal_z;
-  unsigned int GSstart_x, GSstart_y, GSstart_z;
-  unsigned int GSlocal_k_x, GSlocal_k_y, GSlocal_k_z;
-  unsigned int GSstart_k_x, GSstart_k_y, GSstart_k_z;
-  unsigned int total_local_size,total_local_size_fft;
-  unsigned int off, ParticlesPerTask;
+  unsigned int       total_local_size, total_local_size_fft;
+  unsigned int       off, ParticlesPerTask;
+  ptrdiff_t          GSglobal[3];
+  ptrdiff_t          GSlocal[3];
+  ptrdiff_t          GSstart[3];
+  ptrdiff_t          GSlocal_k[3];
+  ptrdiff_t          GSstart_k[3];
+  double             lower_k_cutoff, upper_k_cutoff, norm, BoxSize, CellSize;
+  pfft_plan          forward_plan, reverse_plan;
   unsigned long long Ntotal;
-  double lower_k_cutoff, upper_k_cutoff, norm, BoxSize, CellSize;
-  fftw_plan forward_plan, reverse_plan;
 } grid_data;
 extern grid_data *MyGrids;
 
-extern fftw_complex **cvector_fft;
+extern pfft_complex **cvector_fft;
 extern double **rvector_fft;
 
 #ifdef READ_PK_TABLE
@@ -197,7 +275,8 @@ typedef struct
   int GridSize[3],WriteRmax, WriteFmax, WriteVmax, 
     CatalogInAscii, DoNotWriteCatalogs, DoNotWriteHistories, WriteSnapshot, WriteTimelessSnapshot,
     OutputInH100, RandomSeed, MaxMem, NumFiles, MinMassForCat, 
-    BoxInH100, simpleLambda, AnalyticMassFunction, MinHaloMass, PLCProvideConeData;
+    BoxInH100, simpleLambda, AnalyticMassFunction, MinHaloMass, PLCProvideConeData,
+    use_transposed_fft, use_inplace_fft;
 #ifdef READ_PK_TABLE
   camb_data camb;
 #endif
@@ -214,8 +293,8 @@ extern output_data outputs;
 
 typedef struct
 {
-  unsigned int safe, Ngood, PredNpeaks, maplength;
-  unsigned long long int Nalloc, Nstored, Npart;
+  unsigned int safe, Npart, Ngood, Nstored, PredNpeaks, maplength;
+  unsigned int Nalloc;
   int nbox_x,  nbox_y,  nbox_z;
   int mybox_x, mybox_y, mybox_z;
   int Lgrid_x, Lgrid_y, Lgrid_z; 
@@ -230,7 +309,8 @@ extern subbox_data subbox;
 
 typedef struct
 {
-  double init,total,dens,fft,coll,vel,lpt,fmax,distr,sort,group,frag,io
+  double init,total, dens, fft, coll, invcoll, ell, vel, lpt, fmax, distr, sort, group, frag, io,
+    deriv, mem_transf, partial, set_subboxes, set_plc, memory_allocation, fft_initialization
 #ifdef PLC
     ,plc
 #endif
@@ -347,10 +427,11 @@ typedef struct
 } memory_data;
 extern memory_data memory;
 
+int factor(int , int ); //QUESTO DOVE STA?
 
 /* prototypes for functions defined in collapse_times.c */
 int compute_collapse_times(int);
-int compute_velocities(int);
+int compute_velocities();
 #ifdef TABULATED_CT
 int initialize_collapse_times(int, int);
 int reset_collapse_times(int);
@@ -361,15 +442,19 @@ int set_one_grid(int);
 int initialize_fft();
 double forward_transform(int);
 double reverse_transform(int);
-int finalize_fftw();
+int finalize_fft();
 int compute_derivative(int, int, int);
 void write_in_cvector(int, double *);
 void write_from_cvector(int, double *);
 void write_in_rvector(int, double *);
 void write_from_rvector(int, double *);
 
+// PROBABILMENTE DA TOGLIERE DOPO IL DEBUG
+void dump_cvector(double*, int, int, ptrdiff_t *, ptrdiff_t *,  char *, int);
+void dump_rvector(double*, int, ptrdiff_t *, ptrdiff_t *,  char *, int);
+
 /* prototypes for functions defined in allocations.c */
-unsigned long long int organize_main_memory(void);
+int organize_main_memory(void);
 int allocate_main_memory(void);
 int deallocate_fft_vectors(int);
 int reallocate_memory_for_fragmentation(void);
@@ -377,6 +462,7 @@ int reallocate_memory_for_fragmentation(void);
 
 /* prototypes for functions defined in GenIC.c */
 int GenIC(int);
+int GenIC_large(int);  // NE BASTA UNA?
 double VarianceOnGrid(int, double, double);
 
 /* prototypes for functions defined in initialization.c */
@@ -391,7 +477,7 @@ int set_smoothing(void);
 /* prototypes in write_fields.c */
 int write_fields(void);
 int write_density(int);
-int write_product(int, char*);
+//int write_product(int, char*);
 
 /* prototypes in write_snapshot.c */
 int write_snapshot(int);
@@ -444,7 +530,7 @@ char *fdate(void);
 
 #ifdef TWO_LPT
 /* prototypes for functions defined in LPT.c */
-int compute_LPT_displacements(int);
+int compute_LPT_displacements();
 #endif
 
 /* prototypes for functions defined in distribute.c */

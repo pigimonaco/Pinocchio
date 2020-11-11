@@ -242,6 +242,56 @@ int read_parameter_file()
       id[nt++] = STRING;
 #endif
 
+      strcpy(tag[nt], "UseTransposedFFT");
+      addr[nt] = &(params.use_transposed_fft);
+      id[nt++] = LOGICAL;
+
+      strcpy(tag[nt], "DumpVectors");
+      addr[nt] = &(internal.dump_vectors);
+      id[nt++] = LOGICAL;
+
+      strcpy(tag[nt], "DumpSeedPlane");
+      addr[nt] = &(internal.dump_seedplane);
+      id[nt++] = INT_SKIP;
+
+      strcpy(tag[nt], "DumpKDensity");
+      addr[nt] = &(internal.dump_kdensity);
+      id[nt++] = INT_SKIP;
+
+      strcpy(tag[nt], "UseInPlaceFFT");
+      addr[nt] = &(params.use_inplace_fft);
+      id[nt++] = LOGICAL;
+
+      strcpy(tag[nt], "VerboseLevel");
+      addr[nt] = &(internal.verbose_level);
+      id[nt++] = INT_SKIP;
+
+      strcpy(tag[nt], "MimicOldSeed");
+      addr[nt] = &(internal.mimic_original_seedtable);
+      id[nt++] = LOGICAL;
+      
+      strcpy(tag[nt], "Constrain_dim0");
+      addr[nt] = &(internal.constrain_task_decomposition[0]);
+      id[nt++] = INT_SKIP;
+
+      strcpy(tag[nt], "Constrain_dim1");
+      addr[nt] = &(internal.constrain_task_decomposition[1]);
+      id[nt++] = INT_SKIP;
+
+      strcpy(tag[nt], "Constrain_dim2");
+      addr[nt] = &(internal.constrain_task_decomposition[2]);
+      id[nt++] = INT_SKIP;
+      
+      strcpy(tag[nt], "LargePlane");
+      addr[nt] = &(internal.large_plane);
+      id[nt++] = LOGICAL;
+
+#ifdef USE_FFT_THREADS      
+      strcpy(tag[nt], "NThreads");
+      addr[nt] = &(internal.nthreads);
+      id[nt++] = INT;
+#endif      
+      
       for (j=0; j<nt; j++)     /* All logical tags are FALSE by default */
 	if (id[j]==LOGICAL)
 	  *((int *) addr[j]) = 0;
@@ -416,6 +466,7 @@ int read_parameter_file()
 
   /* processor 0 broadcasts the parameters to all other processors */
   MPI_Bcast(&params, sizeof(param_data), MPI_BYTE, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&internal, sizeof(internal_data), MPI_BYTE, 0, MPI_COMM_WORLD); // PERCHE' QUI?
   MPI_Bcast(&outputs.n, sizeof(output_data), MPI_BYTE, 0, MPI_COMM_WORLD);
 
   return 0;

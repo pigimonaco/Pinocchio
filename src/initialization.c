@@ -26,12 +26,25 @@
 
 #include "pinocchio.h"
 
+#ifdef PRECISE_TIMING  // NON SONO SICURO CHE VALGA LA PENA DI MANTENERLO
+
+#define SET_WTIME cputime.partial = MPI_Wtime();
+#define ASSIGN_WTIME(INIT, ACC) do { double ttt= MPI_Wtime(); cputime.ACC = ttt - cputime.INIT; } while(0)
+#define ACCUMULATE_WTIME(INIT, ACC) do { double ttt= MPI_Wtime(); cputime.ACC += ttt - cputime.INIT; } while(0)
+#else
+#define SET_WTIME
+#define ASSIGN_WTIME(INIT, ACC)
+#define ACCUMULATE_WTIME(INIT, ACC)
+#endif
+
 int init_cosmology(void);
 int generate_densities(void);
 int set_plc(void);
 #ifdef SCALE_DEPENDENT
 int set_scaledep_GM(void);
 #endif
+unsigned int gcd(unsigned int, unsigned int);
+int set_fft_decomposition(void);
 
 
 int initialization()
@@ -49,6 +62,47 @@ int initialization()
   if (set_parameters())
     return 1;
 
+// CAPIRE DOVE E` MEGLIO METTERE QUESTO QUI SOTTO, FORSE DOPO LA COSMOLOGIA
+#ifdef USE_FFT_THREADS
+  if ( internal.nthreads > 1 )
+    dprintf(VMSG, 0, "Using %d threads for FFTs\n", internal.nthreads );
+#endif
+  
+  /* Initialize pfft */
+  pfft_init();
+
+  /* Inititalize fftw */
+#ifdef USE_FFT_THREADS
+    fftw_init_threads();
+#endif
+
+  fftw_mpi_init();    
+
+  
+  if(set_fft_decomposition())
+    return 1;
+
+  if(ThisTask == 0)
+    dprintf(VMSG, ThisTask, "cube subdivision [%d dim]: %d x %d x %d = %d processes\n",
+	    internal.tasks_subdivision_dim,
+	    internal.tasks_subdivision_3D[0],
+	    internal.tasks_subdivision_3D[1],
+	    internal.tasks_subdivision_3D[2],
+	    internal.tasks_subdivision_3D[0] *
+	    internal.tasks_subdivision_3D[1] *
+	    internal.tasks_subdivision_3D[2]);
+  
+  if( pfft_create_procmesh(internal.tasks_subdivision_dim, MPI_COMM_WORLD, internal.tasks_subdivision_3D, &FFT_Comm) )
+    {
+      int all = 1;
+      for(int iii = 0; iii < internal.tasks_subdivision_dim; iii++)
+  	all *= internal.tasks_subdivision_3D[iii];
+      
+      pfft_fprintf(MPI_COMM_WORLD, stderr, "Error while creating communicator and mesh with %d processes\n", all);
+      return 1;
+    }
+
+
   /* call to cosmo.c: initialization of cosmological functions */
   if (initialize_cosmology())
     return 1;
@@ -65,14 +119,23 @@ int initialization()
   WindowFunctionType=2;
   if (initialize_MassVariance())
     return 1;
-  
+
   /* initializes quantities needed for the on-the-fly reconstruction of PLC */
+  SET_WTIME;
   if (set_plc())
     return 1;
+  ASSIGN_WTIME(partial, set_plc);
 
   /* computes the number of sub-boxes for fragmentation */
+  SET_WTIME;
   if (set_subboxes())
-    return 1;
+    {
+      if (!ThisTask)
+	printf("Pinocchio done!\n");
+      MPI_Finalize();
+      exit (0);
+    }
+  ASSIGN_WTIME(partial, set_subboxes);
 
 #ifdef SCALE_DEPENDENT
   /* computes the growth rates for displacements */
@@ -85,12 +148,16 @@ int initialization()
   MPI_Barrier(MPI_COMM_WORLD);
 
   /* allocations of memory for fmax and memory tests */
+  SET_WTIME;
   if (allocate_main_memory())
     return 1;
+  ASSIGN_WTIME(partial, memory_allocation);
 
   /* initialization of fft plans */
+  SET_WTIME;
   if (initialize_fft())
     return 1;
+  ASSIGN_WTIME(partial, fft_initialization);
 
   /* generation of initial density field */
   if (generate_densities())
@@ -99,7 +166,16 @@ int initialization()
   cputime.init=MPI_Wtime()-cputime.init;
 
   if (!ThisTask)
-    printf("[%s] initialization done, cpu time = %14.6f\n", fdate(), cputime.init);
+    {      
+      dprintf(VMSG, ThisTask, "[%s] initialization done, initialization cpu time = %14.6f\n", fdate(), cputime.init);
+      dprintf(VMSG, ThisTask, "\t\t set subboxes time = %14.6f\n"
+	      "\t\t set plc time = %14.6f\n"
+	      "\t\t memory allocation time = %14.6f\n"
+	      "\t\t fft initialization time = %14.6f\n"
+	      "\t\t density generation time = %14.6f\n",
+	      cputime.set_subboxes, cputime.set_plc, cputime.memory_allocation,
+	      cputime.fft_initialization, cputime.dens);
+    }
 
   return 0;
 }
@@ -109,6 +185,21 @@ int set_parameters()
 {
   int i;
 
+  /* set default internal parameters */
+  internal.verbose_level                   = VDIAG;
+  internal.dump_seedplane                  = 0;
+  internal.dump_kdensity                   = 0;
+  internal.large_plane                     = 1;
+  internal.mimic_original_seedtable        = 0;
+  internal.dump_vectors                    = 0;
+  internal.constrain_task_decomposition[0] = 0;
+  internal.constrain_task_decomposition[1] = 0;
+  internal.constrain_task_decomposition[2] = 0;
+  internal.tasks_subdivision_3D[0]         = 0;
+  internal.tasks_subdivision_3D[1]         = 0;
+  internal.tasks_subdivision_3D[2]         = 0;
+  internal.nthreads                        = 1;
+  
   if(read_parameter_file())
     return 1;
 
@@ -153,98 +244,98 @@ int set_parameters()
 
   if (!ThisTask)
     {
-      printf("Flag for this run: %s\n\n",params.RunFlag);
-      printf("PARAMETER VALUES from file %s:\n",params.ParameterFile);
-      printf("Omega0                      %f\n",params.Omega0);
-      printf("OmegaLambda                 %f\n",params.OmegaLambda);    
-      printf("OmegaBaryon                 %f\n",params.OmegaBaryon);
+      dprintf(VMSG, 0, "Flag for this run: %s\n\n",params.RunFlag);
+      dprintf(VMSG, 0, "PARAMETER VALUES from file %s:\n",params.ParameterFile);
+      dprintf(VMSG, 0, "Omega0                      %f\n",params.Omega0);
+      dprintf(VMSG, 0, "OmegaLambda                 %f\n",params.OmegaLambda);    
+      dprintf(VMSG, 0, "OmegaBaryon                 %f\n",params.OmegaBaryon);
       if (strcmp(params.TabulatedEoSfile,"no"))
 	{
-	  printf("Dark Energy EoS will be read from file %s\n",params.TabulatedEoSfile);
+	  dprintf(VMSG, 0, "Dark Energy EoS will be read from file %s\n",params.TabulatedEoSfile);
 	}
       else
 	{
-	  printf("DE EoS parameters           %f %f\n",params.DEw0,params.DEwa);
+	  dprintf(VMSG, 0, "DE EoS parameters           %f %f\n",params.DEw0,params.DEwa);
 	}
 
-      printf("Hubble100                   %f\n",params.Hubble100);
-      printf("Sigma8                      %f\n",params.Sigma8);
-      printf("PrimordialIndex             %f\n",params.PrimordialIndex);
-      printf("RandomSeed                  %d\n",params.RandomSeed);
-      printf("OutputList                  %s\n",params.OutputList);
-      printf("Number of outputs           %d\n",outputs.n);
-      printf("Output redshifts           ");
+      dprintf(VMSG, 0, "Hubble100                   %f\n",params.Hubble100);
+      dprintf(VMSG, 0, "Sigma8                      %f\n",params.Sigma8);
+      dprintf(VMSG, 0, "PrimordialIndex             %f\n",params.PrimordialIndex);
+      dprintf(VMSG, 0, "RandomSeed                  %d\n",params.RandomSeed);
+      dprintf(VMSG, 0, "OutputList                  %s\n",params.OutputList);
+      dprintf(VMSG, 0, "Number of outputs           %d\n",outputs.n);
+      dprintf(VMSG, 0, "Output redshifts           ");
       for (i=0; i<outputs.n; i++)
-	printf(" %f ",outputs.z[i]);
-      printf("\n");
-      printf("GridSize                    %d %d %d\n",params.GridSize[0],params.GridSize[1],params.GridSize[2]);
-      printf("BoxSize (true Mpc)          %f\n",params.BoxSize_htrue);
-      printf("BoxSize (Mpc/h)             %f\n",params.BoxSize_h100);
-      printf("Particle Mass (true Msun)   %g\n",params.ParticleMass);
-      printf("Particle Mass (Msun/h)      %g\n",params.ParticleMass*params.Hubble100);
-      printf("Inter-part dist (true Mpc)  %f\n",params.InterPartDist);
-      printf("Inter-part dist (Mpc/h)     %f\n",params.InterPartDist*params.Hubble100);
-      printf("MinHaloMass (particles)     %d\n",params.MinHaloMass);
-      printf("BoundaryLayerFactor         %f\n",params.BoundaryLayerFactor);
-      printf("MaxMem per task (Mb)        %d\n",params.MaxMem);
-      printf("MaxMem per particle (b)     %f\n",params.MaxMemPerParticle);
-      printf("CatalogInAscii              %d\n",params.CatalogInAscii);
-      printf("NumFiles                    %d\n",params.NumFiles);
-      printf("DoNotWriteCatalogs          %d\n",params.DoNotWriteCatalogs);
-      printf("DoNotWriteHistories         %d\n",params.DoNotWriteHistories);
-      printf("WriteSnapshot               %d\n",params.WriteSnapshot);
-      printf("WriteTimelessSnapshot       %d\n",params.WriteTimelessSnapshot);
-      printf("OutputInH100                %d\n",params.OutputInH100);
-      printf("WriteFmax                   %d\n",params.WriteFmax);
-      printf("WriteVmax                   %d\n",params.WriteVmax);
-      printf("WriteRmax                   %d\n",params.WriteRmax);
+	dprintf(VMSG, 0, " %f ",outputs.z[i]);
+      dprintf(VMSG, 0, "\n");
+      dprintf(VMSG, 0, "GridSize                    %d %d %d\n",params.GridSize[0],params.GridSize[1],params.GridSize[2]);
+      dprintf(VMSG, 0, "BoxSize (true Mpc)          %f\n",params.BoxSize_htrue);
+      dprintf(VMSG, 0, "BoxSize (Mpc/h)             %f\n",params.BoxSize_h100);
+      dprintf(VMSG, 0, "Particle Mass (true Msun)   %g\n",params.ParticleMass);
+      dprintf(VMSG, 0, "Particle Mass (Msun/h)      %g\n",params.ParticleMass*params.Hubble100);
+      dprintf(VMSG, 0, "Inter-part dist (true Mpc)  %f\n",params.InterPartDist);
+      dprintf(VMSG, 0, "Inter-part dist (Mpc/h)     %f\n",params.InterPartDist*params.Hubble100);
+      dprintf(VMSG, 0, "MinHaloMass (particles)     %d\n",params.MinHaloMass);
+      dprintf(VMSG, 0, "BoundaryLayerFactor         %f\n",params.BoundaryLayerFactor);
+      dprintf(VMSG, 0, "MaxMem per task (Mb)        %d\n",params.MaxMem);
+      dprintf(VMSG, 0, "MaxMem per particle (b)     %f\n",params.MaxMemPerParticle);
+      dprintf(VMSG, 0, "CatalogInAscii              %d\n",params.CatalogInAscii);
+      dprintf(VMSG, 0, "NumFiles                    %d\n",params.NumFiles);
+      dprintf(VMSG, 0, "DoNotWriteCatalogs          %d\n",params.DoNotWriteCatalogs);
+      dprintf(VMSG, 0, "DoNotWriteHistories         %d\n",params.DoNotWriteHistories);
+      dprintf(VMSG, 0, "WriteSnapshot               %d\n",params.WriteSnapshot);
+      dprintf(VMSG, 0, "OutputInH100                %d\n",params.OutputInH100);
+      dprintf(VMSG, 0, "WriteFmax                   %d\n",params.WriteFmax);
+      dprintf(VMSG, 0, "WriteVmax                   %d\n",params.WriteVmax);
+      dprintf(VMSG, 0, "WriteRmax                   %d\n",params.WriteRmax);
       switch(params.AnalyticMassFunction)
 	{
 	case 0:
-	  printf("Using Press & Schechter (1974) for the analytic mass function\n");
+	  dprintf(VMSG, 0, "Using Press & Schechter (1974) for the analytic mass function\n");
 	  break;
 	case 1:
-	  printf("Using Sheth & Tormen (2001) for the analytic mass function\n");
+	  dprintf(VMSG, 0, "Using Sheth & Tormen (2001) for the analytic mass function\n");
 	  break;
 	case 2:
-	  printf("Using Jenkins et al. (2001) for the analytic mass function\n");
+	  dprintf(VMSG, 0, "Using Jenkins et al. (2001) for the analytic mass function\n");
 	  break;
 	case 3:
-	  printf("Using Warren et al. (2006) for the analytic mass function\n");
+	  dprintf(VMSG, 0, "Using Warren et al. (2006) for the analytic mass function\n");
 	  break;
 	case 4:
-	  printf("Using Reed et al. (2007) for the analytic mass function\n");
+	  dprintf(VMSG, 0, "Using Reed et al. (2007) for the analytic mass function\n");
 	  break;
 	case 5:
-	  printf("Using Crocce et al. (2010) for the analytic mass function\n");
+	  dprintf(VMSG, 0, "Using Crocce et al. (2010) for the analytic mass function\n");
 	  break;
 	case 6:
-	  printf("Using Tinker et al. (2008) for the analytic mass function\n");
+	  dprintf(VMSG, 0, "Using Tinker et al. (2008) for the analytic mass function\n");
 	  break;
 	case 7:
-	  printf("Using Courtin et al. (2010) for the analytic mass function\n");
+	  dprintf(VMSG, 0, "Using Courtin et al. (2010) for the analytic mass function\n");
 	  break;
 	case 8:
-	  printf("Using Angulo et al. (2012) for the analytic mass function\n");
+	  dprintf(VMSG, 0, "Using Angulo et al. (2012) for the analytic mass function\n");
 	  break;
 	case 9:
-	  printf("Using Watson et al. (2013) for the analytic mass function\n");
+	  dprintf(VMSG, 0, "Using Watson et al. (2013) for the analytic mass function\n");
 	  break;
 	case 10:
-	  printf("Using Crocce et al. (2010) with forced universality for the analytic mass function\n");
+	  dprintf(VMSG, 0, "Using Crocce et al. (2010) with forced universality for the analytic mass function\n");
 	  break;
 	default:
-	  printf("Unknown value for AnalyticMassFunction, Using Watson et al. (2013)\n");
+	  dprintf(VMSG, 0, "Unknown value for AnalyticMassFunction, Using Watson et al. (2013)\n");
 	  params.AnalyticMassFunction=9;
 	  break;
 	}
-      printf("\n");
+      dprintf(VMSG, 0, "\n");
 
-      printf("GENIC parameters:\n");
-      printf("InputSpectrum_UnitLength_in_cm %f\n",params.InputSpectrum_UnitLength_in_cm);
-      printf("FileWithInputSpectrum          %s\n",params.FileWithInputSpectrum);
-      printf("WDM_PartMass_in_kev            %f\n",params.WDM_PartMass_in_kev);
-      printf("\n");
+      dprintf(VMSG, 0, "\n");
+      dprintf(VMSG, 0, "GENIC parameters:\n");
+      dprintf(VMSG, 0, "InputSpectrum_UnitLength_in_cm %f\n",params.InputSpectrum_UnitLength_in_cm);
+      dprintf(VMSG, 0, "FileWithInputSpectrum          %s\n",params.FileWithInputSpectrum);
+      dprintf(VMSG, 0, "WDM_PartMass_in_kev            %f\n",params.WDM_PartMass_in_kev);
+      dprintf(VMSG, 0, "\n");
     }
 
   /* Task 0 may have changed the value of this parameter */
@@ -270,7 +361,7 @@ int set_smoothing()
   if (Smoothing.Nsmooth<=0)
     {
       if (!ThisTask)
-	printf("I am afraid that nothing is predicted to collapse in this configuration.\nI will work with no smoothing\n");
+	dprintf(VERR, 0, "I am afraid that nothing is predicted to collapse in this configuration.\nI will work with no smoothing\n");
       Smoothing.Nsmooth=1;
     }
 
@@ -315,14 +406,14 @@ int generate_densities()
   cputime.dens=MPI_Wtime();
 
   if (!ThisTask)
-    printf("[%s] Generating density in Fourier space\n",fdate());
+    dprintf(VMSG, 0, "[%s] Generating density in Fourier space\n",fdate());
 
 #ifdef WHITENOISE
 
   if (Ngrids>1)
     {
       if (!ThisTask)
-	printf("Sorry, this works only with a single grid\n");
+	dprintf(VMSG, 0, "Sorry, this works only with a single grid\n");
       return 1;
     }
 
@@ -333,14 +424,14 @@ int generate_densities()
 
   int igrid;
   for (igrid=0; igrid<Ngrids; igrid++)
-    if (GenIC(igrid))
+    if (GenIC_large(igrid))
       return 1;
 
 #endif
 
-  cputime.dens=MPI_Wtime()-cputime.dens;
-  if (!ThisTask)
-    printf("[%s] Done generating density in Fourier space, cputime = %f s\n",fdate(), cputime.dens);
+  cputime.dens = MPI_Wtime()-cputime.dens;
+    if (!ThisTask)
+      dprintf(VMSG, 0, "[%s] Done generating density in Fourier space, cputime = %f s\n",fdate(), cputime.dens);
 
   return 0;
 }
@@ -350,26 +441,25 @@ int set_grids()
 {
   /* initialization of fftw quantities on grids (one for the moment) */
 
-  int igrid;
+  int igrid, dim;
 
   Ngrids=1;
 
-  MyGrids=(grid_data*)malloc(Ngrids * sizeof(grid_data));
+  MyGrids=(grid_data*)malloc(Ngrids * sizeof(grid_data)); // VALE LA PENA DI METTERE UN MESSAGGIO DI ERRORE PER UNA ALLOCAZIONE COSI` INNOCUA?
 
-  MyGrids[0].GSglobal_x = params.GridSize[0];
-  MyGrids[0].GSglobal_y = params.GridSize[1];
-  MyGrids[0].GSglobal_z = params.GridSize[2];
+  for (dim=0; dim<3; dim++)
+    MyGrids[0].GSglobal[dim] = params.GridSize[dim];
   
-  MyGrids[0].Ntotal = (unsigned long long)MyGrids[0].GSglobal_x * 
-    (unsigned long long)MyGrids[0].GSglobal_y * 
-    (unsigned long long)MyGrids[0].GSglobal_z;
+  MyGrids[0].Ntotal = (unsigned long long)MyGrids[0].GSglobal[0] * 
+    (unsigned long long)MyGrids[0].GSglobal[1] * 
+    (unsigned long long)MyGrids[0].GSglobal[2];
 
   MyGrids[0].BoxSize = params.BoxSize_htrue;
   MyGrids[0].lower_k_cutoff=0.;
   MyGrids[0].upper_k_cutoff=NYQUIST * PI;
 
   /* allocates pointers */
-  cvector_fft=(fftw_complex**)malloc(Ngrids * sizeof(fftw_complex*));
+  cvector_fft=(pfft_complex**)malloc(Ngrids * sizeof(fftw_complex*));
   rvector_fft=(double**)malloc(Ngrids * sizeof(double*));
 
   kdensity=(double**)malloc(Ngrids * sizeof(double*));
@@ -385,7 +475,8 @@ int set_grids()
       first_derivatives[igrid]=(double**)malloc(3 * sizeof(double*));
       second_derivatives[igrid]=(double**)malloc(6 * sizeof(double*));
     }
-  seedtable=(unsigned int**)malloc(Ngrids * sizeof(unsigned int*));
+  /* moved to GenIC */
+  /* seedtable=(unsigned int**)malloc(Ngrids * sizeof(unsigned int*)); */
  
   for (igrid=0; igrid<Ngrids; igrid++)
     if (set_one_grid(igrid))
@@ -464,9 +555,9 @@ int set_plc(void)
     {
       /* in this case the center is randomly placed and the direction points toward the main diagonal */
       gsl_rng_set(random_generator, params.RandomSeed);
-      plc.center[0]=gsl_rng_uniform(random_generator)*MyGrids[0].GSglobal_x;
-      plc.center[1]=gsl_rng_uniform(random_generator)*MyGrids[0].GSglobal_y;
-      plc.center[2]=gsl_rng_uniform(random_generator)*MyGrids[0].GSglobal_z;
+      plc.center[0]=gsl_rng_uniform(random_generator)*MyGrids[0].GSglobal[0];
+      plc.center[1]=gsl_rng_uniform(random_generator)*MyGrids[0].GSglobal[1];
+      plc.center[2]=gsl_rng_uniform(random_generator)*MyGrids[0].GSglobal[2];
       plc.zvers[0]=1.0;
       plc.zvers[1]=1.0;
       plc.zvers[2]=1.0;
@@ -515,9 +606,9 @@ int set_plc(void)
   Smallest_r = (Smallest_r>0 ? Smallest_r : 0.);
   Largest_r += NSAFE * GrowingMode(params.StartingzForPLC,params.k_for_GM) * displ_variance;
 
-  l[0]=(double)(MyGrids[0].GSglobal_x);
-  l[1]=(double)(MyGrids[0].GSglobal_y);
-  l[2]=(double)(MyGrids[0].GSglobal_z);
+  l[0]=(double)(MyGrids[0].GSglobal[0]);
+  l[1]=(double)(MyGrids[0].GSglobal[1]);
+  l[2]=(double)(MyGrids[0].GSglobal[2]);
 
   /* first, it counts the number of replications needed */
   plc.Nreplications=0;
@@ -818,15 +909,16 @@ int set_subboxes()
     }
   size=SizeForMass(params.Largest);
   sizeG=size/params.InterPartDist;
-
+  
   /*  
       The number of loadable subbox particles is equal 
       to the number allowed by the specified MaxMemPerParticle.
       The boundary layer is set to its maximum value.
   */
 
-  /* the optimal number of sub-boxes to use for the fragmentation
-     is the number that offers the best volume/surface ratio */
+  /* finds the optimal number of sub-boxes to use for the fragmentation */
+
+
   surface=MyGrids[0].ParticlesPerTask;
   for (k=1; k<=NTasks; k++)
     for (j=1; j<=NTasks/k; j++)
@@ -835,9 +927,9 @@ int set_subboxes()
 	if (i*j*k==NTasks)
 	  {
 	    /* number of particles in the sub-box */
-	    N1 = find_length(MyGrids[0].GSglobal_x,i,0);
-	    N2 = find_length(MyGrids[0].GSglobal_y,j,0);
-	    N3 = find_length(MyGrids[0].GSglobal_z,k,0);
+	    N1 = find_length(MyGrids[0].GSglobal[0],i,0);
+	    N2 = find_length(MyGrids[0].GSglobal[1],j,0);
+	    N3 = find_length(MyGrids[0].GSglobal[2],k,0);
 
 	    this = (unsigned long long int)(i>1? 2*(N2*N3) : 0) + 
 	      (unsigned long long int)(j>1? 2*(N1*N3) : 0) +
@@ -870,58 +962,25 @@ int set_subboxes()
   subbox.mybox_y=NN1/subbox.nbox_z;
   subbox.mybox_z=NN1-subbox.mybox_y*subbox.nbox_z;
 
-  subbox.Lgrid_x = find_length(MyGrids[0].GSglobal_x,subbox.nbox_x,subbox.mybox_x);
-  subbox.Lgrid_y = find_length(MyGrids[0].GSglobal_y,subbox.nbox_y,subbox.mybox_y);
-  subbox.Lgrid_z = find_length(MyGrids[0].GSglobal_z,subbox.nbox_z,subbox.mybox_z);
+  subbox.Lgrid_x = find_length(MyGrids[0].GSglobal[0],subbox.nbox_x,subbox.mybox_x);
+  subbox.Lgrid_y = find_length(MyGrids[0].GSglobal[1],subbox.nbox_y,subbox.mybox_y);
+  subbox.Lgrid_z = find_length(MyGrids[0].GSglobal[2],subbox.nbox_z,subbox.mybox_z);
 
   subbox.pbc_x = (subbox.nbox_x==1);
   subbox.pbc_y = (subbox.nbox_y==1);
   subbox.pbc_z = (subbox.nbox_z==1);
 
-  /* the boundary layer is as large as BoundaryLayerFactor * sizeG 
-     but the total subbox size cannot be larger than GSglobal - 2 */
-  int warn=0;
-  if (subbox.pbc_x)
-    subbox.safe_x=0;
-  else
-    {
-      subbox.safe_x = params.BoundaryLayerFactor * sizeG +0.5;
-      if (2*subbox.safe_x + subbox.Lgrid_x > MyGrids[0].GSglobal_x - 2)
-	{
-	  subbox.safe_x = (MyGrids[0].GSglobal_x - subbox.Lgrid_x)/2 -1;
-	  warn=1;
-	}
-    }
-  if (subbox.pbc_y)
-    subbox.safe_y=0;
-  else
-    {
-      subbox.safe_y = params.BoundaryLayerFactor * sizeG +0.5;
-      if (2*subbox.safe_y + subbox.Lgrid_y > MyGrids[0].GSglobal_y - 2)
-	{
-	  subbox.safe_y = (MyGrids[0].GSglobal_y - subbox.Lgrid_y)/2 -1;
-	  warn=1;
-	}
-    }
-  if (subbox.pbc_z)
-    subbox.safe_z=0;
-  else
-    {
-      subbox.safe_z = params.BoundaryLayerFactor * sizeG +0.5;
-      if (2*subbox.safe_z + subbox.Lgrid_z > MyGrids[0].GSglobal_z - 2)
-	{
-	  subbox.safe_z = (MyGrids[0].GSglobal_z - subbox.Lgrid_z)/2 -1;
-	  warn=1;
-	}
-    }
+  subbox.safe_x = (subbox.pbc_x ? 0 : (find_length(MyGrids[0].GSglobal[0],subbox.nbox_x,0)-1)/2);
+  subbox.safe_y = (subbox.pbc_y ? 0 : (find_length(MyGrids[0].GSglobal[1],subbox.nbox_y,0)-1)/2);
+  subbox.safe_z = (subbox.pbc_z ? 0 : (find_length(MyGrids[0].GSglobal[2],subbox.nbox_z,0)-1)/2);
 
-  subbox.Lgwbl_x = subbox.Lgrid_x + 2*subbox.safe_x; 
+  subbox.Lgwbl_x = subbox.Lgrid_x + 2*subbox.safe_x;
   subbox.Lgwbl_y = subbox.Lgrid_y + 2*subbox.safe_y;
   subbox.Lgwbl_z = subbox.Lgrid_z + 2*subbox.safe_z;
 
-  subbox.start_x = find_start(MyGrids[0].GSglobal_x,subbox.nbox_x,subbox.mybox_x);
-  subbox.start_y = find_start(MyGrids[0].GSglobal_y,subbox.nbox_y,subbox.mybox_y);
-  subbox.start_z = find_start(MyGrids[0].GSglobal_z,subbox.nbox_z,subbox.mybox_z);
+  subbox.start_x = find_start(MyGrids[0].GSglobal[0],subbox.nbox_x,subbox.mybox_x);
+  subbox.start_y = find_start(MyGrids[0].GSglobal[1],subbox.nbox_y,subbox.mybox_y);
+  subbox.start_z = find_start(MyGrids[0].GSglobal[2],subbox.nbox_z,subbox.mybox_z);
 
   subbox.stabl_x = subbox.start_x - subbox.safe_x;
   subbox.stabl_y = subbox.start_y - subbox.safe_y;
@@ -937,19 +996,17 @@ int set_subboxes()
 
   subbox.Npart = subbox.Lgwbl_x * subbox.Lgwbl_y * subbox.Lgwbl_z;
   subbox.Ngood = subbox.Lgrid_x * subbox.Lgrid_y * subbox.Lgrid_z;
-  /* this is a prediction of the number of peaks that will be found,
-   modulated by PredPeakFactor parameter */
+  /* this is a (relatively generous) prediction of the number of peaks that will be found */
   subbox.PredNpeaks = (int)(MyGrids[0].ParticlesPerTask/6 * params.PredPeakFactor);
   subbox.Nstored = 0;
-#ifndef CLASSIC_FRAGMENTATION
   /* this is the size of frag_map*/
   subbox.maplength = subbox.Npart/UINTLEN + (subbox.Npart%UINTLEN!=0);
-#else
-  subbox.maplength = 0;
-#endif
-
-  /* this function returns the number of particles that can be allocated, 0 if memory is insufficient */
-  subbox.Nalloc = organize_main_memory();
+  if ( (subbox.Nalloc = organize_main_memory()) == 0 )
+    {
+      if (!ThisTask)
+	printf("organize_main_memory returned an invalid Nalloc, exiting\n");
+      return 1;
+    }
 
   /* messagges */
   if (!ThisTask)
@@ -957,33 +1014,28 @@ int set_subboxes()
       printf("\n");
       printf("FRAGMENTATION:\n");
       printf("Reference number of particles:         %d\n",MyGrids[0].ParticlesPerTask);
-      printf("Max memory per particle:               %d (requested %d)\n",(int)((double)memory.all/(double)MyGrids[0].ParticlesPerTask+0.5),(int)params.MaxMemPerParticle);
+      printf("Requested bytes per particle:          %d\n",(int)params.MaxMemPerParticle);
       printf("Number of sub-boxes per dimension:     %d %d %d\n",subbox.nbox_x,subbox.nbox_y,subbox.nbox_z);
       printf("Periodic boundary conditions:          %d %d %d\n",subbox.pbc_x,subbox.pbc_y,subbox.pbc_z);
       printf("Core 0 will work on a grid:            %d %d %d\n",subbox.Lgwbl_x,subbox.Lgwbl_y,subbox.Lgwbl_z);
       printf("The resolved box will be:              %d %d %d\n",subbox.Lgrid_x,subbox.Lgrid_y,subbox.Lgrid_z);
       printf("Boundary layer:                        %d %d %d\n",subbox.safe_x,subbox.safe_y,subbox.safe_z);
       printf("Boundary layer factor:                 %f\n",params.BoundaryLayerFactor);
-      printf("Number of total particles for core 0:  %llu\n",subbox.Npart);
+      printf("Number of total particles for core 0:  %d\n",subbox.Npart);
       printf("Number of good particles for core 0:   %d\n",subbox.Ngood);
-      printf("Particles that core 0 will allocate:   %llu\n",subbox.Nalloc);
+      printf("Particles that core 0 will allocate:   %d\n",subbox.Nalloc);
       printf("Allowed overhead:                      %f\n",(float)subbox.Nalloc/(float)subbox.Ngood);
       printf("Largest halo expected in this box at z=%f: %e Msun\n",
   	     outputs.zlast, params.Largest);
       printf("   its Lagrangian size: %f Mpc (%6.2f grid points)\n",size,sizeG);
       printf("   this requires a boundary layer of %6.2f grid points \n",sizeG*params.BoundaryLayerFactor);
-      if (warn)
+      if ((!subbox.pbc_x && params.BoundaryLayerFactor*sizeG>subbox.safe_x) || 
+	  (!subbox.pbc_y && params.BoundaryLayerFactor*sizeG>subbox.safe_y) || 
+	  (!subbox.pbc_z && params.BoundaryLayerFactor*sizeG>subbox.safe_z))
 	{
-	  printf("WARNING: the boundary layer on some dimension is smaller than required\n");
+	  printf("WARNING: the boundary layer on some dimension is smaller than the predicted size of the largest halos\n");
 	  printf("         times the BoundaryLayerFactor, the most massive halos may be inaccurate\n");
 	}
-    }
-
-  if ( !subbox.Nalloc )
-    {
-      if (!ThisTask)
-	printf("ERROR: as you will notice, organize_main_memory returned an invalid Nalloc, exiting\n");
-      return 1;
     }
 
   /* initialization of quantities required by compute_mf */
@@ -992,8 +1044,8 @@ int set_subboxes()
   else
     mf.hfactor=1.0;
   mf.hfactor4=pow(mf.hfactor,4.);
-  mf.vol=(double)MyGrids[0].GSglobal_x*(double)MyGrids[0].GSglobal_y
-    *(double)MyGrids[0].GSglobal_z*pow(params.InterPartDist,3.0);
+  mf.vol=(double)MyGrids[0].GSglobal[0]*(double)MyGrids[0].GSglobal[1]
+    *(double)MyGrids[0].GSglobal[2]*pow(params.InterPartDist,3.0);
   mf.mmin=log10(params.MinHaloMass*params.ParticleMass)-0.001*DELTAM;
   mf.mmax=log10(params.Largest)+3.0*DELTAM;
   mf.NBIN = (int)((mf.mmax-mf.mmin)/DELTAM) +1;
@@ -1055,14 +1107,212 @@ int find_length(int L, int n, int ibox)
 	return LL;
     }
 }
+unsigned int gcd(unsigned int u, unsigned int v)
+// this version of greatest common divisor taken
+// from Daniel Lemire's blog
+// lemire.me/blog/2013/12/26/fastest-way-to-compute-the-greatest-common-divisor/
+{
+    if (u == 0) return v;
+    if (v == 0) return u;
+    int shift = __builtin_ctz(u | v);
+    u   >>= __builtin_ctz( u );
+    do {
+        v >>= __builtin_ctz( v );
+        if (u > v) {
+            unsigned int t = v;
+            v = u;
+            u = t;
+        }  
+        v = v - u;
+    } while (v != 0);
+    return u << shift;
+}
 
+
+int set_fft_decomposition(void)
+{
+
+  /* initialize task mesh for pfft */
+  /* it's up to you to decide HOW to subdivide work in 3D, and then to store it in task_subdivision_3D*/
+
+  int decomposition_done = 0;
+  
+  if(  internal.constrain_task_decomposition[0] +
+       internal.constrain_task_decomposition[1] +
+       internal.constrain_task_decomposition[2] > 0)
+
+    // some constraints about how to decompose fft are set in parameter file
+    {
+      // --- check trivial errors
+      // just ot be sure about trivial typos, check that none is < 0
+      if (  internal.constrain_task_decomposition[0] < 0 ||
+	    internal.constrain_task_decomposition[1] < 0 ||
+	    internal.constrain_task_decomposition[2] < 0 )
+	{
+	  dprintf(VXERR, 0, "you can't constraint FFt decomposition with negative values\n");
+	  return 1;
+	}
+      
+      if ( internal.constrain_task_decomposition[0] == 0 )
+	{	
+	  dprintf(VXERR, 0, "you can't constraint FFt decomposition leaving first dimension to 0\n");
+	  return 1;
+	}
+      // -------------------------
+      
+      // set first dimension
+      internal.tasks_subdivision_3D[0] = internal.constrain_task_decomposition[0];
+      internal.tasks_subdivision_3D[1] = internal.tasks_subdivision_3D[2] = 1;
+      decomposition_done = 1;
+      
+      if( internal.constrain_task_decomposition[0] == NTasks )
+	{
+	  // all tasks are in dimension 1
+	  internal.tasks_subdivision_dim = 1;
+	  decomposition_done = 3;
+	}
+      
+      else if( internal.constrain_task_decomposition[1] > 0 )
+	{
+	  // --- check trivial errors
+	  if(internal.constrain_task_decomposition[0]*internal.constrain_task_decomposition[1] > NTasks )
+	    {
+	      dprintf(VXERR, 0, "you specified a wrong fft decomposition: Dim0 x Dim1 = %d > %d tasks\n",
+		      internal.constrain_task_decomposition[0]*internal.constrain_task_decomposition[1], NTasks);
+	      return 1;
+	    }
+	  // ------------------------
+	  
+	  internal.tasks_subdivision_3D[1] = internal.constrain_task_decomposition[1];
+	  
+	  if(internal.constrain_task_decomposition[0]*internal.constrain_task_decomposition[1] == NTasks)
+	    {
+	      // all tasks are in dimension 1 and 2
+	      internal.tasks_subdivision_dim = 2;
+	      internal.tasks_subdivision_3D[2] = 1;
+	      decomposition_done = 3;
+	    }
+	  else
+	    {
+	      internal.tasks_subdivision_dim = 3;
+	      decomposition_done = 3;
+	      
+	      internal.tasks_subdivision_3D[2] = NTasks /(internal.tasks_subdivision_3D[0] * internal.tasks_subdivision_3D[1]);
+	      
+	      if(internal.constrain_task_decomposition[2] > 0 &&
+		 internal.tasks_subdivision_3D[2] != internal.constrain_task_decomposition[2])
+		{
+		  dprintf(VXERR, 0, "you specified a wrong fft decomposition: dim2 should be %d instead of %d\n", internal.tasks_subdivision_3D[2], internal.constrain_task_decomposition[2]);
+		  return 1;
+		}
+	    }
+	}
+      else // constrain_task_decomposition[1] > 0
+	decomposition_done = 1;
+      
+      // close if constrain_task_decomposition[1] > 0
+      
+    } // close constrain_task_decomposition initial if
+  
+
+  if(decomposition_done < 3)
+    {
+      // decomposition is still to be made or completed
+      // we try to use as less dimensions as possible, maximizing contiguity
+
+      
+      if(decomposition_done == 1)
+	// only the first dimension has been specified in the param file,
+	// but with a number of tasks smaller than NTasks
+	{	  
+	  internal.tasks_subdivision_3D[1] = NTasks / internal.tasks_subdivision_3D[0];
+	  internal.tasks_subdivision_3D[2] = 1;
+	  internal.tasks_subdivision_dim = 2;
+	  
+	  if(NTasks % internal.tasks_subdivision_3D[0])
+	    {
+	      dprintf(VXERR, 0, "you specified a wrong fft decomposition\n");
+	      return 1;
+	    }  	  
+	}
+      else
+	// no dimension has been constrained in the param file
+	{
+	  // NOTE : no non-cubic grids, no multi-grids
+	  
+	  int Ngrid = params.GridSize[0];
+
+	  if( NTasks <= Ngrid )
+	    // prefer 1D decomposition for the most obvious case
+	    // that minimize communications in FFTs
+	    {
+	      internal.tasks_subdivision_dim = 1;
+	      internal.tasks_subdivision_3D[0] = NTasks;
+	      internal.tasks_subdivision_3D[2] = internal.tasks_subdivision_3D[1] = 1;
+	      return 0;
+	    }
+
+	  int Ngrid2 = Ngrid * Ngrid / (DECOMPOSITION_LIMIT_FACTOR_2D * DECOMPOSITION_LIMIT_FACTOR_2D);
+
+	  if( NTasks <= Ngrid2)
+	    // check whether exact 2D pencil decomposition
+	    {
+	      unsigned GCD   = gcd( Ngrid, NTasks );
+	      unsigned GCD_2 = gcd( Ngrid, (NTasks / GCD) );
+
+	      if( GCD * GCD_2 != NTasks)
+		// no exact decomposition is possible,
+		// revert to 1D decomposition
+		{
+		  internal.tasks_subdivision_dim = 1;
+		  internal.tasks_subdivision_3D[0] = NTasks;
+		  internal.tasks_subdivision_3D[2] = internal.tasks_subdivision_3D[1] = 1;
+		  return 0;
+		}
+	      else
+		{
+		  internal.tasks_subdivision_dim = 2;
+		  internal.tasks_subdivision_3D[0] = GCD;
+		  internal.tasks_subdivision_3D[1] = GCD_2;
+		  return 0;
+		}
+
+	    }  // close if( NTasks < Ngrid2)
+
+	  else
+	    // try 3d decomposition
+	    {
+	      int Ngrid_limit = Ngrid / DECOMPOSITION_LIMIT_FACTOR_2D;
+	      
+	      unsigned GCD   = gcd( Ngrid_limit, NTasks );
+	      unsigned GCD_2 = gcd( Ngrid_limit, (NTasks / GCD) );
+	      
+	      if( NTasks % (GCD * GCD_2) )
+		{
+		  dprintf(VXERR, 0, "3D decomposition is not possible\n");
+		  return 1;
+		}
+
+	      internal.tasks_subdivision_dim = 3;
+	      internal.tasks_subdivision_3D[0] = GCD;
+	      internal.tasks_subdivision_3D[1] = GCD_2;
+
+	      internal.tasks_subdivision_3D[2] = NTasks / (GCD * GCD_2);
+	      return 0;
+	    }
+	  
+	}
+    }
+
+  return 0;
+}
 
 #ifdef SCALE_DEPENDENT
 #include "def_splines.h"
 #define SMALLDIFF ((double)1.e-5)
 #define TOLERANCE ((double)1.e-4)
 #define MAXITER 20
-#define DEBUG
+//#define DEBUG
 
 double ThisRadius;
 double Time;

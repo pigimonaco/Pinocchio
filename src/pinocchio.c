@@ -36,8 +36,14 @@ int main(int argc, char **argv, char **envp)
   double time;
   int ThisGrid;
 
+
+#ifdef USE_GPERFTOOLS
+  ProfilerStart("pinocchio_gprofile.log");
+#endif
+  
   /* Initialize MPI */
-  MPI_Init(&argc, &argv);
+  int got_level;
+  MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &got_level);
   MPI_Comm_rank(MPI_COMM_WORLD, &ThisTask);
   MPI_Comm_size(MPI_COMM_WORLD, &NTasks);
 
@@ -45,12 +51,23 @@ int main(int argc, char **argv, char **envp)
   cputime.total=MPI_Wtime();
   greetings();
 
+#ifdef _OPENMP  // E QUESTO COSA FA?
+#pragma omp parallel
+  {
+#pragma omp master
+    num_omp_th = omp_get_num_threads();
+  }
+#endif
+
   /* checks that the parameter file is given in the command line */
   if (argc<2)
     {
       if (!ThisTask)
 	printf("Usage: pinocchio.x parameterfile\n");
       MPI_Finalize();
+#ifdef USE_GPERFTOOLS
+      ProfilerStop();
+#endif
       return 0;
     }
 
@@ -85,8 +102,14 @@ int main(int argc, char **argv, char **envp)
 	    abort_code();
 	}
       if (!ThisTask)
-	printf("Pinocchio done!\n");
+	{
+	  write_cputimes();
+	  printf("Pinocchio done!\n");
+	}
       MPI_Finalize();
+#ifdef USE_GPERFTOOLS
+      ProfilerStop();
+#endif
 
       return 0;
     }
@@ -123,6 +146,9 @@ int main(int argc, char **argv, char **envp)
       if (!ThisTask)
 	printf("Pinocchio done!\n");
       MPI_Finalize();
+#ifdef USE_GPERFTOOLS
+      ProfilerStop();
+#endif
 
       return 0;
     }
@@ -159,6 +185,9 @@ int main(int argc, char **argv, char **envp)
       if (!ThisTask)
 	printf("Pinocchio done!\n");
       MPI_Finalize();
+#ifdef USE_GPERFTOOLS
+      ProfilerStop();
+#endif
 
       return 0;
 
@@ -168,6 +197,9 @@ int main(int argc, char **argv, char **envp)
 	  printf("Sorry but you have to compile the code with TABULATED_CT to compute CT table\n");
 	}
       MPI_Finalize();
+#ifdef USE_GPERFTOOLS
+      ProfilerStop();
+#endif
 
       return 0;
 #endif
@@ -197,6 +229,9 @@ int main(int argc, char **argv, char **envp)
   if (!ThisTask)
     printf("Pinocchio done!\n");
   MPI_Finalize();
+#ifdef USE_GPERFTOOLS
+      ProfilerStop();
+#endif
 
   return 0;
 }
@@ -211,26 +246,30 @@ void abort_code(void)
 
 void write_cputimes()
 {
-  printf("Total:            %14.6f\n",cputime.total);
-  printf("Initialization:   %14.6f (%5.2f%%)\n",cputime.init, 100.*cputime.init/cputime.total);
-  printf("  Density in FS:  %14.6f (%5.2f%%)\n",cputime.dens, 100.*cputime.dens/cputime.total);
-  printf("fmax:             %14.6f (%5.2f%%)\n",cputime.fmax, 100.*cputime.fmax /cputime.total);
+  printf("Total:            %14.6f\n", cputime.total);
+  printf("Initialization:   %14.6f (%5.2f%%)\n", cputime.init, 100.*cputime.init/cputime.total);
+  printf("  Density in PS:  %14.6f (%5.2f%%)\n", cputime.dens, 100.*cputime.dens/cputime.total);
+  printf("fmax:             %14.6f (%5.2f%%)\n", cputime.fmax, 100.*cputime.fmax /cputime.total);
 #ifdef TWO_LPT
-  printf("  LPT:            %14.6f (%5.2f%%)\n",cputime.lpt,  100.*cputime.lpt  /cputime.total);
+  printf("  LPT:            %14.6f (%5.2f%%)\n", cputime.lpt,  100.*cputime.lpt  /cputime.total);
 #endif
-  printf("  FFTs:           %14.6f (%5.2f%%)\n",cputime.fft,  100.*cputime.fft  /cputime.total);
-  printf("  Collapse times: %14.6f (%5.2f%%)\n",cputime.coll, 100.*cputime.coll /cputime.total);
-  printf("  Velocities:     %14.6f (%5.2f%%)\n",cputime.vel,  100.*cputime.vel  /cputime.total);
-  printf("Fragmentation:    %14.6f (%5.2f%%)\n",cputime.frag, 100.*cputime.frag /cputime.total);
-  printf("  Redistribution: %14.6f (%5.2f%%)\n",cputime.distr,100.*cputime.distr/cputime.total);
-  printf("  Sorting:        %14.6f (%5.2f%%)\n",cputime.sort, 100.*cputime.sort /cputime.total);
+  printf("  Derivatives:    %14.6f (%5.2f%%)\n", cputime.deriv,  100.*cputime.deriv  /cputime.total);
+  printf("    Mem transfer: %14.6f (%5.2f%%)\n", cputime.mem_transf, 100.*cputime.mem_transf  /cputime.total);
+  printf("    FFTs:         %14.6f (%5.2f%%)\n", cputime.fft,  100.*cputime.fft  /cputime.total);
+  printf("  Collapse times: %14.6f (%5.2f%%)\n", cputime.coll, 100.*cputime.coll /cputime.total);
+  printf("    inv.collapse: %14.6f (%5.2f%%)\n", cputime.invcoll, 100.*cputime.invcoll /cputime.total);
+  printf("    ellipsoid:    %14.6f (%5.2f%%)\n", cputime.ell, 100.*cputime.ell /cputime.total);
+  printf("  Velocities:     %14.6f (%5.2f%%)\n", cputime.vel,  100.*cputime.vel  /cputime.total);
+  printf("Fragmentation:    %14.6f (%5.2f%%)\n", cputime.frag, 100.*cputime.frag /cputime.total);
+  printf("  Redistribution: %14.6f (%5.2f%%)\n", cputime.distr,100.*cputime.distr/cputime.total);
+  printf("  Sorting:        %14.6f (%5.2f%%)\n", cputime.sort, 100.*cputime.sort /cputime.total);
 #ifdef PLC
-  printf("  Groups total:   %14.6f (%5.2f%%)\n",cputime.group,100.*cputime.group/cputime.total);
-  printf("  Groups PLC:     %14.6f (%5.2f%%)\n",cputime.plc,100.*cputime.plc/cputime.total);
+  printf("  Groups total:   %14.6f (%5.2f%%)\n", cputime.group,100.*cputime.group/cputime.total);
+  printf("  Groups PLC:     %14.6f (%5.2f%%)\n", cputime.plc,100.*cputime.plc/cputime.total);
 #else
-  printf("  Groups:         %14.6f (%5.2f%%)\n",cputime.group,100.*cputime.group/cputime.total);
+  printf("  Groups:         %14.6f (%5.2f%%)\n", cputime.group,100.*cputime.group/cputime.total);
 #endif
-  printf("Total I/O:        %14.6f (%5.2f%%)\n",cputime.io,   100.*cputime.io   /cputime.total);
+  printf("Total I/O:        %14.6f (%5.2f%%)\n", cputime.io,   100.*cputime.io   /cputime.total);
 }
 
 void greetings(void)
@@ -240,6 +279,13 @@ void greetings(void)
   if (!ThisTask)
     {
       printf("[%s] This is pinocchio V4.XX, running on %d MPI tasks\n\n",fdate(),NTasks);
+#ifdef _OPENMP
+      printf( "Using %d OpenMP threads\n", num_omp_th );
+#endif
+
+#ifdef USE_FFT_THREADS
+      printf( "Using threaded-FFTs\n");
+#endif
 #ifdef TWO_LPT
 #ifndef THREE_LPT
       printf("This version uses 2LPT displacements\n");
