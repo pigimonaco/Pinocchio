@@ -27,6 +27,8 @@
 #include "pinocchio.h"
 #include "fragment.h"
 
+/* if F is the inverse collapse time: */
+/* #define FTOZ(A) (A>0.0 ? InverseGrowingMode(1./A) : A); */
 #define FTOZ(A) (A>0.0 ? A-1 : A);
 
 #define FORTRAN
@@ -36,11 +38,15 @@ int compute_mf(int iout)
   /* computes the mass function of the groups and the analytic mass function */
 
   int i,ibin,idummy;
-  char filename[LBLENGTH],lab1[10],lab2[10];
+  char filename[BLENGTH],lab1[10],lab2[10];
   double amass,x,dm,a,a1,a2,a3,m,D,mx,r,massvar,sigma,ni,fdummy;
   FILE *file;
 
-  D=GrowingMode(outputs.z[iout],params.k_for_GM);
+#ifdef SCALE_DEPENDENT_GROWTH
+  /* presently, the analytic mass function does not deal with scale-dependent growing mode */
+  SDGM.flag=-1;
+#endif
+  D=GrowingMode(outputs.z[iout]);
 
   /* sets counters to zero */
   for (i=0; i<mf.NBIN; i++)
@@ -254,7 +260,7 @@ int write_catalog(int iout)
 
   int igood,i,ngood,nhalos,j;
   double hfactor,GGrid[3],SGrid[3];
-  char filename[LBLENGTH],labh[3];
+  char filename[BLENGTH],labh[3];
   int NTasksPerFile,collector,itask,next,ThisFile;
   catalog_data *mycat;
   FILE *file;
@@ -317,7 +323,6 @@ int write_catalog(int iout)
 	    groups[i].Mass >= params.MinHaloMass) 
 	  {
 	    set_obj(i,outputs.F[iout],&obj1);
-	    set_obj_vel(i,outputs.F[iout],&obj1);
 	    mycat[igood].name=groups[i].name;
 	    mycat[igood].n=groups[i].Mass;
 	    mycat[igood].M=groups[i].Mass*params.ParticleMass*hfactor;
@@ -531,7 +536,7 @@ int write_PLC()
 
   int i,nhalos,nstored;
   double hfactor;
-  char filename[LBLENGTH],labh[3];
+  char filename[BLENGTH],labh[3];
   int NTasksPerFile,collector,itask,next,ThisFile;
   FILE *file;
   MPI_Status status;
@@ -791,7 +796,7 @@ int write_histories(void)
 
   int i, commint[2], ntrees, nbranch_all, nbranch_tree, ntrees_global, nbranch_global,
     ibranch, thisbranch, thistree, itree;
-  char filename[LBLENGTH];
+  char filename[BLENGTH];
   int NTasksPerFile,collector,itask,next,ThisFile;
   histories_data *mycat;
   FILE *file;

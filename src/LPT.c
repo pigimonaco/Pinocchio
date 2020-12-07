@@ -25,15 +25,11 @@
 */
 
 #include "pinocchio.h"
-
 #ifdef TWO_LPT
 
 int compute_LPT_displacements(int ismooth)
 {
-  int local_x,local_y,local_z,index;
-#if !defined(RECOMPUTE_DISPLACEMENTS) && !defined(THREE_LPT)
-  int ia;
-#endif
+  int local_x,local_y,local_z,index,ia;
 #ifdef THREE_LPT
   int ib,ider;
 #endif
@@ -49,6 +45,9 @@ int compute_LPT_displacements(int ismooth)
        5 -> (2,3)
   */
 
+#ifdef SMOOTH_VELOCITIES
+  int final=(ismooth==Smoothing.Nsmooth-1);
+#endif
 
   /* ********************************************* */
   /* ***************   2LPT term   *************** */
@@ -137,12 +136,9 @@ int compute_LPT_displacements(int ismooth)
       }
 #endif
 
-#ifndef RECOMPUTE_DISPLACEMENTS
-  /* velocities are computed during fragmentation if it segmented */
-
   /* displacements for the three terms */
   if (!ThisTask)
-    printf("\n[%s] Computing LPT displacements\n",fdate());
+    printf("[%s] Computing LPT displacements\n",fdate());
 
   Rsmooth=0.0;
 
@@ -159,7 +155,7 @@ int compute_LPT_displacements(int ismooth)
       write_from_rvector(0, first_derivatives[0][ia-1]);
     }
 
-  /* assigns displacement to particles */
+  /* assigns displacement to particles whose collapse time has just been updated */
   for (local_z=0; local_z < MyGrids[0].GSlocal_z; local_z++)
     for (local_y=0; local_y < MyGrids[0].GSlocal_y; local_y++)
       for (local_x=0; local_x < MyGrids[0].GSlocal_x; local_x++)
@@ -168,12 +164,15 @@ int compute_LPT_displacements(int ismooth)
 	  index = local_x + (MyGrids[0].GSlocal_x) * 
 	    (local_y + local_z * MyGrids[0].GSlocal_y);
 
-	  for (ia=0; ia<3; ia++)
-	    products[index].Vel_2LPT[ia]=first_derivatives[0][ia][index];
-
+#ifdef SMOOTH_VELOCITIES
+	  if (products[index].Rmax == ismooth || (products[index].Fmax<0.0 && final) )
+#endif
+	    {
+	      for (ia=0; ia<3; ia++)
+		products[index].Vmax_2LPT[ia]=first_derivatives[0][ia][index];
+	      }
 	}
 
-#endif
 
 #ifdef THREE_LPT
 
@@ -191,9 +190,6 @@ int compute_LPT_displacements(int ismooth)
   cputime.fft+=time;
 
   write_from_cvector(0, kvector_3LPT_1);
-
-#ifndef RECOMPUTE_DISPLACEMENTS
-  /* velocities are computed during fragmentation if it segmented */
 
   if (!ThisTask)
     printf("[%s] Computing 3LPT_1 displacements\n",fdate());
@@ -219,11 +215,14 @@ int compute_LPT_displacements(int ismooth)
 	  index = local_x + (MyGrids[0].GSlocal_x) * 
 	    (local_y + local_z * MyGrids[0].GSlocal_y);
 
-	  for (ia=0; ia<3; ia++)
-	    products[index].Vel_3LPT_1[ia]=first_derivatives[0][ia][index];
-
-	}
+#ifdef SMOOTH_VELOCITIES
+	  if (products[index].Rmax == ismooth || (products[index].Fmax<0.0 && final) )
 #endif
+	    {
+	      for (ia=0; ia<3; ia++)
+		products[index].Vmax_3LPT_1[ia]=first_derivatives[0][ia][index];
+	      }
+	}
 
   /* forward FFT for 3LPT_2 source */
   write_in_rvector(0, source_3LPT_2);
@@ -239,9 +238,6 @@ int compute_LPT_displacements(int ismooth)
   cputime.fft+=time;
 
   write_from_cvector(0, kvector_3LPT_2);
-
-#ifndef RECOMPUTE_DISPLACEMENTS
-  /* velocities are computed during fragmentation if it segmented */
 
   if (!ThisTask)
     printf("[%s] Computing 3LPT_2 displacements\n",fdate());
@@ -267,11 +263,14 @@ int compute_LPT_displacements(int ismooth)
 	  index = local_x + (MyGrids[0].GSlocal_x) * 
 	    (local_y + local_z * MyGrids[0].GSlocal_y);
 
-	  for (ia=0; ia<3; ia++)
-	    products[index].Vel_3LPT_2[ia]=first_derivatives[0][ia][index];
-
-	}
+#ifdef SMOOTH_VELOCITIES
+	  if (products[index].Rmax == ismooth || (products[index].Fmax<0.0 && final) )
 #endif
+	    {
+	      for (ia=0; ia<3; ia++)
+		products[index].Vmax_3LPT_2[ia]=first_derivatives[0][ia][index];
+	      }
+	}
 #endif
 
   /* bye! */
