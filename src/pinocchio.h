@@ -36,80 +36,35 @@
 #include <gsl/gsl_randist.h>
 #include <gsl/gsl_roots.h>
 #include <gsl/gsl_integration.h>
-#include <gsl/gsl_odeiv2.h>
+#include <gsl/gsl_odeiv.h>
 #include <gsl/gsl_spline.h>
 #include <fftw3-mpi.h>
 
 #define NYQUIST 1.
 #define PI      3.14159265358979323846 
-#define LBLENGTH 400
-#define SBLENGTH 100
+#define BLENGTH 300
 #define GBYTE 1073741824.0
 #define MBYTE 1048576.0
 #define alloc_verbose 0
 #define MAXOUTPUTS 100
 #define SPEEDOFLIGHT ((double)299792.458)
 #define GRAVITY ((double)4.30200e-9)      /*  (M_sun^-1 (km/s)^2 Mpc)  */
-#define NBINS 210   /* number of time bins in cosmological quantities */
 
 #if defined(THREE_LPT) && !defined(TWO_LPT)
 #define TWO_LPT
 #endif
 
-#if defined(RECOMPUTE_DISPLACEMENTS) && defined(THREE_LPT)
-#error RECOMPUTE_DISPLACEMENTS and THREE_LPT should not be used together
-#endif
-
-#if !defined(ELL_SNG) && !defined(ELL_CLASSIC)
-#define ELL_CLASSIC
-#endif
-
-#if (defined(READ_PK_TABLE) || defined(MOD_GRAV_FR)) && !defined(SCALE_DEPENDENT)
-#define SCALE_DEPENDENT
-#endif
-
-#if defined(READ_PK_TABLE) && (defined(MOD_GRAV_FR) || defined(Cubic_Galileon))
-#error REAK_PK_TABLE and MOD_GRAV_FR/Cubic_Galileon cannot be chosen together
-#endif
-
-#if defined(MOD_GRAV_FR) && !defined(FR0)
-#error Please set a value to FR0 when you choose MOD_GRAV_FR
-#endif
-
 extern int ThisTask,NTasks;
-
-
-#ifdef DOUBLE_PRECISION_PRODUCTS
-#define MPI_PRODFLOAT MPI_DOUBLE
-typedef double PRODFLOAT;
-#else
-#define MPI_PRODFLOAT MPI_FLOAT
-typedef float PRODFLOAT;
-#endif
 
 typedef struct
 {
+  double Fmax, Vmax[3];
   int Rmax;
-  PRODFLOAT Fmax,Vel[3];
 #ifdef TWO_LPT
-  PRODFLOAT Vel_2LPT[3];
+  double Vmax_2LPT[3];
 #ifdef THREE_LPT
-  PRODFLOAT Vel_3LPT_1[3],Vel_3LPT_2[3];
+  double Vmax_3LPT_1[3],Vmax_3LPT_2[3];
 #endif
-#endif
-
-#ifdef RECOMPUTE_DISPLACEMENTS
-  PRODFLOAT Vel_after[3];
-#ifdef TWO_LPT
-  PRODFLOAT Vel_2LPT_after[3];
-#ifdef THREE_LPT
-  PRODFLOAT Vel_3LPT_1_after[3],Vel_3LPT_2_after[3];
-#endif
-#endif
-#endif
-
-#ifdef TIMELESS_SNAPSHOT
-  PRODFLOAT zacc;
 #endif
 } product_data;
 
@@ -141,9 +96,6 @@ typedef struct
 {
   int Nsmooth;
   double *Radius, *Variance, *TrueVariance;
-#ifdef SCALE_DEPENDENT
-  double *Rad_GM, *k_GM_dens, *k_GM_displ, *k_GM_vel;
-#endif
 } smoothing_data;
 extern smoothing_data Smoothing;
 
@@ -165,22 +117,14 @@ extern grid_data *MyGrids;
 extern fftw_complex **cvector_fft;
 extern double **rvector_fft;
 
-#ifdef READ_PK_TABLE
+#ifdef SCALE_DEPENDENT_GROWTH
 typedef struct
 {
-  int Nkbins, NCAMB;
-  char MatterFile[SBLENGTH], TransferFile[SBLENGTH], RunName[SBLENGTH], RedshiftsFile[LBLENGTH];
+  double ReferenceRedshift;
+  int ReferenceOutput,Nkbins, NCAMB, ReferenceScale;
+  char MatterFile[BLENGTH], TransferFile[BLENGTH], RunName[BLENGTH], RedshiftsFile[BLENGTH];
   double *Logk, *LogPkref, D2ref, *Scalef, *RefGM;
 } camb_data;
-#endif
-
-#ifdef SCALE_DEPENDENT
-typedef struct
-{
-  int order;
-  double redshift;
-} ScaleDep_data;
-extern ScaleDep_data ScaleDep;
 #endif
 
 typedef struct
@@ -188,15 +132,15 @@ typedef struct
   double Omega0, OmegaLambda, Hubble100, Sigma8, OmegaBaryon, DEw0, DEwa, 
     PrimordialIndex, InterPartDist, BoxSize, BoxSize_htrue, BoxSize_h100, ParticleMass, 
     StartingzForPLC, LastzForPLC, InputSpectrum_UnitLength_in_cm, WDM_PartMass_in_kev, 
-    BoundaryLayerFactor, Largest, MaxMemPerParticle, k_for_GM, PLCAperture,
+    BoundaryLayerFactor, Largest, MaxMemPerParticle, PLCAperture,
     PLCCenter[3], PLCAxis[3];
-  char RunFlag[SBLENGTH],DataDir[SBLENGTH],TabulatedEoSfile[LBLENGTH],ParameterFile[LBLENGTH],
-    OutputList[LBLENGTH],FileWithInputSpectrum[LBLENGTH],CTtableFile[LBLENGTH];
+  char RunFlag[BLENGTH],DataDir[BLENGTH],TabulatedEoSfile[BLENGTH],ParameterFile[BLENGTH],
+    OutputList[BLENGTH],FileWithInputSpectrum[BLENGTH];
   int GridSize[3],WriteRmax, WriteFmax, WriteVmax, 
-    CatalogInAscii, DoNotWriteCatalogs, DoNotWriteHistories, WriteSnapshot, WriteTimelessSnapshot,
+    CatalogInAscii, DoNotWriteCatalogs, DoNotWriteHistories, WriteSnapshot, 
     OutputInH100, RandomSeed, MaxMem, NumFiles, MinMassForCat, 
     BoxInH100, simpleLambda, AnalyticMassFunction, MinHaloMass, PLCProvideConeData;
-#ifdef READ_PK_TABLE
+#ifdef SCALE_DEPENDENT_GROWTH
   camb_data camb;
 #endif
 } param_data;
@@ -247,15 +191,6 @@ typedef struct
   double Vel_3LPT_1[3], Vel_3LPT_2[3];
 #endif
 #endif
-#ifdef RECOMPUTE_DISPLACEMENTS
-  double Vel_after[3];
-#ifdef TWO_LPT
-  double Vel_2LPT_after[3];
-#ifdef THREE_LPT
-  double Vel_3LPT_1_after[3], Vel_3LPT_2_after[3];
-#endif
-#endif
-#endif
   int ll, halo_app, mass_at_merger, merged_with, point, bottom, good;
   double t_appear, t_peak, t_merge;
   unsigned long long int name;
@@ -299,6 +234,15 @@ extern int NSlices,ThisSlice;
 /* fragmentation parameters */
 extern double f_m, f_rm, espo, f_a, f_ra, f_200, sigmaD0;
 
+#ifdef SCALE_DEPENDENT_GROWTH
+typedef struct
+{
+  int flag, ismooth;
+  double radius;
+} SDGM_data;
+extern SDGM_data SDGM;
+#endif
+
 #define NWINT 1000
 extern gsl_integration_workspace *workspace;
 extern gsl_rng *random_generator;
@@ -321,27 +265,9 @@ typedef struct
 } mf_data;
 extern mf_data mf;
 
-/* splines for interpolations */
-extern gsl_spline **SPLINE;
-extern gsl_interp_accel **ACCEL;
-#if defined(SCALE_DEPENDENT) && defined(ELL_CLASSIC)
-extern gsl_spline **SPLINE_INVGROW;
-extern gsl_interp_accel **ACCEL_INVGROW;
-#endif
-
-#if defined(MOD_GRAV_FR)
-extern double H_over_c;
-#endif
-
-
-
 /* prototypes for functions defined in collapse_times.c */
 int compute_collapse_times(int);
 int compute_velocities(int);
-#ifdef TABULATED_CT
-int initialize_collapse_times(int, int);
-int reset_collapse_times(int);
-#endif
 
 /* prototypes for functions defined in fmax-fftw.c */
 int set_one_grid(int);
@@ -364,7 +290,6 @@ int reallocate_memory_for_fragmentation_2(int);
 
 /* prototypes for functions defined in GenIC.c */
 int GenIC(int);
-double VarianceOnGrid(int, double, double);
 
 /* prototypes for functions defined in initialization.c */
 int initialization();
@@ -376,36 +301,31 @@ int set_grids(void);
 /* prototypes in write_fields.c */
 int write_fields(void);
 int write_density(int);
-int write_product(int, char*);
 
 /* prototypes in write_snapshot.c */
 int write_snapshot(int);
 int write_LPT_snapshot(double);
-#ifdef TIMELESS_SNAPSHOT
-int write_timeless_snapshot(void);
-#endif
 
 /* prototypes for functions defined in cosmo.c */
 int initialize_cosmology();
 int initialize_MassVariance();
-double OmegaMatter(double);
-double OmegaLambda(double);
+double Omega(double);
 double Hubble(double);
 double Hubble_Gyr(double);
-double fomega(double,double);
-double fomega_2LPT(double,double);
-double fomega_3LPT_2(double,double);
-double fomega_3LPT_1(double,double);
+double fomega(double);
+double fomega_2LPT(double);
+double fomega_3LPT_2(double);
+double fomega_3LPT_1(double);
 double CosmicTime(double);
 double InverseCosmicTime(double);
-double GrowingMode(double,double);
-double GrowingMode_2LPT(double,double);
-double GrowingMode_3LPT_1(double,double);
-double GrowingMode_3LPT_2(double,double);
-double InverseGrowingMode(double,int);
-double ComovingDistance(double);
-double InverseComovingDistance(double);
-double dComovingDistance_dz(double);
+double GrowingMode(double);
+double GrowingMode_2LPT(double);
+double GrowingMode_3LPT_1(double);
+double GrowingMode_3LPT_2(double);
+double InverseGrowingMode(double);
+double ProperDistance(double);
+double InverseProperDistance(double);
+double dProperDistance_dz(double);
 double PowerSpectrum(double);
 double MassVariance(double);
 double dMassVariance_dr(double);
@@ -413,11 +333,11 @@ double DisplVariance(double);
 double Radius(double);
 double SizeForMass(double);
 double MassForSize(double);
+double TypicalCollapsingMass(double);
 double dOmega_dVariance(double, double);
 double AnalyticMassFunction(double, double);
 double WindowFunction(double);
 double my_spline_eval(gsl_spline *, double, gsl_interp_accel *);
-int jac(double, const double [], double *, double [], void *);
 
 /* prototypes for functions defined in ReadParamFile.c */
 int read_parameter_file();
@@ -439,12 +359,18 @@ int distribute(void);
 int fragment(void);
 
 /* prototypes for functions defined in build_groups.c */
-int build_groups(int,double);
+int build_groups(int);
+
+#ifdef SCALE_DEPENDENT_GROWTH
+int read_power_table_from_CAMB(void);
+int initialize_ScaleDependentGrowth(void);
+double MatterGrowingMode(double);
+double VelGrowingMode(double);
+double InverseMatterGrowingMode(double);
+double VelfOmega(double);
+double VelfOmega2(double);
+#endif
 
 #ifdef WHITENOISE
 int read_white_noise(void);
 #endif
-
-
-//LEVARE
-int test_GM(void);

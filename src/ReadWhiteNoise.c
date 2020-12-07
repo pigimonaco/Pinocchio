@@ -39,7 +39,7 @@ int read_white_noise()
   float *plane;
   double kx,ky,kz,kxnorm,kynorm,kznorm,k_squared,k_module,k_physical,time,norm,delta;
   double ave=0.0, var=0.0, gave, gvar;
-  char filename[LBLENGTH];
+  char filename[BLENGTH];
   FILE *file;
   MPI_Status status;
 
