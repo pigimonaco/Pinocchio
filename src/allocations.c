@@ -29,7 +29,7 @@
 //#define VERBOSE
 
 static size_t group_memory, frag_prods_memory, frag_memory, prods_memory, fft_memory,
-  all_memory, first_allocated_memory, fmax_memory, fields_memory;
+  all_memory, first_allocated_memory, fmax_memory, fields_memory, fields_to_keep_memory;
 
 int allocate_main_memory()
 {
@@ -92,9 +92,6 @@ int allocate_main_memory()
      frag_memory:             memory needed by fragment
      all_memory:              total memory needed
 
-     IN CASE DO_NOT_REALLOC IS DEFINED:
-     first_allocated_memory is large enough to include frag_memory, fftw vectors are an extra overhead
-
    */
 
   int igrid,i;
@@ -111,27 +108,43 @@ int allocate_main_memory()
 #endif
 
   /* Computes total required memory */
-  prods_memory = MyGrids[0].total_local_size * sizeof(product_data);   // products
-  fields_memory=0;
+  prods_memory = MyGrids[0].total_local_size * sizeof(product_data);               // products
+  fields_memory=fields_to_keep_memory=0;
+#ifndef RECOMPUTE_DISPLACEMENTS
+
   for (igrid=0; igrid<Ngrids; igrid++)
-    fields_memory += MyGrids[igrid].total_local_size_fft * sizeof(double); // kdensity
-  for (igrid=0; igrid<Ngrids; igrid++)
-    fields_memory += 6 * MyGrids[igrid].total_local_size * sizeof(double); // second_derivatives
+    fields_memory += MyGrids[igrid].total_local_size_fft * sizeof(double);         // kdensity
 #ifdef TWO_LPT
-  fields_memory += MyGrids[0].total_local_size_fft * sizeof(double);       // kvector_2LPT
+  fields_memory += MyGrids[0].total_local_size_fft * sizeof(double);               // kvector_2LPT
 #ifdef THREE_LPT
-  fields_memory += 2 * MyGrids[0].total_local_size_fft * sizeof(double);   // kvector_3LPT_*
+  fields_memory += 2 * MyGrids[0].total_local_size_fft * sizeof(double);           // kvector_3LPT_*
 #endif
 #endif
+
+#else
+  /* in this case densities and fft vectors will be kept during fragmentation */
+  for (igrid=0; igrid<Ngrids; igrid++)
+    fields_to_keep_memory += MyGrids[igrid].total_local_size_fft * sizeof(double); // kdensity
+#ifdef TWO_LPT
+  fields_to_keep_memory += MyGrids[0].total_local_size_fft * sizeof(double);       // kvector_2LPT
+#ifdef THREE_LPT
+  fields_to_keep_memory += 2 * MyGrids[0].total_local_size_fft * sizeof(double);   // kvector_3LPT_*
+#endif
+#endif
+
+#endif
+
+  for (igrid=0; igrid<Ngrids; igrid++)
+    fields_memory += 6 * MyGrids[igrid].total_local_size * sizeof(double);         // second_derivatives
   for (igrid=0; igrid<Ngrids; igrid++)
     fields_memory += MyGrids[igrid].GSglobal_x * MyGrids[igrid].GSglobal_y * sizeof(unsigned int);  // seedtable
-  first_allocated_memory = prods_memory + fields_memory;
+  first_allocated_memory = prods_memory + fields_memory + fields_to_keep_memory;
 
   /* adds memory for fft vectors */
   for (igrid=0, fft_memory=0; igrid<Ngrids; igrid++)
     fft_memory += 2 * MyGrids[igrid].total_local_size_fft * sizeof(double);
 
-  fmax_memory = first_allocated_memory + fft_memory;
+  fmax_memory = first_allocated_memory;
 
   /* this is the memory needed to fragment the collapsed medium, including PLC data;
      we assume that all peaks are at worst 1/10 of the particles */
@@ -142,18 +155,24 @@ int allocate_main_memory()
   group_memory += plc.Nmax * sizeof(plcgroup_data);
 #endif
 
+#ifndef RECOMPUTE_DISPLACEMENTS
+
   if (NSlices>1)
     frag_memory = prods_memory + frag_prods_memory + group_memory;
   else
     frag_memory = (group_memory > prods_memory ? group_memory : prods_memory) + frag_prods_memory;
 
-#ifdef DO_NOT_REALLOC
-  if (frag_memory > first_allocated_memory)
-    first_allocated_memory = frag_memory;
-  all_memory = first_allocated_memory + fft_memory;
 #else
+
+  frag_memory = prods_memory + fields_to_keep_memory + frag_prods_memory + group_memory;
+
+#endif
+
   /* this is the largest amount of memory needed by the code */
-  all_memory = (fmax_memory > frag_memory? fmax_memory : frag_memory);
+#ifndef RECOMPUTE_DISPLACEMENTS
+  all_memory = (fmax_memory + fft_memory > frag_memory ? fmax_memory + fft_memory : frag_memory);
+#else
+  all_memory = (fmax_memory  > frag_memory ? fmax_memory : frag_memory) + fft_memory;
 #endif
 
   /* map of memory usage for all tasks */
@@ -163,12 +182,16 @@ int allocate_main_memory()
     {
       mymap.oh=(double)subbox.Npart/(double)MyGrids[0].total_local_size;
       mymap.m1=(double)prods_memory/(double)MyGrids[0].total_local_size;
-      mymap.m2=(double)fields_memory/(double)MyGrids[0].total_local_size;
+      mymap.m2=(double)(fields_memory+fields_to_keep_memory)/(double)MyGrids[0].total_local_size;
       mymap.m3=(double)fft_memory/(double)MyGrids[0].total_local_size;
-      mymap.m4=(double)fmax_memory/(double)MyGrids[0].total_local_size;
+      mymap.m4=(double)(fmax_memory+fft_memory)/(double)MyGrids[0].total_local_size;
       mymap.m5=(double)frag_prods_memory/(double)MyGrids[0].total_local_size;
       mymap.m6=(double)group_memory/(double)MyGrids[0].total_local_size;
+#ifndef RECOMPUTE_DISPLACEMENTS
       mymap.m7=(double)frag_memory/(double)MyGrids[0].total_local_size;
+#else
+      mymap.m7=(double)(frag_memory+fft_memory)/(double)MyGrids[0].total_local_size;
+#endif
       mymap.m8=(double)all_memory/(double)MyGrids[0].total_local_size;
     }
   else
@@ -188,9 +211,6 @@ int allocate_main_memory()
     {
       printf("\n");
       printf("Map of memory usage for all MPI tasks\n");
-#ifdef DO_NOT_REALLOC
-      printf("  NB: here we avoid reallocations\n");
-#endif
       printf("Task N. planes    mem(MB) overhead   products   fields     ffts     fmax  frag pr.  groups fragment  total bytes per particle\n");
     }
   for (i=0; i<NTasks; i++)
@@ -246,17 +266,6 @@ int allocate_main_memory()
       kdensity[igrid] = (double *)(main_memory + memory);
       memory += MyGrids[igrid].total_local_size_fft * sizeof(double);
     }
-  for (igrid=0; igrid<Ngrids; igrid++)
-    {
-      for (i=0; i<6; i++)
-	{
-	  second_derivatives[igrid][i] = (double *)(main_memory + memory);
-	  memory += MyGrids[igrid].total_local_size * sizeof(double);	  
-	}
-      for (i=0; i<3; i++)
-	first_derivatives[igrid][i] = second_derivatives[igrid][i];
-      density[igrid] = second_derivatives[igrid][0];
-    }
 #ifdef TWO_LPT
   kvector_2LPT = (double *)(main_memory + memory);
   memory += MyGrids[0].total_local_size_fft * sizeof(double);
@@ -270,6 +279,17 @@ int allocate_main_memory()
   source_3LPT_2 = kvector_3LPT_2;
 #endif
 #endif
+  for (igrid=0; igrid<Ngrids; igrid++)
+    {
+      for (i=0; i<6; i++)
+	{
+	  second_derivatives[igrid][i] = (double *)(main_memory + memory);
+	  memory += MyGrids[igrid].total_local_size * sizeof(double);	  
+	}
+      for (i=0; i<3; i++)
+	first_derivatives[igrid][i] = second_derivatives[igrid][i];
+      density[igrid] = second_derivatives[igrid][0];
+    }
   for (igrid=0; igrid<Ngrids; igrid++)
     {
       seedtable[igrid] = (unsigned int*)(main_memory + memory);
@@ -307,15 +327,15 @@ int allocate_main_memory()
   bcast[n++]=(size_t)((void*)kdensity[0]-(void*)products);
   for (igrid=1; igrid<Ngrids; igrid++)
     bcast[n++]=(size_t)((void*)kdensity[igrid]-(void*)kdensity[igrid-1]);
-  bcast[n++]=(size_t)((void*)second_derivatives[0][0]-(void*)kdensity[Ngrids-1]);
-  for (igrid=1; igrid<Ngrids; igrid++)
-    bcast[n++]=(size_t)((void*)second_derivatives[igrid][0]-(void*)second_derivatives[igrid-1][0]);
 #ifdef TWO_LPT
   bcast[n++]=(size_t)((void*)kvector_2LPT-(void*)second_derivatives[Ngrids-1][0]);
   bcast[n++]=(size_t)((void*)seedtable[0]-(void*)kvector_2LPT);
 #else
   bcast[n++]=(size_t)((void*)seedtable[0]-(void*)second_derivatives[Ngrids-1][0]);
 #endif
+  bcast[n++]=(size_t)((void*)second_derivatives[0][0]-(void*)kdensity[Ngrids-1]);
+  for (igrid=1; igrid<Ngrids; igrid++)
+    bcast[n++]=(size_t)((void*)second_derivatives[igrid][0]-(void*)second_derivatives[igrid-1][0]);
   for (igrid=1; igrid<Ngrids; igrid++)
     bcast[n++]=(size_t)((void*)seedtable[igrid]-(void*)seedtable[igrid-1]);
   bcast[n++]=(size_t)(last-(void*)seedtable[Ngrids-1]);
@@ -347,14 +367,14 @@ int allocate_main_memory()
       printf("    PRODUCTS");
       for (igrid=0; igrid<Ngrids; igrid++)
 	printf("    KDENS G.%d",igrid);
-      for (igrid=0; igrid<Ngrids; igrid++)
-	printf("    DERIV G.%d",igrid);
 #ifdef TWO_LPT
       printf("   KVEC 2LPT ");
 #ifdef THREE_LPT
       printf("   KVEC 3LPT ");
 #endif
 #endif
+      for (igrid=0; igrid<Ngrids; igrid++)
+	printf("    DERIV G.%d",igrid);
       for (igrid=0; igrid<Ngrids; igrid++)
 	printf("    SEEDS G.%d ",igrid);
       printf(" MAIN MEMORY ");
@@ -418,25 +438,34 @@ int reallocate_memory_for_fragmentation_1()
   void *last;
 #endif
 
+#ifndef RECOMPUTE_DISPLACEMENTS
+
   kdensity=0x0;
-  density=0x0;
-  first_derivatives=0x0;
-  second_derivatives=0x0;
-  seedtable=0x0;
 #ifdef TWO_LPT
   kvector_2LPT=0x0;
-  source_2LPT=0x0;
 #ifdef THREE_LPT
   kvector_3LPT_1=0x0;
-  source_3LPT_1=0x0;
   kvector_3LPT_2=0x0;
+#endif
+#endif
+
+#endif
+
+#ifdef TWO_LPT
+  source_2LPT=0x0;
+#ifdef THREE_LPT
+  source_3LPT_1=0x0;
   source_3LPT_2=0x0;
 #endif
 #endif
 
+  density=0x0;
+  first_derivatives=0x0;
+  second_derivatives=0x0;
+  seedtable=0x0;
+
   /* products in the sub-box are stored in the memory that has been freed */
 
-#ifndef DO_NOT_REALLOC
   /* enlarge memory allocation if needed */
   if (frag_memory > first_allocated_memory)
     {
@@ -446,7 +475,7 @@ int reallocate_memory_for_fragmentation_1()
 	  main_memory=tmp;
 	  products = (product_data *)main_memory;
 	  if (!ThisTask)
-	    printf("Task 0 reallocated memory for %f Gb\n",(double)frag_memory/GBYTE);
+	    printf("\nTask 0 reallocated memory for %f Gb\n",(double)frag_memory/GBYTE);
 	}
       else
 	{
@@ -456,7 +485,8 @@ int reallocate_memory_for_fragmentation_1()
 	  return 1;
 	}
     }
-#endif
+
+#ifndef RECOMPUTE_DISPLACEMENTS
 
   /* the frag structure is located just after memory products */
   if (NSlices>1)
@@ -469,6 +499,31 @@ int reallocate_memory_for_fragmentation_1()
       frag = (product_data *)(main_memory + (group_memory > prods_memory ? group_memory : prods_memory));
       memory=0;
     }
+
+#else
+
+  memory = prods_memory;
+  for (int igrid=0; igrid<Ngrids; igrid++)
+    {
+      kdensity[igrid] = (double *)(main_memory + memory);
+      memory += MyGrids[igrid].total_local_size_fft * sizeof(double);
+    }
+#ifdef TWO_LPT
+  kvector_2LPT = (double *)(main_memory + memory);
+  memory += MyGrids[0].total_local_size_fft * sizeof(double);
+#ifdef THREE_LPT
+  kvector_3LPT_1 = (double *)(main_memory + memory);
+  memory += MyGrids[0].total_local_size_fft * sizeof(double);
+  kvector_3LPT_2 = (double *)(main_memory + memory);
+  memory += MyGrids[0].total_local_size_fft * sizeof(double);
+#endif
+#endif
+
+  frag = (product_data *)(main_memory + prods_memory + fields_to_keep_memory);
+  memory=prods_memory + fields_to_keep_memory + frag_prods_memory;
+
+#endif
+
 
   /* QUESTO CREAVA PROBLEMI DI MEMORIA, BISOGNA CAPIRE PERCHE' */
   /* for (i=0; i<frag_prods_memory; i++) */

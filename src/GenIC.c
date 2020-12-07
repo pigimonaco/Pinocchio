@@ -167,7 +167,7 @@ int GenIC(int ThisGrid)
 
 			  kdensity[ThisGrid][2*(((i - Local_x_start) * Nmesh + j) * (Nmesh / 2 + 1) + k)  ] =  delta * cos(phase);
 			  kdensity[ThisGrid][2*(((i - Local_x_start) * Nmesh + j) * (Nmesh / 2 + 1) + k)+1] =  delta * sin(phase);
-			  
+
 #ifdef DEBUG
 			  fprintf(numbers,"%6d %6d %6d %6d %12f %12f %20g %20g %12f %12f\n",i,ii,j,k,phase/2/PI,ampl,
 				  kdensity[ThisGrid][2*(((i - Local_x_start) * Nmesh + j) * (Nmesh / 2 + 1) + k)  ],
@@ -202,6 +202,7 @@ int GenIC(int ThisGrid)
 
 				  kdensity[ThisGrid][2*(((i - Local_x_start) * Nmesh + jj) * (Nmesh / 2 + 1) + k)  ] = delta * cos(phase);
 				  kdensity[ThisGrid][2*(((i - Local_x_start) * Nmesh + jj) * (Nmesh / 2 + 1) + k)+1] = -delta * sin(phase);
+
 #ifdef DEBUG
 				  fprintf(numbers,"%6d %6d %6d %6d %12f %12f %20g %20g %12f %12f\n",i,ii,j,k,phase/2/PI,ampl,
 					  kdensity[ThisGrid][2*(((i - Local_x_start) * Nmesh + j) * (Nmesh / 2 + 1) + k)  ],
@@ -249,6 +250,7 @@ int GenIC(int ThisGrid)
 
 				  kdensity[ThisGrid][2*(((i - Local_x_start) * Nmesh + j) * (Nmesh / 2 + 1) + k)  ] = delta * cos(phase);
 				  kdensity[ThisGrid][2*(((i - Local_x_start) * Nmesh + j) * (Nmesh / 2 + 1) + k)+1] = delta * sin(phase);
+
 #ifdef DEBUG				  
 				  fprintf(numbers,"%6d %6d %6d %6d %12f %12f %20g %20g %12f %12f\n",i,ii,j,k,phase/2/PI,ampl,
 					  kdensity[ThisGrid][2*(((i - Local_x_start) * Nmesh + j) * (Nmesh / 2 + 1) + k)  ],
@@ -271,7 +273,7 @@ int GenIC(int ThisGrid)
 				  
 				  kdensity[ThisGrid][2*(((ii - Local_x_start) * Nmesh + jj) * (Nmesh / 2 + 1) + k)  ] = delta * cos(phase);
 				  kdensity[ThisGrid][2*(((ii - Local_x_start) * Nmesh + jj) * (Nmesh / 2 + 1) + k)+1] = -delta * sin(phase);
-				  
+
 #ifdef DEBUG
 				  fprintf(numbers,"%6d %6d %6d %6d %12f %12f %20g %20g %12f %12f\n",ii,i,jj,k,phase/2/PI,ampl,
 					  kdensity[ThisGrid][2*(((ii - Local_x_start) * Nmesh + jj) * (Nmesh / 2 + 1) + k)  ],
@@ -310,3 +312,39 @@ int GenIC(int ThisGrid)
 }
 
 
+double VarianceOnGrid(int ThisGrid, double Time, double ThisRadius)
+{
+
+  int i,j,k,ii,jj,kk;
+  double fundamental = 2. * PI / MyGrids[ThisGrid].BoxSize;
+  double nyquist = NYQUIST * MyGrids[ThisGrid].GSglobal_x/2 * fundamental;
+  double d3k=pow(fundamental,3.);
+  double w, D, kmag;
+  double Variance=0.0;
+
+  for (i=0; i<=MyGrids[ThisGrid].GSglobal_x; i++)
+    {
+      ii = i-MyGrids[ThisGrid].GSglobal_x/2;
+      for (j=0; j<=MyGrids[ThisGrid].GSglobal_y; j++)
+	{
+	  jj = j-MyGrids[ThisGrid].GSglobal_y/2;
+	  for (k=0; k<=MyGrids[ThisGrid].GSglobal_z; k++)
+	    {
+	      kk = k-MyGrids[ThisGrid].GSglobal_z/2;
+	     
+	      
+	      kmag=sqrt((double)(ii*ii+jj*jj+kk*kk))*fundamental;
+	      if (kmag>0.0 && kmag <= nyquist)
+		{
+		  w = WindowFunction(kmag * ThisRadius);
+		  D = GrowingMode(1./Time-1.,kmag);
+		  Variance += PowerSpectrum(kmag) * D*D * w*w * d3k;
+		}
+	    }
+	}
+    }
+
+  Variance /= pow(2.*PI,3.);
+
+  return Variance;
+}
