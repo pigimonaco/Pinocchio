@@ -1,0 +1,9 @@
+s/GSglobal\[0\]/GSglobal\[_x_\]/
+s/GSglobal\[1\]/GSglobal\[_y_\]/
+s/GSglobal\[2\]/GSglobal\[_z_\]/
+s/GSlocal\[0\]/GSlocal\[_x_\]/
+s/GSlocal\[1\]/GSlocal\[_y_\]/
+s/GSlocal\[2\]/GSlocal\[_z_\]/
+s/GSstart\[0\]/GSstart\[_x_\]/
+s/GSstart\[1\]/GSstart\[_y_\]/
+s/GSstart\[2\]/GSstart\[_z_\]/
