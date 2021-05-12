@@ -25,17 +25,12 @@
 */
 
 #include "pinocchio.h"
-#include "def_splines.h"
 
 void abort_code(void);
 void write_cputimes(void);
-void greetings(void);
-
 
 int main(int argc, char **argv, char **envp)
 {
-  
-
   double time;
   int ThisGrid;
 
@@ -46,7 +41,51 @@ int main(int argc, char **argv, char **envp)
 
   /* timing of the code */
   cputime.total=MPI_Wtime();
-  greetings();  
+
+  if (!ThisTask)
+    {
+      printf("[%s] This is pinocchio V4.1, running on %d MPI tasks\n\n",fdate(),NTasks);
+#ifdef TWO_LPT
+#ifndef THREE_LPT
+      printf("This version uses 2LPT displacements\n");
+#else
+      printf("This version uses 3LPT displacements\n");
+#endif
+#else
+      printf("This version uses Zeldovich displacements\n");
+#endif
+#ifdef ROTATE_BOX
+      printf("The output will be rotated to reproduce N-GenIC and 2LPTic orientation\n");
+#endif
+#ifdef WHITENOISE
+      printf("Initial conditions will be read from a white noise file\n");
+#endif
+#ifdef SCALE_DEPENDENT_GROWTH
+      printf("This version of the code works with scale-dependent growing modes.\n");
+      printf("These will be computed from CAMB tables\n");
+#ifdef THREE_LPT
+      if (!ThisTask)
+	{
+	  printf("********************************************************\n");
+	  printf("Scale-dependent growth presently does not work with 3LPT\n");
+	  printf("Please recompile without the THREE_LPT directive\n");
+	  printf("********************************************************\n");
+	}
+#endif
+#endif
+#ifdef NO_RANDOM_MODULES
+      printf("Initial conditions will be generated with non-random modules of the Fourier modes\n");
+#endif
+#ifdef LIST_OF_FRAGMENT_PARAMETERS
+      printf("Fragmentation will be repeated many times, reading parameters from list_of_fragment_parameters.txt\n");
+      printf("NB: THIS OPTION IS USEFUL ONLY TO FINE-TUNE THE MASS FUNCTION\n");
+#endif
+#ifdef SMOOTH_VELOCITIES
+      printf("Velocities will be computed at the same smoothing radius as the collapse time.\n");
+      printf("NB: THIS IS NOT A RECOMMENDED OPTION, USE IT IF YOU KNOW WHAT YOU ARE DOING!\n");
+#endif
+
+    }
 
   /* checks that the parameter file is given in the command line */
   if (argc<2)
@@ -60,7 +99,7 @@ int main(int argc, char **argv, char **envp)
   /* initialization */
   memset(&params, 0, sizeof(param_data));
   strcpy(params.ParameterFile,argv[1]);
-  if (initialization()) 
+  if (initialization())
     abort_code();
 
 
@@ -84,7 +123,7 @@ int main(int argc, char **argv, char **envp)
 	  if (!ThisTask)
 	    printf("[%s] compute_derivative: done fft, cpu time = %f\n",fdate(),time);
 	  write_from_rvector(ThisGrid, density[ThisGrid]);
-	  if (write_density(ThisGrid)) 
+	  if (write_density(ThisGrid))
 	    abort_code();
 	}
       if (!ThisTask)
@@ -115,7 +154,7 @@ int main(int argc, char **argv, char **envp)
 	}
 #else
 
-      if (compute_displacements()) 
+      if (compute_displacements())
         abort_code();
 
       if (write_LPT_snapshot(outputs.z[0]))
@@ -129,65 +168,16 @@ int main(int argc, char **argv, char **envp)
 
       return 0;
     }
-  
-
-
-  /* called as "pinocchio.x parameterfile 2" it computes and writes collapse time table, then exit */
-  if (argc>=3 && atoi(argv[2])==3)
-    {
-#ifdef TABULATED_CT
-      if (!ThisTask)
-	{
-	  printf("In this configuration pinocchio will only compute a table of collapse times\n");
-	}
-
-      /****************************
-       * CYCLE ON SMOOTHING RADII *
-       ****************************/
-      for (int ismooth=0; ismooth<Smoothing.Nsmooth; ismooth++)
-	{
-	  double cputmp=MPI_Wtime();
-
-	  if (!ThisTask)
-	    printf("\n[%s] Starting smoothing radius %d of %d (R=%9.5f, sigma=%9.5f)\n", 
-		   fdate(), ismooth+1, Smoothing.Nsmooth, Smoothing.Radius[ismooth],
-		   sqrt(Smoothing.Variance[ismooth]) );
-
-	  if (initialize_collapse_times(ismooth,1))
-	    return 1;
-
-	  if (!ThisTask)
-	    printf("[%s] Collapse times computed, cpu time =%f s\n",fdate(),cputmp);
-
-	}
-
-      if (!ThisTask)
-	printf("Pinocchio done!\n");
-      MPI_Finalize();
-
-      return 0;
-
-#else
-      if (!ThisTask)
-	{
-	  printf("Sorry but you have to compile the code with TABULATED_CT to compute CT table\n");
-	}
-      MPI_Finalize();
-
-      return 0;
-#endif
-    }
-
 
   /* computation of collapse times and displacements */
-  if (compute_fmax()) 
+  if (compute_fmax())
     abort_code();
 
   fflush(stdout);
   MPI_Barrier(MPI_COMM_WORLD);
 
   /* fragmentation of the collapsed medium */
-  if (fragment()) 
+  if (fragment())
     abort_code();
 
   fflush(stdout);
@@ -202,14 +192,6 @@ int main(int argc, char **argv, char **envp)
   if (!ThisTask)
     printf("Pinocchio done!\n");
   MPI_Finalize();
-
-
-
-  
-
-
-
-
 
   return 0;
 }
@@ -244,79 +226,4 @@ void write_cputimes()
   printf("  Groups:         %14.6f (%5.2f%%)\n",cputime.group,100.*cputime.group/cputime.total);
 #endif
   printf("Total I/O:        %14.6f (%5.2f%%)\n",cputime.io,   100.*cputime.io   /cputime.total);
-}
-
-void greetings(void)
-{
-  /* This is a list of messages to declare the most relevant precompiler directives in the stdout */
-
-  if (!ThisTask)
-    {
-      printf("[%s] This is pinocchio V4.XX, running on %d MPI tasks\n\n",fdate(),NTasks);
-#ifdef TWO_LPT
-#ifndef THREE_LPT
-      printf("This version uses 2LPT displacements\n");
-#else
-      printf("This version uses 3LPT displacements\n");
-#endif
-#else
-      printf("This version uses Zeldovich displacements\n");
-#endif
-#ifdef ROTATE_BOX
-      printf("The output will be rotated to reproduce N-GenIC and 2LPTic orientation\n");
-#endif
-#ifdef NORADIATION
-      printf("Radiation is not included in the Friedmann equations\n");
-#else
-      printf("Radiation is included in the Friedmann equations\n");
-#endif
-#ifdef TIMELESS_SNAPSHOT
-      printf("Production of the timeless snapshot has been activated\n");
-#endif
-
-#ifdef TABULATED_CT
-#ifdef ELL_CLASSIC
-      printf("Ellipsoidal collapse will be tabulated as Monaco (1995)\n");
-#endif
-#ifdef ELL_SNG
-      printf("Numerical integration of ellipsoidal collapse will be tabulated\n");
-#endif
-#else
-      printf("Ellipsoidal collapse will be computed as Monaco (1995)\n");
-#endif
-
-#ifdef WHITENOISE
-      printf("Initial conditions will be read from a white noise file\n");
-#endif
-
-#ifdef SCALE_DEPENDENT
-      printf("This version of the code works with scale-dependent growing modes;\n");
-#if defined(MOD_GRAV_FR) 
-      printf("Scales will range from %10g to %10g 1/Mpc, in %d steps\n",
-	     0.0, pow(10.,LOGKMIN+(NkBINS-1)*DELTALOGK), NkBINS);
-#ifdef Cubic_Galileon
-      printf("the Gravity used here is Cubic Galileon, and the background evolution obeys the Cubic Galileon, so you can ignore the wCDM model that used as the background in PINOCCHIO ");
-#else
-      printf("Gravity will be given by Hu-Sawicki f(R) with f_R0=%7g\n",FR0);
-#endif
-#endif
-#ifdef READ_PK_TABLE
-      printf("Scales will range from %10g to %10g 1/Mpc, in %d steps\n",
-	     pow(10.,LOGKMIN), pow(10.,LOGKMIN+(NkBINS-1)*DELTALOGK), NkBINS);
-      printf("Scale-dependent growth rates will be worked out from CAMB P(k) files\n");
-#ifdef ONLY_MATTER_POWER
-      printf("The power spectrum will include only dark matter + baryon fluctuations, excluding neutrinos (if present)\n");
-#else
-      printf("The power spectrum will include TOTAL matter fluctuations, including neutrinos (if present)\n");
-#endif
-#endif
-#endif
-
-#ifdef NO_RANDOM_MODULES
-      printf("Initial conditions will be generated with non-random modules of the Fourier modes\n");
-#endif
-
-      printf("\n");
-
-    }
 }

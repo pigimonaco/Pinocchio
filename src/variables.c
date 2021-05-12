@@ -76,10 +76,8 @@ int *indices,*group_ID,*linking_list;
 double f_m, f_rm, espo, f_a, f_ra, f_200, sigmaD0;
 int NSlices,ThisSlice;
 
-//SDGM_data SDGM;
-
-#ifdef SCALE_DEPENDENT
-ScaleDep_data ScaleDep;
+#ifdef SCALE_DEPENDENT_GROWTH
+SDGM_data SDGM;
 #endif
 
 gsl_integration_workspace * workspace;
@@ -87,13 +85,3 @@ gsl_rng *random_generator;
 
 mf_data mf;
 
-gsl_spline **SPLINE;
-gsl_interp_accel **ACCEL;
-#if defined(SCALE_DEPENDENT) && defined(ELL_CLASSIC)
-gsl_spline **SPLINE_INVGROW;
-gsl_interp_accel **ACCEL_INVGROW;
-#endif
-
-#if defined(MOD_GRAV_FR)
-double H_over_c;
-#endif
