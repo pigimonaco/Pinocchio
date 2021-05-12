@@ -49,53 +49,6 @@ int recompute_group_velocities(void);
 int ngroups;
 
 
-/* void scrivi() */
-/* { */
-
-/*   char fname[LBLENGTH]; */
-/*   sprintf(fname,"Task%d.%s",ThisTask,params.RunFlag); */
-/*   FILE *fd=fopen(fname,"w"); */
-/*   int ibox, jbox, kbox, kk; */
-/*   int global_x, global_y, global_z, good_particle; */
-
-/*   for (long long iz=0; iz<subbox.Nalloc; iz++) */
-/*     { */
-
-/* #ifdef CLASSIC_FRAGMENTATION */
-/*       ibox = iz%subbox.Lgwbl_x; */
-/*       kk   = iz/subbox.Lgwbl_x; */
-/* #else */
-/*       ibox = frag_pos[iz]%subbox.Lgwbl_x; */
-/*       kk   = frag_pos[iz]/subbox.Lgwbl_x; */
-/* #endif */
-/*       jbox = kk%subbox.Lgwbl_y; */
-/*       kbox = kk/subbox.Lgwbl_y; */
-      
-/*       global_x = ibox + subbox.stabl_x; */
-/*       if (global_x<0) global_x+=MyGrids[0].GSglobal[0]; */
-/*       if (global_x>=MyGrids[0].GSglobal[0]) global_x-=MyGrids[0].GSglobal[0]; */
-/*       global_y = jbox + subbox.stabl_y; */
-/*       if (global_y<0) global_y+=MyGrids[0].GSglobal[1]; */
-/*       if (global_y>=MyGrids[0].GSglobal[1]) global_y-=MyGrids[0].GSglobal[1]; */
-/*       global_z = kbox + subbox.stabl_z; */
-/*       if (global_z<0) global_z+=MyGrids[0].GSglobal[2]; */
-/*       if (global_z>=MyGrids[0].GSglobal[2]) global_z-=MyGrids[0].GSglobal[2]; */
-
-/*       good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x &&  */
-/* 			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y &&  */
-/* 			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z ); */
-
-/*       if (good_particle && (frag[iz].Fmax>=1.0)) */
-/* 	fprintf(fd,"  %3d %3d %3d   %10f\n",global_x, global_y, global_z ,frag[iz].Fmax); */
-/*     } */
-/*   fclose(fd); */
-
-/* } */
-
-
-
-
-
 void set_fragment_parameters(int order)
 {
 
@@ -358,7 +311,7 @@ int fragment()
   /* This implements the updated fragmentation */
   /*********************************************/
   
-  int all_pbc = (subbox.pbc_x && subbox.pbc_y && subbox.pbc_z);
+  int all_pbc = (subbox.pbc[_x_] && subbox.pbc[_y_] && subbox.pbc[_z_]);
 
   /* fragmentation is performed twice;
      in the first turn a quick fragmentation is performed to locate
@@ -688,11 +641,13 @@ void reorder_nofrag(int *ind, int n)
     } 
 }
 
+
 int find_location(int i,int j,int k)
 {
   /* this function finds the location in the frag and frag_pos vectors of a given particle */
 
-  int pos = i + (j + k*subbox.Lgwbl_y)*subbox.Lgwbl_x;
+  int pos = COORD_TO_INDEX(i,j,k,subbox.Lgwbl);
+    //i + (j + k*subbox.Lgwbl[_y_])*subbox.Lgwbl[_x_];
   int *nn=bsearch((void*)&pos,(void*)sorted_pos,(size_t)subbox.Nstored,sizeof(int),compare_search);
   if (nn!=0x0)
     return nn-sorted_pos;
@@ -707,7 +662,7 @@ int count_peaks(int *ngood)
   /* counts the number of Fmax peaks down to the final redshift
      to know the total number of groups */
 
-  int iz,i,j,k,kk,nn,ngroups_tot,peak_cond,i1,j1,k1;
+  int iz,i,j,k,nn,ngroups_tot,peak_cond,i1,j1,k1;
 
 #ifdef DEBUG
   FILE *fd=fopen("peaks.dat","w");
@@ -716,28 +671,29 @@ int count_peaks(int *ngood)
   ngroups_tot=0;     // number of groups, group 1 is the filament group
   *ngood=0;          // number of groups out of the safety boundary
 
-#ifdef CLASSIC_FRAGMENTATION
-  int Lgridxy = subbox.Lgwbl_x * subbox.Lgwbl_y;
-#else
-  int pos;
-#endif
   for (iz=0; iz<subbox.Nstored; iz++)
     {
       /* position on the local box */
 #ifdef CLASSIC_FRAGMENTATION
-      i  = iz%subbox.Lgwbl_x;
-      kk = iz/subbox.Lgwbl_x;
+      INDEX_TO_COORD(iz,i,j,k,subbox.Lgwbl);
 #else
-      i  = frag_pos[iz]%subbox.Lgwbl_x;
-      kk = frag_pos[iz]/subbox.Lgwbl_x;
+      INDEX_TO_COORD(frag_pos[iz],i,j,k,subbox.Lgwbl);
 #endif
-      j  = kk%subbox.Lgwbl_y;
-      k  = kk/subbox.Lgwbl_y;
+
+/* #ifdef CLASSIC_FRAGMENTATION */
+/*       i  = iz%subbox.Lgwbl[_x_]; */
+/*       kk = iz/subbox.Lgwbl[_x_]; */
+/* #else */
+/*       i  = frag_pos[iz]%subbox.Lgwbl[_x_]; */
+/*       kk = frag_pos[iz]/subbox.Lgwbl[_x_]; */
+/* #endif */
+/*       j  = kk%subbox.Lgwbl[_y_]; */
+/*       k  = kk/subbox.Lgwbl[_y_]; */
 
       /* avoid borders */
-      if ( !subbox.pbc_x && (i==0 || i==subbox.Lgwbl_x-1) ) continue;
-      if ( !subbox.pbc_y && (j==0 || j==subbox.Lgwbl_y-1) ) continue;
-      if ( !subbox.pbc_z && (k==0 || k==subbox.Lgwbl_z-1) ) continue;
+      if ( !subbox.pbc[_x_] && (i==0 || i==subbox.Lgwbl[_x_]-1) ) continue;
+      if ( !subbox.pbc[_y_] && (j==0 || j==subbox.Lgwbl[_y_]-1) ) continue;
+      if ( !subbox.pbc[_z_] && (k==0 || k==subbox.Lgwbl[_z_]-1) ) continue;
 
       /* peak condition */
       peak_cond=1;
@@ -746,42 +702,43 @@ int count_peaks(int *ngood)
 	  switch (nn)
 	    {
 	    case 0:
-	      i1=( subbox.pbc_x && i==0 ? subbox.Lgwbl_x-1 : i-1 );
+	      i1=( subbox.pbc[_x_] && i==0 ? subbox.Lgwbl[_x_]-1 : i-1 );
 	      j1=j;
 	      k1=k;
 	      break;
 	    case 1:
-	      i1=( subbox.pbc_x && i==subbox.Lgwbl_x-1 ? 0 : i+1 );
+	      i1=( subbox.pbc[_x_] && i==subbox.Lgwbl[_x_]-1 ? 0 : i+1 );
 	      j1=j;
 	      k1=k;
 	      break;
 	    case 2:
 	      i1=i;
-	      j1=( subbox.pbc_y && j==0 ? subbox.Lgwbl_y-1 : j-1 );
+	      j1=( subbox.pbc[_y_] && j==0 ? subbox.Lgwbl[_y_]-1 : j-1 );
 	      k1=k;
 	      break;
 	    case 3:
 	      i1=i;
-	      j1=( subbox.pbc_y && j==subbox.Lgwbl_y-1 ? 0 : j+1 );
+	      j1=( subbox.pbc[_y_] && j==subbox.Lgwbl[_y_]-1 ? 0 : j+1 );
 	      k1=k;
 	      break;
 	    case 4:
 	      i1=i;
 	      j1=j;
-	      k1=( subbox.pbc_z && k==0 ? subbox.Lgwbl_z-1 : k-1 );
+	      k1=( subbox.pbc[_z_] && k==0 ? subbox.Lgwbl[_z_]-1 : k-1 );
 	      break;
 	    case 5:
 	      i1=i;
 	      j1=j;
-	      k1=( subbox.pbc_z && k==subbox.Lgwbl_z-1 ? 0 : k+1 );
+	      k1=( subbox.pbc[_z_] && k==subbox.Lgwbl[_z_]-1 ? 0 : k+1 );
 	      break;
 	    }
 
 #ifdef CLASSIC_FRAGMENTATION
-	  peak_cond &= (frag[iz].Fmax > frag[i1 +j1*subbox.Lgwbl_x + k1*Lgridxy].Fmax);
+	  peak_cond &= (frag[iz].Fmax > frag[COORD_TO_INDEX(i1,j1,k1,subbox.Lgwbl)].Fmax);
+	  //i1 +j1*subbox.Lgwbl[_x_]+ k1*Lgridxy
 #else
 	  /* looks for the neighbouring particle in the list */
-	  pos = find_location(i1,j1,k1);
+	  int pos = find_location(i1,j1,k1);
 	  if (pos>=0)
 	    peak_cond &= (frag[iz].Fmax > frag[indices[pos]].Fmax);
 #endif
@@ -794,9 +751,9 @@ int count_peaks(int *ngood)
       if (peak_cond)
 	{
 	  ngroups_tot++;
-	  if ( i>=subbox.safe_x && i<subbox.Lgwbl_x-subbox.safe_x &&
-	       j>=subbox.safe_y && j<subbox.Lgwbl_y-subbox.safe_y &&
-	       k>=subbox.safe_z && k<subbox.Lgwbl_z-subbox.safe_z)
+	  if ( i>=subbox.safe[_x_] && i<subbox.Lgwbl[_x_]-subbox.safe[_x_] &&
+	       j>=subbox.safe[_y_] && j<subbox.Lgwbl[_y_]-subbox.safe[_y_] &&
+	       k>=subbox.safe[_z_] && k<subbox.Lgwbl[_z_]-subbox.safe[_z_])
 	    (*ngood)++;
 #ifdef DEBUG
 	  fprintf(fd," %2d %2d %2d   %12.10f\n",i,j,k,frag[iz].Fmax);
@@ -819,35 +776,35 @@ int create_map()
 
   /* sets to 1 all particles in the well-resolved region plus one row for each side (without PBCs) */
   memset(frag_map_update, 0, subbox.maplength*sizeof(unsigned int));
-  if (!subbox.pbc_x)
+  if (!subbox.pbc[_x_])
     {
-      i1=subbox.safe_x-1;
-      i2=subbox.Lgrid_x+subbox.safe_x+1;
+      i1=subbox.safe[_x_]-1;
+      i2=subbox.Lgrid[_x_]+subbox.safe[_x_]+1;
     }
   else
     {
       i1=0;
-      i2=subbox.Lgrid_x;
+      i2=subbox.Lgrid[_x_];
     }
-  if (!subbox.pbc_y)
+  if (!subbox.pbc[_y_])
     {
-      j1=subbox.safe_y-1;
-      j2=subbox.Lgrid_y+subbox.safe_y+1;
+      j1=subbox.safe[_y_]-1;
+      j2=subbox.Lgrid[_y_]+subbox.safe[_y_]+1;
     }
   else
     {
       j1=0;
-      j2=subbox.Lgrid_y;
+      j2=subbox.Lgrid[_y_];
     }
-  if (!subbox.pbc_z)
+  if (!subbox.pbc[_z_])
     {
-      k1=subbox.safe_z-1;
-      k2=subbox.Lgrid_z+subbox.safe_z+1;
+      k1=subbox.safe[_z_]-1;
+      k2=subbox.Lgrid[_z_]+subbox.safe[_z_]+1;
     }
   else
     {
       k1=0;
-      k2=subbox.Lgrid_z;
+      k2=subbox.Lgrid[_z_];
     }
 
   for (i=i1; i<i2; i++)
@@ -861,14 +818,15 @@ int create_map()
 void set_mapup_bit(int i, int j, int k)
 {
   /* this operates on frag_map_update */
-  unsigned int pos = i + (j + k*subbox.Lgwbl_y)*subbox.Lgwbl_x;
+  unsigned int pos = COORD_TO_INDEX(i,j,k,subbox.Lgwbl);
+  //i + (j + k*subbox.Lgwbl[_y_])*subbox.Lgwbl[_x_];
   frag_map_update[pos/UINTLEN]|=(1<<pos%UINTLEN);
 }
 
 int get_mapup_bit(unsigned int pos)
 {
   /* this operates on frag_map_update */
-  /* unsigned int pos = i + (j + k*subbox.Lgwbl_y)*subbox.Lgwbl_x; */
+  /* unsigned int pos = i + (j + k*subbox.Lgwbl[_y_])*subbox.Lgwbl[_x_]; */
   unsigned int rem = pos%UINTLEN;
   return (frag_map_update[pos/UINTLEN] & (1<<rem))>>rem;
 }
@@ -876,7 +834,8 @@ int get_mapup_bit(unsigned int pos)
 int get_map_bit(int i, int j, int k)
 {
   /* this operates on frag_map */
-  unsigned int pos = i + (j + k*subbox.Lgwbl_y)*subbox.Lgwbl_x;
+  unsigned int pos = COORD_TO_INDEX(i,j,k,subbox.Lgwbl);
+  //i + (j + k*subbox.Lgwbl[_y_])*subbox.Lgwbl[_x_];
   unsigned int rem = pos%UINTLEN;
   return (frag_map[pos/UINTLEN] & (1<<rem))>>rem;
 }
@@ -887,15 +846,17 @@ void write_map(int turn)
   unsigned int pos,rem;
   char fname[LBLENGTH];
   sprintf(fname,"map_task%d_turn%d.txt",ThisTask,turn);
-  FILE *fd=fopen(fname,"w"); 
-  for (k=0; k<subbox.Lgwbl_z; k++)
+  FILE *fd=fopen(fname,"w");
+  /* this loop is not following memory... */
+  for (k=0; k<subbox.Lgwbl[_z_]; k++)
     {
       fprintf(fd,"k=%d\n",k);
-      for (j=0; j<subbox.Lgwbl_y; j++)
+      for (j=0; j<subbox.Lgwbl[_y_]; j++)
 	{
-	  for (i=0; i<subbox.Lgwbl_x; i++)
+	  for (i=0; i<subbox.Lgwbl[_x_]; i++)
 	    {
-	      pos = i + (j + k*subbox.Lgwbl_y)*subbox.Lgwbl_x;
+	      pos = COORD_TO_INDEX(i,j,k,subbox.Lgwbl); 
+	      //i + (j + k*subbox.Lgwbl[_y_])*subbox.Lgwbl[_x_];
 	      rem = pos%UINTLEN;
 	      fprintf(fd,"%1d",(frag_map[pos/UINTLEN] & (1<<rem))>>rem);
 	    }
@@ -905,14 +866,15 @@ void write_map(int turn)
   fclose(fd);
   sprintf(fname,"mapup_task%d_turn%d.txt",ThisTask,turn);
   fd=fopen(fname,"w"); 
-  for (k=0; k<subbox.Lgwbl_z; k++)
+  for (k=0; k<subbox.Lgwbl[_z_]; k++)
     {
       fprintf(fd,"k=%d\n",k);
-      for (j=0; j<subbox.Lgwbl_y; j++)
+      for (j=0; j<subbox.Lgwbl[_y_]; j++)
 	{
-	  for (i=0; i<subbox.Lgwbl_x; i++)
+	  for (i=0; i<subbox.Lgwbl[_x_]; i++)
 	    {
-	      pos = i + (j + k*subbox.Lgwbl_y)*subbox.Lgwbl_x;
+	      pos =  COORD_TO_INDEX(i,j,k,subbox.Lgwbl); 
+	      //i + (j + k*subbox.Lgwbl[_y_])*subbox.Lgwbl[_x_];
 	      rem = pos%UINTLEN;
 	      fprintf(fd,"%1d",(frag_map_update[pos/UINTLEN] & (1<<rem))>>rem);
 	    }
@@ -949,6 +911,8 @@ int init_segmentation(void)
 
 
 #ifdef RECOMPUTE_DISPLACEMENTS
+// DA RIVEDERE
+
 int compute_future_LPT_displacements(double z, int after)
 {
 
@@ -980,13 +944,13 @@ int compute_future_LPT_displacements(double z, int after)
 
       if (after)
 	{
-	  for (local_z=0; local_z < MyGrids[0].GSlocal[2]; local_z++)
-	    for (local_y=0; local_y < MyGrids[0].GSlocal[1]; local_y++)
-	      for (local_x=0; local_x < MyGrids[0].GSlocal[0]; local_x++)
+	  for (local_z=0; local_z < MyGrids[0].GSlocal[_z_]; local_z++)
+	    for (local_y=0; local_y < MyGrids[0].GSlocal[_y_]; local_y++)
+	      for (local_x=0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)
 		{
-		  index = local_x + (MyGrids[0].GSlocal[0]) * (local_y + local_z * MyGrids[0].GSlocal[1]);
+		  index = local_x + (MyGrids[0].GSlocal[_x_]) * (local_y + local_z * MyGrids[0].GSlocal[_y_]);
 		  products[index].Vel_after[ia-1] = 
-		    *(rvector_fft[0] + local_x + (MyGrids[0].GSlocal[0] + MyGrids[0].off) * (local_y + local_z * MyGrids[0].GSlocal[1]));
+		    *(rvector_fft[0] + local_x + (MyGrids[0].GSlocal[_x_] + MyGrids[0].off) * (local_y + local_z * MyGrids[0].GSlocal[_y_]));
 		}
 	  if (params.WriteVmax)
 	    if (write_product(13+ia,tag))
@@ -994,13 +958,13 @@ int compute_future_LPT_displacements(double z, int after)
 	}
       else
 	{
-	  for (local_z=0; local_z < MyGrids[0].GSlocal[2]; local_z++)
-	    for (local_y=0; local_y < MyGrids[0].GSlocal[1]; local_y++)
-	      for (local_x=0; local_x < MyGrids[0].GSlocal[0]; local_x++)
+	  for (local_z=0; local_z < MyGrids[0].GSlocal[_z_]; local_z++)
+	    for (local_y=0; local_y < MyGrids[0].GSlocal[_y_]; local_y++)
+	      for (local_x=0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)
 		{
-		  index = local_x + (MyGrids[0].GSlocal[0]) * (local_y + local_z * MyGrids[0].GSlocal[1]);
+		  index = local_x + (MyGrids[0].GSlocal[_x_]) * (local_y + local_z * MyGrids[0].GSlocal[_y_]);
 		  products[index].Vel[ia-1] = 
-		    *(rvector_fft[0] + local_x + (MyGrids[0].GSlocal[0] + MyGrids[0].off) * (local_y + local_z * MyGrids[0].GSlocal[1]));
+		    *(rvector_fft[0] + local_x + (MyGrids[0].GSlocal[_x_] + MyGrids[0].off) * (local_y + local_z * MyGrids[0].GSlocal[_y_]));
 		}
 	  if (params.WriteVmax)
 	    if (write_product(ia,tag))
@@ -1027,13 +991,13 @@ int compute_future_LPT_displacements(double z, int after)
 
       if (after)
 	{
-	  for (local_z=0; local_z < MyGrids[0].GSlocal[2]; local_z++)
-	    for (local_y=0; local_y < MyGrids[0].GSlocal[1]; local_y++)
-	      for (local_x=0; local_x < MyGrids[0].GSlocal[0]; local_x++)
+	  for (local_z=0; local_z < MyGrids[0].GSlocal[_z_]; local_z++)
+	    for (local_y=0; local_y < MyGrids[0].GSlocal[_y_]; local_y++)
+	      for (local_x=0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)
 		{
-		  index = local_x + (MyGrids[0].GSlocal[0]) * (local_y + local_z * MyGrids[0].GSlocal[1]);
+		  index = local_x + (MyGrids[0].GSlocal[_x_]) * (local_y + local_z * MyGrids[0].GSlocal[_y_]);
 		  products[index].Vel_2LPT_after[ia-1] = 
-		    *(rvector_fft[0] + local_x + (MyGrids[0].GSlocal[0] + MyGrids[0].off) * (local_y + local_z * MyGrids[0].GSlocal[1]));
+		    *(rvector_fft[0] + local_x + (MyGrids[0].GSlocal[_x_] + MyGrids[0].off) * (local_y + local_z * MyGrids[0].GSlocal[_y_]));
 		}
 	  if (params.WriteVmax)
 	    if (write_product(16+ia,tag))
@@ -1041,13 +1005,13 @@ int compute_future_LPT_displacements(double z, int after)
 	}
       else
 	{
-	  for (local_z=0; local_z < MyGrids[0].GSlocal[2]; local_z++)
-	    for (local_y=0; local_y < MyGrids[0].GSlocal[1]; local_y++)
-	      for (local_x=0; local_x < MyGrids[0].GSlocal[0]; local_x++)
+	  for (local_z=0; local_z < MyGrids[0].GSlocal[_z_]; local_z++)
+	    for (local_y=0; local_y < MyGrids[0].GSlocal[_y_]; local_y++)
+	      for (local_x=0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)
 		{
-		  index = local_x + (MyGrids[0].GSlocal[0]) * (local_y + local_z * MyGrids[0].GSlocal[1]);
+		  index = local_x + (MyGrids[0].GSlocal[_x_]) * (local_y + local_z * MyGrids[0].GSlocal[_y_]);
 		  products[index].Vel_2LPT[ia-1] = 
-		    *(rvector_fft[0] + local_x + (MyGrids[0].GSlocal[0] + MyGrids[0].off) * (local_y + local_z * MyGrids[0].GSlocal[1]));
+		    *(rvector_fft[0] + local_x + (MyGrids[0].GSlocal[_x_] + MyGrids[0].off) * (local_y + local_z * MyGrids[0].GSlocal[_y_]));
 		}
 	  if (params.WriteVmax)
 	    if (write_product(4+ia,tag))
@@ -1147,3 +1111,187 @@ int recompute_group_velocities()
 
 
 #endif
+
+
+double myz;
+gsl_function Function;
+
+double Integrand_MF(double logm, void *param)
+{
+  double m=exp(logm);
+  return m * AnalyticMassFunction(m,myz);
+}
+
+double compute_Nhalos_in_PLC(double z1, double z2)
+{
+  /* analytic prediction of the number of halos in the PLC */
+
+  double MinMass=log(params.ParticleMass*params.MinHaloMass);
+  double delta_z=0.01;
+  double result, error, upper, lower;
+  double number=0;
+  double solidangle = (1-cos( (params.PLCAperture>90. ? 90. : params.PLCAperture)  /180.*PI) )*2.*PI;
+  Function.function = &Integrand_MF;
+  lower=z1;
+  do
+    {
+      upper=lower+delta_z;
+      if (upper>z2)
+	upper=z2;
+      myz = 0.5*(upper+lower);
+
+      gsl_integration_qags(&Function, MinMass, 37.0, 0.0, TOLERANCE, NWINT, workspace, &result, &error);
+
+      number += result * solidangle * (pow(ComovingDistance(upper),3.) -
+				       pow(ComovingDistance(lower),3.)) /3.;
+      lower+=delta_z;
+    } 
+  while (upper<z2);
+
+  return number;
+}
+
+int size2Mb(double *s)
+{
+  *s /= MBYTE;
+  int gb=0;
+  if (*s>1024.)
+    {
+      *s /= 1024.;
+      gb=1;
+    }
+  return gb;
+}
+
+int estimate_file_size(void)
+{
+
+  /* estimates the size of output files */
+
+  /* only Task 0 needs to work here */
+  if (ThisTask)
+    return 0;
+
+  /* this works for binary output */
+  if (params.CatalogInAscii)
+    return 0;
+
+  double result, error, total=0.0, size, number;
+  int gb;
+  
+  printf("ESTIMATED STORAGE REQUIREMENTS:\n");
+
+  double MinMass=log(params.ParticleMass*params.MinHaloMass);
+  Function.function = &Integrand_MF;
+  for (int iout=0; iout<outputs.n; iout++)
+    {
+
+      myz=outputs.z[iout];
+      gsl_integration_qags(&Function, MinMass, 37.0, 0.0, TOLERANCE, NWINT, workspace, &result, &error);
+      number = result * pow(params.BoxSize_htrue,3.);
+      size = number * sizeof(catalog_data);
+      total+=size;
+      gb=size2Mb(&size);
+      printf("catalog, z=%6.4f, number of halos: %d, size: %f %s",outputs.z[iout],(int)number, size,(gb?"Gbyte":"Mbyte"));
+      if (params.NumFiles>1)
+	printf(" - each file will have a size of %f %s",size/(double)params.NumFiles,(gb?"Gbyte":"Mbyte"));
+      printf("\n");
+    }
+
+  size = number * sizeof(catalog_data) * 1.4;
+  total += size;
+  gb=size2Mb(&size);
+  printf("order-of-magnitude size of histories file: %f %s",1.4*size,(gb?"Gbyte":"Mbyte"));
+  if (params.NumFiles>1)
+    printf(" - each file will have a size of %f %s",size/(double)params.NumFiles,(gb?"Gbyte":"Mbyte"));
+  printf("\n");
+
+#ifdef PLC
+  
+  if (params.StartingzForPLC>0.)
+    {
+      number = compute_Nhalos_in_PLC(params.LastzForPLC, params.StartingzForPLC);
+      size = number * sizeof(catalog_data);
+      total+=size;
+      gb=size2Mb(&size);
+      printf("past light cone, number of halos: %d, size: %f %s",(int)number, size,(gb?"Gbyte":"Mbyte"));
+      if (params.NumFiles>1)
+	printf(" - each file will have a size of %f %s",size/(double)params.NumFiles,(gb?"Gbyte":"Mbyte"));
+      printf("\n");
+
+    }
+#endif
+
+#ifdef LONGIDS
+  double IDsize = (double)MyGrids[0].Ntotal * 8.;
+#else
+  double IDsize = (double)MyGrids[0].Ntotal * 4.;
+#endif
+
+#ifndef TWO_LPT
+  int nvel=3;
+#else
+#ifndef THREE_LPT
+  int nvel=6;
+#else
+  int nvel=12;
+#endif
+#endif
+
+#ifdef RECOMPUTE_DENSITY
+  implementare...;
+#endif
+
+  if (params.WriteDensity)
+    {
+      size=268. + IDsize + 6. + (double)MyGrids[0].Ntotal * sizeof(float) + 6.;
+      total+=size;
+      gb=size2Mb(&size);
+      printf("density snapshot size: %f %s", size, (gb?"Gbyte":"Mbyte"));
+      if (params.NumFiles>1)
+	printf(" - each file will have a size of %f %s",size/(double)params.NumFiles,(gb?"Gbyte":"Mbyte"));
+      printf("\n");
+    }
+
+  if (params.WriteProducts)
+    {
+      size=268. + IDsize + 6. + (nvel+2) * ((double)MyGrids[0].Ntotal * sizeof(float) + 6.);
+      total+=size;
+      gb=size2Mb(&size);
+      printf("products snapshot size: %f %s", size, (gb?"Gbyte":"Mbyte"));
+      if (params.NumFiles>1)
+	printf(" - each file will have a size of %f %s",size/(double)params.NumFiles,(gb?"Gbyte":"Mbyte"));
+      printf("\n");
+    }
+
+  if (params.WriteSnapshot)
+    {
+      size=268. + IDsize + 6. + 6 * ((double)MyGrids[0].Ntotal * sizeof(float) + 6.);
+      total+=size;
+      gb=size2Mb(&size);
+      printf("size of each snapshot: %f %s", size, (gb?"Gbyte":"Mbyte"));
+      if (params.NumFiles>1)
+	printf(" - each file will have a size of %f %s",size/(double)params.NumFiles,(gb?"Gbyte":"Mbyte"));
+      printf("\n");
+    }
+
+  // CONTROLLARE
+  if (params.WriteTimelessSnapshot)
+    {
+      size=268. + IDsize + 6. + (nvel+2) * ((double)MyGrids[0].Ntotal * sizeof(float) + 6.);
+      total+=size;
+      gb=size2Mb(&size);
+      printf("timeless snapshot size: %f %s", size, (gb?"Gbyte":"Mbyte"));
+      if (params.NumFiles>1)
+	printf(" - each file will have a size of %f %s",size/(double)params.NumFiles,(gb?"Gbyte":"Mbyte"));
+      printf("\n");
+    }
+
+  gb=size2Mb(&total);
+
+  printf("Total storage: %f %s\n",total,(gb?"Gbyte":"Mbyte"));
+
+  return 0;
+}
+
+

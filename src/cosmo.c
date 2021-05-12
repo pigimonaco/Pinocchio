@@ -37,7 +37,6 @@
 #else
 #define OMEGARAD_H2 ((double)4.2e-5)
 #endif
-#define TOLERANCE ((double)1.e-4)
 #define UnitLength_in_cm ((double)3.085678e24)
 #define HUBBLETIME_GYR ((double)3.085678e24/(double)1.e7/(double)3.1558150e16)
 #define DELTA_C ((double)1.686)

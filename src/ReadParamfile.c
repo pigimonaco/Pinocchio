@@ -26,8 +26,8 @@
 
 /* 
    The similarity of this code with the read_parameter_file() function in the Gadget code,
-   by V. Springel (http://www.gadgetcode.org), is not a coincidence.  
-   I have adopted the same code structure.
+   by V. Springel (http://www.gadgetcode.org), is not a coincidence. 
+   Many thanks to Volker for the inspiration.
 */
 
 
@@ -39,7 +39,8 @@
 #define LOGICAL 4
 #define INT3 5
 #define DOUBLE3 6
-#define INT_SKIP 99
+#define INT_SKIP_DEF 98   /* this is previously set to the default value */
+#define INT_SKIP 99       /* this is set to 0 if not present in the parameter file */
 #define MAXTAGS 100
 
 int read_parameter_file()
@@ -146,16 +147,20 @@ int read_parameter_file()
       addr[nt] = &params.MinHaloMass;
       id[nt++] = INT;
 
-      strcpy(tag[nt], "WriteFmax");
-      addr[nt] = &params.WriteFmax;
+      strcpy(tag[nt], "WriteDensity");
+      addr[nt] = &params.WriteDensity;
       id[nt++] = LOGICAL;
 
-      strcpy(tag[nt], "WriteVmax");
-      addr[nt] = &params.WriteVmax;
+      strcpy(tag[nt], "WriteProducts");
+      addr[nt] = &params.WriteProducts;
       id[nt++] = LOGICAL;
 
-      strcpy(tag[nt], "WriteRmax");
-      addr[nt] = &params.WriteRmax;
+      strcpy(tag[nt], "DumpProducts");
+      addr[nt] = &params.DumpProducts;
+      id[nt++] = LOGICAL;
+
+      strcpy(tag[nt], "ReadProductsFromDumps");
+      addr[nt] = &params.ReadProductsFromDumps;
       id[nt++] = LOGICAL;
 
       strcpy(tag[nt], "NumFiles");
@@ -242,7 +247,7 @@ int read_parameter_file()
       id[nt++] = STRING;
 #endif
 
-      strcpy(tag[nt], "UseTransposedFFT");   // LEVARE
+      strcpy(tag[nt], "UseTransposedFFT");
       addr[nt] = &(params.use_transposed_fft);
       id[nt++] = LOGICAL;
 
@@ -252,11 +257,11 @@ int read_parameter_file()
 
       strcpy(tag[nt], "DumpSeedPlane");      // LEVARE
       addr[nt] = &(internal.dump_seedplane);
-      id[nt++] = INT_SKIP;
+      id[nt++] = INT_SKIP_DEF;
 
       strcpy(tag[nt], "DumpKDensity");       // LEVARE
       addr[nt] = &(internal.dump_kdensity);
-      id[nt++] = INT_SKIP;
+      id[nt++] = INT_SKIP_DEF;
 
       strcpy(tag[nt], "UseInPlaceFFT");      // LEVARE
       addr[nt] = &(params.use_inplace_fft);
@@ -264,7 +269,7 @@ int read_parameter_file()
 
       strcpy(tag[nt], "VerboseLevel");       // LEVARE
       addr[nt] = &(internal.verbose_level);
-      id[nt++] = INT_SKIP;
+      id[nt++] = INT_SKIP_DEF;
 
       strcpy(tag[nt], "MimicOldSeed");
       addr[nt] = &(internal.mimic_original_seedtable);
@@ -276,15 +281,15 @@ int read_parameter_file()
 
       strcpy(tag[nt], "Constrain_dim0");
       addr[nt] = &(internal.constrain_task_decomposition[0]);
-      id[nt++] = INT_SKIP;
+      id[nt++] = INT_SKIP_DEF;
 
       strcpy(tag[nt], "Constrain_dim1");
       addr[nt] = &(internal.constrain_task_decomposition[1]);
-      id[nt++] = INT_SKIP;
+      id[nt++] = INT_SKIP_DEF;
 
       strcpy(tag[nt], "Constrain_dim2");
       addr[nt] = &(internal.constrain_task_decomposition[2]);
-      id[nt++] = INT_SKIP;
+      id[nt++] = INT_SKIP_DEF;
       
 
 #ifdef USE_FFT_THREADS
@@ -354,6 +359,13 @@ int read_parameter_file()
 			*((int *) addr[j]) = atoi(buf2);
 		      break;
 
+		    case INT_SKIP_DEF:
+		      if (number_of_fields<2)
+			j=-10;
+		      else
+			*((int *) addr[j]) = atoi(buf2);
+		      break;
+
 		    case INT3:
 		      if (number_of_fields<4)
 			j=-10;
@@ -417,7 +429,7 @@ int read_parameter_file()
 	    {
 	      if (id[i]==LOGICAL || id[i]==INT_SKIP || id[i]==DOUBLE3) 
 		*((int *) addr[i]) = 0;
-	      else
+	      else if (id[i]!=INT_SKIP_DEF)
 		{
 		  printf("ERROR on task 0: I miss a value for tag '%s' in parameter file '%s'.\n", tag[i], params.ParameterFile);
 		  fflush(stdout);

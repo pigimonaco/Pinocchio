@@ -47,7 +47,6 @@ int set_scaledep_GM(void);
 unsigned int gcd(unsigned int, unsigned int);
 int set_fft_decomposition(void);
 
-
 int initialization()
 {
 
@@ -93,12 +92,7 @@ int initialization()
   /* computes the number of sub-boxes for fragmentation */
   SET_WTIME;
   if (set_subboxes())
-    {
-      if (!ThisTask)
-	printf("Pinocchio done!\n");
-      MPI_Finalize();
-      exit (0);
-    }
+    return 1;
   ASSIGN_WTIME(partial, set_subboxes);
 
 #ifdef SCALE_DEPENDENT
@@ -106,6 +100,10 @@ int initialization()
   if (set_scaledep_GM())
     return 1;
 #endif
+  
+  /* estimates the size of output file */
+  if (estimate_file_size())
+    return 1;
 
   /* this barrier is set to have correct stdout in case the run cannot start */
   fflush(stdout);
@@ -124,8 +122,9 @@ int initialization()
   ASSIGN_WTIME(partial, fft_initialization);
 
   /* generation of initial density field */
-  if (generate_densities())
-    return 1;
+  if (!params.ReadProductsFromDumps) /* no generation if products are read from dumps */
+    if (generate_densities())
+      return 1;
 
   cputime.init=MPI_Wtime()-cputime.init;
 
@@ -209,7 +208,7 @@ int set_parameters()
   internal.tasks_subdivision_3D[1]         = 0;
   internal.tasks_subdivision_3D[2]         = 0;
   //internal.nthreads_fft                    = 1;
-  
+
   if(read_parameter_file())
     return 1;
 
@@ -227,7 +226,7 @@ int set_parameters()
 
   params.ParticleMass = 2.775499745e11 * params.Hubble100 * params.Hubble100 * params.Omega0 
     * pow(params.InterPartDist,3.);
-  strcpy(params.DataDir,"Data/");
+  strcpy(params.DumpDir,"DumpProducts/");
 
   /* The Nyquist wavenumber is used in generic calls of scale-dependent growth rates */
   params.k_for_GM = PI/params.InterPartDist;
@@ -286,6 +285,7 @@ int set_parameters()
       dprintf(VMSG, 0, "Inter-part dist (true Mpc)  %f\n",params.InterPartDist);
       dprintf(VMSG, 0, "Inter-part dist (Mpc/h)     %f\n",params.InterPartDist*params.Hubble100);
       dprintf(VMSG, 0, "MinHaloMass (particles)     %d\n",params.MinHaloMass);
+      dprintf(VMSG, 0, "MinHaloMass (Msun/h)        %g\n",params.MinHaloMass*params.ParticleMass*params.Hubble100);
       dprintf(VMSG, 0, "BoundaryLayerFactor         %f\n",params.BoundaryLayerFactor);
       dprintf(VMSG, 0, "MaxMem per task (Mb)        %d\n",params.MaxMem);
       dprintf(VMSG, 0, "MaxMem per particle (b)     %f\n",params.MaxMemPerParticle);
@@ -295,9 +295,10 @@ int set_parameters()
       dprintf(VMSG, 0, "DoNotWriteHistories         %d\n",params.DoNotWriteHistories);
       dprintf(VMSG, 0, "WriteSnapshot               %d\n",params.WriteSnapshot);
       dprintf(VMSG, 0, "OutputInH100                %d\n",params.OutputInH100);
-      dprintf(VMSG, 0, "WriteFmax                   %d\n",params.WriteFmax);
-      dprintf(VMSG, 0, "WriteVmax                   %d\n",params.WriteVmax);
-      dprintf(VMSG, 0, "WriteRmax                   %d\n",params.WriteRmax);
+      dprintf(VMSG, 0, "WriteDensity                %d\n",params.WriteDensity);
+      dprintf(VMSG, 0, "WriteProducts               %d\n",params.WriteProducts);
+      dprintf(VMSG, 0, "DumpProducts                %d\n",params.DumpProducts);
+      dprintf(VMSG, 0, "ReadProductsFromDumps       %d\n",params.ReadProductsFromDumps);
       switch(params.AnalyticMassFunction)
 	{
 	case 0:
@@ -460,9 +461,9 @@ int set_grids()
   for (dim=0; dim<3; dim++)
     MyGrids[0].GSglobal[dim] = params.GridSize[dim];
   
-  MyGrids[0].Ntotal = (unsigned long long)MyGrids[0].GSglobal[0] * 
-    (unsigned long long)MyGrids[0].GSglobal[1] * 
-    (unsigned long long)MyGrids[0].GSglobal[2];
+  MyGrids[0].Ntotal = (unsigned long long)MyGrids[0].GSglobal[_x_] * 
+    (unsigned long long)MyGrids[0].GSglobal[_y_] * 
+    (unsigned long long)MyGrids[0].GSglobal[_z_];
 
   MyGrids[0].BoxSize = params.BoxSize_htrue;
   MyGrids[0].lower_k_cutoff=0.;
@@ -495,9 +496,8 @@ int set_grids()
   /* Task 0 broadcasts its number of fft particles, that becomes the reference */
   unsigned int PPT;
   if (!ThisTask)
-    {
-      PPT=MyGrids[0].total_local_size;
-    }
+    PPT=MyGrids[0].total_local_size;
+
   MPI_Bcast(&PPT, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
   MyGrids[0].ParticlesPerTask=PPT;
 
@@ -520,7 +520,6 @@ int set_grids()
 #ifdef PLC
 #define NSAFE 2.0
 
-double myz;
 int cone_and_cube_intersect(double *, double *, double *, double *, double , double *, double *, int *);
 double maxF(double *, double *, double *, double *, double *);
 
@@ -543,6 +542,7 @@ int set_plc(void)
       plc.Nreplications=0;
       plc.Fstart=plc.Fstop=-1.;
       plc.Nmax=0;
+      plc.Nexpected=0;
       if (!ThisTask)
 	printf("Negative value of StartingzForPLC, no Past Light Cone output will be given\n\n");
 
@@ -565,9 +565,9 @@ int set_plc(void)
     {
       /* in this case the center is randomly placed and the direction points toward the main diagonal */
       gsl_rng_set(random_generator, params.RandomSeed);
-      plc.center[0]=gsl_rng_uniform(random_generator)*MyGrids[0].GSglobal[0];
-      plc.center[1]=gsl_rng_uniform(random_generator)*MyGrids[0].GSglobal[1];
-      plc.center[2]=gsl_rng_uniform(random_generator)*MyGrids[0].GSglobal[2];
+      plc.center[0]=gsl_rng_uniform(random_generator)*MyGrids[0].GSglobal[_x_];
+      plc.center[1]=gsl_rng_uniform(random_generator)*MyGrids[0].GSglobal[_y_];
+      plc.center[2]=gsl_rng_uniform(random_generator)*MyGrids[0].GSglobal[_z_];
       plc.zvers[0]=1.0;
       plc.zvers[1]=1.0;
       plc.zvers[2]=1.0;
@@ -616,9 +616,9 @@ int set_plc(void)
   Smallest_r = (Smallest_r>0 ? Smallest_r : 0.);
   Largest_r += NSAFE * GrowingMode(params.StartingzForPLC,params.k_for_GM) * displ_variance;
 
-  l[0]=(double)(MyGrids[0].GSglobal[0]);
-  l[1]=(double)(MyGrids[0].GSglobal[1]);
-  l[2]=(double)(MyGrids[0].GSglobal[2]);
+  l[0]=(double)(MyGrids[0].GSglobal[_x_]);
+  l[1]=(double)(MyGrids[0].GSglobal[_y_]);
+  l[2]=(double)(MyGrids[0].GSglobal[_z_]);
 
   /* first, it counts the number of replications needed */
   plc.Nreplications=0;
@@ -705,6 +705,11 @@ int set_plc(void)
 
   plc.Nmax = (int)(MyGrids[0].ParticlesPerTask/6 * params.PredPeakFactor);
 
+  /* n(z) for the light cone */
+  plc.delta_z=0.05;  /* NB: this is hard-coded... */
+  plc.nzbins=(int)((params.StartingzForPLC-params.LastzForPLC)/plc.delta_z+0.1);
+  plc.nz=(double*)calloc(plc.nzbins , sizeof(double));
+
   if (!ThisTask)
     {
       printf("\nThe Past Light Cone will be reconstruct from z=%f to z=%f\n",
@@ -733,8 +738,10 @@ int set_plc(void)
 	       ic,plc.repls[ic].i,plc.repls[ic].j,plc.repls[ic].k,
 	       plc.repls[ic].F1,plc.repls[ic].F2);
       printf("Task 0 will use plc.Nmax=%d\n",plc.Nmax);
+      printf("The halo number density will be output in %d redshift bins\n",plc.nzbins);
       printf("\n");
     }
+
 
   return 0;
 
@@ -886,7 +893,6 @@ int cone_and_cube_intersect(double *Oc, double *L, double *V, double *D, double 
 
 }
 
-
 #else
 
 int set_plc()
@@ -898,7 +904,6 @@ int set_plc()
 }
 
 #endif
-
 
 /* division in sub-boxes */
 int set_subboxes()
@@ -937,9 +942,9 @@ int set_subboxes()
 	if (i*j*k==NTasks)
 	  {
 	    /* number of particles in the sub-box */
-	    N1 = find_length(MyGrids[0].GSglobal[0],i,0);
-	    N2 = find_length(MyGrids[0].GSglobal[1],j,0);
-	    N3 = find_length(MyGrids[0].GSglobal[2],k,0);
+	    N1 = find_length(MyGrids[0].GSglobal[_x_],i,0);
+	    N2 = find_length(MyGrids[0].GSglobal[_y_],j,0);
+	    N3 = find_length(MyGrids[0].GSglobal[_z_],k,0);
 
 	    this = (unsigned long long int)(i>1? 2*(N2*N3) : 0) + 
 	      (unsigned long long int)(j>1? 2*(N1*N3) : 0) +
@@ -961,40 +966,40 @@ int set_subboxes()
 	      }
 	  }
 
-  subbox.nbox_x=i1;
-  subbox.nbox_y=j1;
-  subbox.nbox_z=k1;
+  subbox.nbox[_x_]=i1;
+  subbox.nbox[_y_]=j1;
+  subbox.nbox[_z_]=k1;
 
   /* mybox is the box assigned to the task */
-  NN=subbox.nbox_y*subbox.nbox_z;
-  subbox.mybox_x=ThisTask/NN;
-  NN1=ThisTask-subbox.mybox_x*NN;
-  subbox.mybox_y=NN1/subbox.nbox_z;
-  subbox.mybox_z=NN1-subbox.mybox_y*subbox.nbox_z;
+  NN=subbox.nbox[_y_]*subbox.nbox[_z_];
+  subbox.mybox[_x_]=ThisTask/NN;
+  NN1=ThisTask-subbox.mybox[_x_]*NN;
+  subbox.mybox[_y_]=NN1/subbox.nbox[_z_];
+  subbox.mybox[_z_]=NN1-subbox.mybox[_y_]*subbox.nbox[_z_];
 
-  subbox.Lgrid_x = find_length(MyGrids[0].GSglobal[0],subbox.nbox_x,subbox.mybox_x);
-  subbox.Lgrid_y = find_length(MyGrids[0].GSglobal[1],subbox.nbox_y,subbox.mybox_y);
-  subbox.Lgrid_z = find_length(MyGrids[0].GSglobal[2],subbox.nbox_z,subbox.mybox_z);
+  subbox.Lgrid[_x_] = find_length(MyGrids[0].GSglobal[_x_],subbox.nbox[_x_],subbox.mybox[_x_]);
+  subbox.Lgrid[_y_] = find_length(MyGrids[0].GSglobal[_y_],subbox.nbox[_y_],subbox.mybox[_y_]);
+  subbox.Lgrid[_z_] = find_length(MyGrids[0].GSglobal[_z_],subbox.nbox[_z_],subbox.mybox[_z_]);
 
-  subbox.pbc_x = (subbox.nbox_x==1);
-  subbox.pbc_y = (subbox.nbox_y==1);
-  subbox.pbc_z = (subbox.nbox_z==1);
+  subbox.pbc[_x_] = (subbox.nbox[_x_]==1);
+  subbox.pbc[_y_] = (subbox.nbox[_y_]==1);
+  subbox.pbc[_z_] = (subbox.nbox[_z_]==1);
 
-  subbox.safe_x = (subbox.pbc_x ? 0 : (find_length(MyGrids[0].GSglobal[0],subbox.nbox_x,0)-1)/2);
-  subbox.safe_y = (subbox.pbc_y ? 0 : (find_length(MyGrids[0].GSglobal[1],subbox.nbox_y,0)-1)/2);
-  subbox.safe_z = (subbox.pbc_z ? 0 : (find_length(MyGrids[0].GSglobal[2],subbox.nbox_z,0)-1)/2);
+  subbox.safe[_x_] = (subbox.pbc[_x_] ? 0 : (find_length(MyGrids[0].GSglobal[_x_],subbox.nbox[_x_],0)-1)/2);
+  subbox.safe[_y_] = (subbox.pbc[_y_] ? 0 : (find_length(MyGrids[0].GSglobal[_y_],subbox.nbox[_y_],0)-1)/2);
+  subbox.safe[_z_] = (subbox.pbc[_z_] ? 0 : (find_length(MyGrids[0].GSglobal[_z_],subbox.nbox[_z_],0)-1)/2);
 
-  subbox.Lgwbl_x = subbox.Lgrid_x + 2*subbox.safe_x;
-  subbox.Lgwbl_y = subbox.Lgrid_y + 2*subbox.safe_y;
-  subbox.Lgwbl_z = subbox.Lgrid_z + 2*subbox.safe_z;
+  subbox.Lgwbl[_x_] = subbox.Lgrid[_x_] + 2*subbox.safe[_x_];
+  subbox.Lgwbl[_y_] = subbox.Lgrid[_y_] + 2*subbox.safe[_y_];
+  subbox.Lgwbl[_z_] = subbox.Lgrid[_z_] + 2*subbox.safe[_z_];
 
-  subbox.start_x = find_start(MyGrids[0].GSglobal[0],subbox.nbox_x,subbox.mybox_x);
-  subbox.start_y = find_start(MyGrids[0].GSglobal[1],subbox.nbox_y,subbox.mybox_y);
-  subbox.start_z = find_start(MyGrids[0].GSglobal[2],subbox.nbox_z,subbox.mybox_z);
+  subbox.start[_x_] = find_start(MyGrids[0].GSglobal[_x_],subbox.nbox[_x_],subbox.mybox[_x_]);
+  subbox.start[_y_] = find_start(MyGrids[0].GSglobal[_y_],subbox.nbox[_y_],subbox.mybox[_y_]);
+  subbox.start[_z_] = find_start(MyGrids[0].GSglobal[_z_],subbox.nbox[_z_],subbox.mybox[_z_]);
 
-  subbox.stabl_x = subbox.start_x - subbox.safe_x;
-  subbox.stabl_y = subbox.start_y - subbox.safe_y;
-  subbox.stabl_z = subbox.start_z - subbox.safe_z;
+  subbox.stabl[_x_] = subbox.start[_x_] - subbox.safe[_x_];
+  subbox.stabl[_y_] = subbox.start[_y_] - subbox.safe[_y_];
+  subbox.stabl[_z_] = subbox.start[_z_] - subbox.safe[_z_];
 
   /* 
      Npart: total number of particles in the whole sub-volume 
@@ -1004,8 +1009,8 @@ int set_subboxes()
      Nstored: number of actually stored particles
   */
 
-  subbox.Npart = subbox.Lgwbl_x * subbox.Lgwbl_y * subbox.Lgwbl_z;
-  subbox.Ngood = subbox.Lgrid_x * subbox.Lgrid_y * subbox.Lgrid_z;
+  subbox.Npart = subbox.Lgwbl[_x_] * subbox.Lgwbl[_y_] * subbox.Lgwbl[_z_];
+  subbox.Ngood = subbox.Lgrid[_x_] * subbox.Lgrid[_y_] * subbox.Lgrid[_z_];
   /* this is a (relatively generous) prediction of the number of peaks that will be found */
   subbox.PredNpeaks = (int)(MyGrids[0].ParticlesPerTask/6 * params.PredPeakFactor);
   subbox.Nstored = 0;
@@ -1013,6 +1018,7 @@ int set_subboxes()
   subbox.maplength = subbox.Npart/UINTLEN + (subbox.Npart%UINTLEN!=0);
   if ( (subbox.Nalloc = organize_main_memory()) == 0 )
     {
+      fflush(stdout);
       if (!ThisTask)
 	printf("organize_main_memory returned an invalid Nalloc, exiting\n");
       return 1;
@@ -1025,11 +1031,11 @@ int set_subboxes()
       printf("FRAGMENTATION:\n");
       printf("Reference number of particles:         %d\n",MyGrids[0].ParticlesPerTask);
       printf("Requested bytes per particle:          %d\n",(int)params.MaxMemPerParticle);
-      printf("Number of sub-boxes per dimension:     %d %d %d\n",subbox.nbox_x,subbox.nbox_y,subbox.nbox_z);
-      printf("Periodic boundary conditions:          %d %d %d\n",subbox.pbc_x,subbox.pbc_y,subbox.pbc_z);
-      printf("Core 0 will work on a grid:            %d %d %d\n",subbox.Lgwbl_x,subbox.Lgwbl_y,subbox.Lgwbl_z);
-      printf("The resolved box will be:              %d %d %d\n",subbox.Lgrid_x,subbox.Lgrid_y,subbox.Lgrid_z);
-      printf("Boundary layer:                        %d %d %d\n",subbox.safe_x,subbox.safe_y,subbox.safe_z);
+      printf("Number of sub-boxes per dimension:     %d %d %d\n",subbox.nbox[_x_],subbox.nbox[_y_],subbox.nbox[_z_]);
+      printf("Periodic boundary conditions:          %d %d %d\n",subbox.pbc[_x_],subbox.pbc[_y_],subbox.pbc[_z_]);
+      printf("Core 0 will work on a grid:            %d %d %d\n",subbox.Lgwbl[_x_],subbox.Lgwbl[_y_],subbox.Lgwbl[_z_]);
+      printf("The resolved box will be:              %d %d %d\n",subbox.Lgrid[_x_],subbox.Lgrid[_y_],subbox.Lgrid[_z_]);
+      printf("Boundary layer:                        %d %d %d\n",subbox.safe[_x_],subbox.safe[_y_],subbox.safe[_z_]);
       printf("Boundary layer factor:                 %f\n",params.BoundaryLayerFactor);
       printf("Number of total particles for core 0:  %d\n",subbox.Npart);
       printf("Number of good particles for core 0:   %d\n",subbox.Ngood);
@@ -1039,9 +1045,9 @@ int set_subboxes()
   	     outputs.zlast, params.Largest);
       printf("   its Lagrangian size: %f Mpc (%6.2f grid points)\n",size,sizeG);
       printf("   this requires a boundary layer of %6.2f grid points \n",sizeG*params.BoundaryLayerFactor);
-      if ((!subbox.pbc_x && params.BoundaryLayerFactor*sizeG>subbox.safe_x) || 
-	  (!subbox.pbc_y && params.BoundaryLayerFactor*sizeG>subbox.safe_y) || 
-	  (!subbox.pbc_z && params.BoundaryLayerFactor*sizeG>subbox.safe_z))
+      if ((!subbox.pbc[_x_] && params.BoundaryLayerFactor*sizeG>subbox.safe[_x_]) || 
+	  (!subbox.pbc[_y_] && params.BoundaryLayerFactor*sizeG>subbox.safe[_y_]) || 
+	  (!subbox.pbc[_z_] && params.BoundaryLayerFactor*sizeG>subbox.safe[_z_]))
 	{
 	  printf("WARNING: the boundary layer on some dimension is smaller than the predicted size of the largest halos\n");
 	  printf("         times the BoundaryLayerFactor, the most massive halos may be inaccurate\n");
@@ -1054,8 +1060,7 @@ int set_subboxes()
   else
     mf.hfactor=1.0;
   mf.hfactor4=pow(mf.hfactor,4.);
-  mf.vol=(double)MyGrids[0].GSglobal[0]*(double)MyGrids[0].GSglobal[1]
-    *(double)MyGrids[0].GSglobal[2]*pow(params.InterPartDist,3.0);
+  mf.vol=(double)MyGrids[0].Ntotal*pow(params.InterPartDist,3.0);
   mf.mmin=log10(params.MinHaloMass*params.ParticleMass)-0.001*DELTAM;
   mf.mmax=log10(params.Largest)+3.0*DELTAM;
   mf.NBIN = (int)((mf.mmax-mf.mmin)/DELTAM) +1;

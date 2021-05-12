@@ -29,6 +29,7 @@ RUNDIR = ./
 
 EXEC = pinocchio.x
 
+#OPTIONS += -DCLASSIC_FRAGMENTATION
 #OPTIONS += -DDOUBLE_PRECISION_PRODUCTS
 OPTIONS += -DLIGHT_OUTPUT
 
@@ -46,7 +47,7 @@ OPTIONS += -DELL_CLASSIC
 
 # output
 #OPTIONS += -DROTATE_BOX
-OPTIONS += -DTIMELESS_SNAPSHOT
+#OPTIONS += -DTIMELESS_SNAPSHOT
 
 # other options
 #OPTIONS += -DWHITENOISE
@@ -58,8 +59,8 @@ SYSTYPE="my_machine"
 
 ifeq ($(SYSTYPE),"my_machine")
 CC          =  mpicc
-CDEBUG      = -ggdb3 -Wall
-COPTIMIZED  = -O3 -Wno-unused-result
+CDEBUG      = -ggdb3 -Wall -Wno-unknown-pragmas
+COPTIMIZED  = -O3 -Wno-unused-result -Wno-unknown-pragmas
 FFTW_LIBR   = -L$(HOME)/lib -lfftw3_mpi -lfftw3
 FFTW_INCL   = -I/usr/local/include -I$(HOME)/include
 PFFT_LIBR   = -lpfft
@@ -81,8 +82,8 @@ COPTS = $(CDEBUG)
 #COPTS = $(COPTIMIZED)
 
 # source files:
-OBJECTS = fmax.o variables.o initialization.o collapse_times.o fmax-pfft.o GenIC_large.o \
-	ReadParamfile.o write_fields.o allocations.o LPT.o distribute.o \
+OBJECTS = fmax.o variables.o initialization.o collapse_times.o fmax-pfft.o GenIC.o \
+	ReadParamfile.o allocations.o LPT.o distribute.o \
 	fragment.o build_groups.o write_halos.o write_snapshot.o cosmo.o
 #ReadWhiteNoise.o
 

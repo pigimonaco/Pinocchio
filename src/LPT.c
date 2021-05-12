@@ -50,18 +50,20 @@ int compute_LPT_displacements()
   /* loop on all local particles */
 #pragma omp parallel
   {
-    unsigned int fact = MyGrids[0].GSlocal[_x_] * MyGrids[0].GSlocal[_y_];
+    //unsigned int fact = MyGrids[0].GSlocal[_x_] * MyGrids[0].GSlocal[_y_];
 
 #pragma omp for nowait
-    for (int local_z = 0; local_z < MyGrids[0].GSlocal[_z_]; local_z++)
+    /* for (int local_z = 0; local_z < MyGrids[0].GSlocal[_z_]; local_z++) */
+    /*   { */
+    /* 	int idx_z = local_z * fact; */
+    /* 	for ( int local_y = 0; local_y < MyGrids[0].GSlocal[_y_]; local_y++) */
+    /* 	  { */
+    /* 	    int idx_y = local_y * MyGrids[0].GSlocal[_x_] + idx_z; */
+    /* 	    for ( int local_x = 0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)	   */
+    /* 	      {	   */
+    /* 		int index = idx_y + local_x; */
+    for (int index=0; index<MyGrids[0].total_local_size; index++)
       {
-	int idx_z = local_z * fact;
-	for ( int local_y = 0; local_y < MyGrids[0].GSlocal[_y_]; local_y++)
-	  {
-	    int idx_y = local_y * MyGrids[0].GSlocal[_x_] + idx_z;
-	    for ( int local_x = 0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)	  
-	      {	  
-		int index = idx_y + local_x;
 	      
 	      /* NB: QUI BISOGNERA` SOMMARE I CONTRIBUTI DELLE DUE GRIGLIE QUANDO USIAMO LE GRIGLIE MULTIPLE */
 	      
@@ -90,10 +92,10 @@ int compute_LPT_displacements()
 		  source_2LPT[index];
 #endif
 	      }
-	  }
-      }
+	  //}
+      //}
   }
-  
+
   /* forward FFT for 2LPT source */
   write_in_rvector(0, source_2LPT);
 
@@ -124,28 +126,35 @@ int compute_LPT_displacements()
 	if (compute_derivative(0,ia,ib))
 	  return 1;
 
+/* #pragma omp parallel */
+/* 	{ */
+/* 	  unsigned int fact = MyGrids[0].GSlocal[_x_] * MyGrids[0].GSlocal[_y_]; */
+	  
+/* 	  /\* this substitutes write_from_rvector: it adds to the 3LPT_2 source term the mixed products of the two second derivative tensors *\/ */
+/* #pragma omp for nowait */
+/* 	  for (int local_z = 0; local_z < MyGrids[0].GSlocal[_z_]; local_z++) */
+/* 	    { */
+/* 	      int idx_z = local_z * fact; */
+/* 	      for ( int local_y = 0; local_y < MyGrids[0].GSlocal[_y_]; local_y++) */
+/* 		{ */
+/* 		  int idx_y = local_y * MyGrids[0].GSlocal[_x_] + idx_z; */
+/* 		  for ( int local_x = 0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)	   */
+/* 		    {	   */
+/* 		      int index = idx_y + local_x; */
+		      
+/* 		      source_3LPT_2[index] -= 2.0 * (ider<=3? 1.0 : 2.0) *    /\* the first 2 factor is needed because nabla2phi is half the theoretical one *\/ */
+/* 			*(rvector_fft[0] + local_x + (MyGrids[0].GSlocal[_x_]) * (local_y + local_z * MyGrids[0].GSlocal[_y_])) */
+/* 			* second_derivatives[0][ider-1][index]; */
+/* 		    } */
+/* 		} */
+/* 	    } */
 #pragma omp parallel
 	{
-	  unsigned int fact = MyGrids[0].GSlocal[_x_] * MyGrids[0].GSlocal[_y_];
-	  
-	  /* this substitutes write_from_rvector: it adds to the 3LPT_2 source term the mixed products of the two second derivative tensors */
-#pragma omp for nowait
-	  for (int local_z = 0; local_z < MyGrids[0].GSlocal[_z_]; local_z++)
-	    {
-	      int idx_z = local_z * fact;
-	      for ( int local_y = 0; local_y < MyGrids[0].GSlocal[_y_]; local_y++)
-		{
-		  int idx_y = local_y * MyGrids[0].GSlocal[_x_] + idx_z;
-		  for ( int local_x = 0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)	  
-		    {	  
-		      int index = idx_y + local_x;
-		      
-		      source_3LPT_2[index] -= 2.0 * (ider<=3? 1.0 : 2.0) *    /* the first 2 factor is needed because nabla2phi is half the theoretical one */
-			*(rvector_fft[0] + local_x + (MyGrids[0].GSlocal[_x_]) * (local_y + local_z * MyGrids[0].GSlocal[_y_]))
-			* second_derivatives[0][ider-1][index];
-		    }
-		}
-	    }
+#pragma omp nowait
+	  for (int index=0; index<MyGrids[0].total_local_size; index++)
+	    /* the first 2 factor is needed because nabla2phi is half the theoretical one */
+	    source_3LPT_2[index] -= 2.0 * (ider<=3? 1.0 : 2.0) *
+	      rvector_fft[0][index] * second_derivatives[0][ider-1][index];
 	}
       }
 #endif
@@ -174,26 +183,30 @@ int compute_LPT_displacements()
 
 #pragma omp parallel
   {
-    unsigned int fact = MyGrids[0].GSlocal[_x_] * MyGrids[0].GSlocal[_y_];
+    //unsigned int fact = MyGrids[0].GSlocal[_x_] * MyGrids[0].GSlocal[_y_];
     
     /* assigns displacement to particles */
     
 #pragma omp for nowait
-    for (int local_z = 0; local_z < MyGrids[0].GSlocal[_z_]; local_z++)
-      {
-	int idx_z = local_z * fact;
-	for ( int local_y = 0; local_y < MyGrids[0].GSlocal[_y_]; local_y++)
-	  {
-	    int idx_y = local_y * MyGrids[0].GSlocal[_x_] + idx_z;
-	    for ( int local_x = 0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)	  
-	      {	  
-		int index = idx_y + local_x;
-		for ( int ia = 0; ia < 3; ia++ )
-		  products[index].Vel_2LPT[ia] = first_derivatives[0][ia][index];
+    /* for (int local_z = 0; local_z < MyGrids[0].GSlocal[_z_]; local_z++) */
+    /*   { */
+    /* 	int idx_z = local_z * fact; */
+    /* 	for ( int local_y = 0; local_y < MyGrids[0].GSlocal[_y_]; local_y++) */
+    /* 	  { */
+    /* 	    int idx_y = local_y * MyGrids[0].GSlocal[_x_] + idx_z; */
+    /* 	    for ( int local_x = 0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)	   */
+    /* 	      {	   */
+    /* 		int index = idx_y + local_x; */
+    /* 		for ( int ia = 0; ia < 3; ia++ ) */
+    /* 		  products[index].Vel_2LPT[ia] = first_derivatives[0][ia][index]; */
 		    
-	      }
-	  }
-      }
+    /* 	      } */
+    /* 	  } */
+    /*   } */
+    for (int index=0; index<MyGrids[0].total_local_size; index++)
+      for ( int ia = 0; ia < 3; ia++ )
+	products[index].Vel_2LPT[ia] = first_derivatives[0][ia][index];
+
   }
 #endif
 
@@ -235,27 +248,28 @@ int compute_LPT_displacements()
 
 #pragma omp parallel
   {
-    unsigned int fact = MyGrids[0].GSlocal[_x_] * MyGrids[0].GSlocal[_y_];
+    //unsigned int fact = MyGrids[0].GSlocal[_x_] * MyGrids[0].GSlocal[_y_];
     
-    /* assigns displacement to particles whose collapse time has just been updated */
-    
-
 // CHECK: verificare che i pencil sono in x e y
 #pragma omp for nowait
-    for (int local_z = 0; local_z < MyGrids[0].GSlocal[_z_]; local_z++)
-      {
-	int idx_z = local_z * fact;
-	for ( int local_y = 0; local_y < MyGrids[0].GSlocal[_y_]; local_y++)
-	  {
-	    int idx_y = local_y * MyGrids[0].GSlocal[_x_] + idx_z;
-	    for ( int local_x = 0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)	  
-	      {	  
-		int index = idx_y + local_x;	  
-		for ( int ia = 0; ia < 3; ia++ )
-		  products[index].Vel_3LPT_1[ia]=first_derivatives[0][ia][index];
-	      }
-	  }
-      }
+/*     for (int local_z = 0; local_z < MyGrids[0].GSlocal[_z_]; local_z++) */
+/*       { */
+/* 	int idx_z = local_z * fact; */
+/* 	for ( int local_y = 0; local_y < MyGrids[0].GSlocal[_y_]; local_y++) */
+/* 	  { */
+/* 	    int idx_y = local_y * MyGrids[0].GSlocal[_x_] + idx_z; */
+/* 	    for ( int local_x = 0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)	   */
+/* 	      {	   */
+/* 		int index = idx_y + local_x;	   */
+/* 		for ( int ia = 0; ia < 3; ia++ ) */
+/* 		  products[index].Vel_3LPT_1[ia]=first_derivatives[0][ia][index]; */
+/* 	      } */
+/* 	  } */
+/*       } */
+    for (int index=0; index<MyGrids[0].total_local_size; index++)
+      for ( int ia = 0; ia < 3; ia++ )
+	products[index].Vel_3LPT_1[ia] = first_derivatives[0][ia][index];
+
   }
 #endif
 
@@ -295,25 +309,29 @@ int compute_LPT_displacements()
 
 #pragma omp parallel
   {
-    unsigned int fact = MyGrids[0].GSlocal[_x_] * MyGrids[0].GSlocal[_y_];
+    //unsigned int fact = MyGrids[0].GSlocal[_x_] * MyGrids[0].GSlocal[_y_];
     
     /* assigns displacement to particles whose collapse time has just been updated */
     
 #pragma omp for nowait
-    for (int local_z = 0; local_z < MyGrids[0].GSlocal[_z_]; local_z++)
-      {
-	int idx_z = local_z * fact;
-	for ( int local_y = 0; local_y < MyGrids[0].GSlocal[_y_]; local_y++)
-	  {
-	    int idx_y = local_y * MyGrids[0].GSlocal[_x_] + idx_z;
-	    for ( int local_x = 0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)	  
-	      {	  
-		int index = idx_y + local_x;	  
-		for ( int ia = 0; ia < 3; ia++ )
-		  products[index].Vel_3LPT_2[ia]=first_derivatives[0][ia][index];
-	      }
-	  }
-      }
+    for (int index=0; index<MyGrids[0].total_local_size; index++)
+      for ( int ia = 0; ia < 3; ia++ )
+	products[index].Vel_3LPT_2[ia] = first_derivatives[0][ia][index];
+
+    /* for (int local_z = 0; local_z < MyGrids[0].GSlocal[_z_]; local_z++) */
+    /*   { */
+    /* 	int idx_z = local_z * fact; */
+    /* 	for ( int local_y = 0; local_y < MyGrids[0].GSlocal[_y_]; local_y++) */
+    /* 	  { */
+    /* 	    int idx_y = local_y * MyGrids[0].GSlocal[_x_] + idx_z; */
+    /* 	    for ( int local_x = 0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)	   */
+    /* 	      {	   */
+    /* 		int index = idx_y + local_x;	   */
+    /* 		for ( int ia = 0; ia < 3; ia++ ) */
+    /* 		  products[index].Vel_3LPT_2[ia]=first_derivatives[0][ia][index]; */
+    /* 	      } */
+    /* 	  } */
+    /*   } */
   }
 #endif
 #endif

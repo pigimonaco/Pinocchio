@@ -78,80 +78,83 @@ int main(int argc, char **argv, char **envp)
   if (initialization())
     abort_code();
 
-  fflush(stdout);
-  MPI_Barrier(MPI_COMM_WORLD);
 
-  /* called as "pinocchio.x parameterfile 1" it writes the density field  of Grid 0
+  /*****************************************/
+  /*********** Special behaviour ***********/
+  /*****************************************/
+
+  /* On request, it writes the density field */
+  if (params.WriteDensity || (argc>=3 && atoi(argv[2])==1) )
+    for (ThisGrid=0; ThisGrid<Ngrids; ThisGrid++)
+      {
+	write_in_cvector(ThisGrid, kdensity[ThisGrid]);
+	time=reverse_transform(ThisGrid);
+	if (!ThisTask)
+	  printf("[%s] compute_derivative: done fft, cpu time = %f\n",fdate(),time);
+	write_from_rvector(ThisGrid, density[ThisGrid]);
+	if (write_density(ThisGrid))
+	  abort_code();
+      }
+    
+  /* called as "pinocchio.x parameterfile 1" it writes the density field of Grid 0
      in configuration space and exits */
   if (argc>=3 && atoi(argv[2])==1)
     {
       if (!ThisTask)
 	{
-	  printf("In this configuration pinocchio will only write the linear density field\n");
-	  printf("in the Data/ directory\n");
-	}
-
-      for (ThisGrid=0; ThisGrid<Ngrids; ThisGrid++)
-	{
-	  write_in_cvector(ThisGrid, kdensity[ThisGrid]);
-	  time=reverse_transform(ThisGrid);
-	  if (!ThisTask)
-	    printf("[%s] compute_derivative: done fft, cpu time = %f\n",fdate(),time);
-	  write_from_rvector(ThisGrid, density[ThisGrid]);
-	  if (write_density(ThisGrid))
-	    abort_code();
-	}
-      if (!ThisTask)
-	{
+	  printf("In this configuration pinocchio only writes the linear density field\n");
 	  write_cputimes();
 	  printf("Pinocchio done!\n");
 	}
+
       MPI_Finalize();
 #ifdef USE_GPERFTOOLS
       ProfilerStop();
 #endif
-
       return 0;
     }
 
-  /* called as "pinocchio.x parameterfile 2" it computes and writes displacement fields, then exit */
-  if (argc>=3 && atoi(argv[2])==2)
-    {
-      if (!ThisTask)
-	{
-	  printf("In this configuration pinocchio will only produce a GADGET snapshot\n");
-	  printf("at the first redshift specified by the %s file (z=%f)\n",
-		 params.OutputList,outputs.z[0]);
-	}
+/*   /\* called as "pinocchio.x parameterfile 2" it computes and writes displacement fields, then exit *\/ */
+/*   if (argc>=3 && atoi(argv[2])==2) */
+/*     { */
+/*       if (!ThisTask) */
+/* 	{ */
+/* 	  printf("In this configuration pinocchio will only produce a GADGET snapshot\n"); */
+/* 	  printf("at the first redshift specified by the %s file (z=%f)\n", */
+/* 		 params.OutputList,outputs.z[0]); */
+/* 	} */
 
 
-#ifdef THREE_LPT
-      if (!ThisTask)
-	{
-	  printf("*********************************************************\n");
-	  printf("Writing of LPT snapshot presently does not work with 3LPT\n");
-	  printf("Please recompile without the THREE_LPT directive\n");
-	  printf("*********************************************************\n");
-	}
-#else
+/* #ifdef THREE_LPT */
+/*       if (!ThisTask) */
+/* 	{ */
 
-      if (compute_displacements())
-        abort_code();
+/* 	  // METTERE 3LPT!!!! */
 
-      if (write_LPT_snapshot(outputs.z[0]))
-        abort_code();
+/* 	  printf("*********************************************************\n"); */
+/* 	  printf("Writing of LPT snapshot presently does not work with 3LPT\n"); */
+/* 	  printf("Please recompile without the THREE_LPT directive\n"); */
+/* 	  printf("*********************************************************\n"); */
+/* 	} */
+/* #else */
 
-#endif
+/*       if (compute_displacements()) */
+/*         abort_code(); */
+
+/*       /\* if (write_LPT_snapshot(outputs.z[0])) *\/  // RIMETTERE!!! */
+/*       /\*   abort_code(); *\/ */
+
+/* #endif */
 	
-      if (!ThisTask)
-	printf("Pinocchio done!\n");
-      MPI_Finalize();
-#ifdef USE_GPERFTOOLS
-      ProfilerStop();
-#endif
+/*       if (!ThisTask) */
+/* 	printf("Pinocchio done!\n"); */
+/*       MPI_Finalize(); */
+/* #ifdef USE_GPERFTOOLS */
+/*       ProfilerStop(); */
+/* #endif */
 
-      return 0;
-    }
+/*       return 0; */
+/*     } */
 
   /* called as "pinocchio.x parameterfile 2" it computes and writes collapse time table, then exit */
   if (argc>=3 && atoi(argv[2])==3)
@@ -162,9 +165,7 @@ int main(int argc, char **argv, char **envp)
 	  printf("In this configuration pinocchio will only compute a table of collapse times\n");
 	}
 
-      /****************************
-       * CYCLE ON SMOOTHING RADII *
-       ****************************/
+      /* CYCLE ON SMOOTHING RADII */
       for (int ismooth=0; ismooth<Smoothing.Nsmooth; ismooth++)
 	{
 	  double cputmp=MPI_Wtime();
@@ -205,13 +206,33 @@ int main(int argc, char **argv, char **envp)
 #endif
     }
 
+  /******************************************/
+  /*********** Standard behaviour ***********/
+  /******************************************/
 
-  /* computation of collapse times and displacements */
-  if (compute_fmax())
-    abort_code();
 
-  fflush(stdout);
-  MPI_Barrier(MPI_COMM_WORLD);
+  if (params.ReadProductsFromDumps)
+    {
+      /* on request, read products from dump files and skip the first part */
+      if (read_dumps())
+	abort_code();
+    }
+  else
+    {
+      /* computation of collapse times and displacements */
+      if (compute_fmax())
+	abort_code();
+
+      /* on request, write products on a snapshot */
+      if (params.WriteProducts)
+	if (write_products())
+	  abort_code();
+
+      /* on request, dump products to files for skipping fmax */
+      if (params.DumpProducts)
+	if (dump_products())
+	  abort_code();
+    }
 
   /* fragmentation of the collapsed medium */
   if (fragment_driver())
@@ -352,3 +373,26 @@ void greetings(void)
 
     }
 }
+
+
+
+
+  /* //LEVARE */
+  /* write_in_cvector(0, kdensity[0]); */
+
+  /* dump_cvector((double*)kdensity[0], params.use_transposed_fft*internal.tasks_subdivision_dim, */
+  /* 	       MyGrids[0].GSglobal[_x_], */
+  /* 	       MyGrids[0].GSlocal_k, */
+  /* 	       MyGrids[0].GSstart_k, "kdensity.check", 0); */
+
+
+  /* time=reverse_transform(0); */
+  /* write_from_rvector(0, density[0]); */
+
+  /* dump_rvector((double*)rvector_fft[0], */
+  /* 	       MyGrids[0].GSglobal[_x_], */
+  /* 	       MyGrids[0].GSlocal, */
+  /* 	       MyGrids[0].GSstart, "density.check", 0); */
+
+  /* fflush(stdout); */
+  /* MPI_Barrier(MPI_COMM_WORLD); */

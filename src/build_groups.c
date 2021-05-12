@@ -31,13 +31,12 @@
 #define NCOUNTERS 15
 
 unsigned long long int particle_name;
-int global_x,global_y,global_z,good_particle;
+int good_particle;
 
 #ifdef PLC
 const gsl_root_fsolver_type *brent;
 gsl_root_fsolver *solver;
 gsl_function cPLC;
-double Lgrid[3],start[3];
 int thisgroup;
 int replicate[3];
 double brent_err;
@@ -54,13 +53,8 @@ int build_groups(int Npeaks, double zstop, int first_call)
 
   int merge[NV][NV], neigh[NV], fil_list[NV][4];
   static int iout,nstep,nstep_p;
-#ifdef CLASSIC_FRAGMENTATION
-  static int Lgridxy;
-#else
-  int pos;
-#endif
-  int nn,ifil,this_z,neigrp,nf;
-  int iz,kk,i1,j1,k1,skip;
+  int nn,ifil,this_z,neigrp,nf,pos;
+  int iz,i1,j1,k1,skip;
   int ig3,small,large,to_group,accgrp,ig1,ig2;
   int accrflag,nmerge,peak_cond;
   double ratio,best_ratio,d2,r2,cputmp;
@@ -90,7 +84,6 @@ int build_groups(int Npeaks, double zstop, int first_call)
   double aa, bb, Fplc;
 #endif
 
-
   if (first_call)
     {
       /* Initializations */
@@ -102,9 +95,6 @@ int build_groups(int Npeaks, double zstop, int first_call)
 	  groups[i1].bottom=-1;
 	  groups[i1].good=0;
 	}
-#ifdef CLASSIC_FRAGMENTATION
-      Lgridxy = subbox.Lgwbl_x * subbox.Lgwbl_y;
-#endif
       iout=0;
 
       for (i1=0; i1<NCOUNTERS; i1++)
@@ -133,12 +123,6 @@ int build_groups(int Npeaks, double zstop, int first_call)
       cPLC.function = &condition_F;
       brent = gsl_root_fsolver_brent;
       solver = gsl_root_fsolver_alloc (brent);
-      Lgrid[0]=(double)MyGrids[0].GSglobal[0];
-      Lgrid[1]=(double)MyGrids[0].GSglobal[1];
-      Lgrid[2]=(double)MyGrids[0].GSglobal[2];
-      start[0]=(double)subbox.stabl_x;
-      start[1]=(double)subbox.stabl_y;
-      start[2]=(double)subbox.stabl_z;
       NextF_PLC=plc.Fstart;
       DeltaF_PLC=0.99; // CAPIRE COME FISSARLO
       brent_err = 1.e-2 * params.InterPartDist;
@@ -202,7 +186,7 @@ int build_groups(int Npeaks, double zstop, int first_call)
 
 		  plc_saved=1;
 
-		  if (write_PLC())
+		  if (write_PLC(0))
 		    return 1;
 		  plc.Nstored=0;
 
@@ -222,7 +206,7 @@ int build_groups(int Npeaks, double zstop, int first_call)
 
 		  if (save)
 		    {
-		      if (write_PLC())
+		      if (write_PLC(0))
 			return 1;
 		      plc.Nstored=0;
 		    }
@@ -232,44 +216,6 @@ int build_groups(int Npeaks, double zstop, int first_call)
 	    }
 	}
 #endif
-
-      /* Give output if relevant */
-      while (this_z==nstep-1 || frag[iz].Fmax < outputs.F[iout])
-	{
-	  cputmp=MPI_Wtime();
-
-	  if (!ThisTask)
-	    printf("[%s] Writing output at z=%f\n",fdate(), 
-		   outputs.z[iout]);
-
-	  if (write_catalog(iout))
-	    return 1;
-
-	  if (params.WriteSnapshot && write_snapshot(iout))
-	    return 1;
-
-	  if (compute_mf(iout))
-	    return 1;
-
-	  if (iout==outputs.n-1)
-	    {
-#ifdef TIMELESS_SNAPSHOT
-	      if (params.WriteTimelessSnapshot && write_timeless_snapshot())
-		return 1;
-#endif
-	      if (write_histories())
-		return 1;
-	    }
-
-	  cputime.io += MPI_Wtime() - cputmp;
-
-	  iout++;
-	  if (this_z==nstep-1)
-	    break;
-	}
-
-      if (this_z==nstep-1 || iout==outputs.n)
-	break;
 
       /* More initializations */
 
@@ -281,46 +227,26 @@ int build_groups(int Npeaks, double zstop, int first_call)
 
       /* grid coordinates from the indices (sub-box coordinates) */
 #ifdef CLASSIC_FRAGMENTATION
-      ibox = iz%subbox.Lgwbl_x;
-      kk   = iz/subbox.Lgwbl_x;
+      INDEX_TO_COORD(iz,ibox,jbox,kbox,subbox.Lgwbl);
 #else
-      ibox = frag_pos[iz]%subbox.Lgwbl_x;
-      kk   = frag_pos[iz]/subbox.Lgwbl_x;
+      INDEX_TO_COORD(frag_pos[iz],ibox,jbox,kbox,subbox.Lgwbl);
 #endif
-      jbox = kk%subbox.Lgwbl_y;
-      kbox = kk/subbox.Lgwbl_y;
 
       /* skips if the point is at the border (and PBCs are not active) */
       skip=0;
-      if ( !subbox.pbc_x && (ibox==0 || ibox==subbox.Lgwbl_x-1) ) ++skip;
-      if ( !subbox.pbc_y && (jbox==0 || jbox==subbox.Lgwbl_y-1) ) ++skip;
-      if ( !subbox.pbc_z && (kbox==0 || kbox==subbox.Lgwbl_z-1) ) ++skip;
+      if ( !subbox.pbc[_x_] && (ibox==0 || ibox==subbox.Lgwbl[_x_]-1) ) ++skip;
+      if ( !subbox.pbc[_y_] && (jbox==0 || jbox==subbox.Lgwbl[_y_]-1) ) ++skip;
+      if ( !subbox.pbc[_z_] && (kbox==0 || kbox==subbox.Lgwbl[_z_]-1) ) ++skip;
 
-      /* particle coordinates in the box, imposing PBCs */
-      global_x = ibox + subbox.stabl_x;
-      if (global_x<0) global_x+=MyGrids[0].GSglobal[0];
-      if (global_x>=MyGrids[0].GSglobal[0]) global_x-=MyGrids[0].GSglobal[0];
-      global_y = jbox + subbox.stabl_y;
-      if (global_y<0) global_y+=MyGrids[0].GSglobal[1];
-      if (global_y>=MyGrids[0].GSglobal[1]) global_y-=MyGrids[0].GSglobal[1];
-      global_z = kbox + subbox.stabl_z;
-      if (global_z<0) global_z+=MyGrids[0].GSglobal[2];
-      if (global_z>=MyGrids[0].GSglobal[2]) global_z-=MyGrids[0].GSglobal[2];
-#ifdef ROTATE_BOX
-      particle_name=(long long)global_x + 
-	  ( (long long)global_z + 
-	    (long long)global_y * (long long)MyGrids[0].GSglobal[2] ) * 
-	  (long long)MyGrids[0].GSglobal[0];
-#else
-      particle_name=(long long)global_x + 
-	  ( (long long)global_y + 
-	    (long long)global_z * (long long)MyGrids[0].GSglobal[1] ) * 
-	  (long long)MyGrids[0].GSglobal[0];
-#endif
+      particle_name = 
+	COORD_TO_INDEX((long long)((ibox + subbox.stabl[_x_] + MyGrids[0].GSglobal[_x_])%MyGrids[0].GSglobal[_x_]),
+		       (long long)((jbox + subbox.stabl[_y_] + MyGrids[0].GSglobal[_y_])%MyGrids[0].GSglobal[_y_]),
+		       (long long)((kbox + subbox.stabl[_z_] + MyGrids[0].GSglobal[_z_])%MyGrids[0].GSglobal[_z_]),
+		       MyGrids[0].GSglobal);
 
-      good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
-			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
-			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
+      good_particle = ( ibox>=subbox.safe[_x_] && ibox<subbox.Lgwbl[_x_]-subbox.safe[_x_] && 
+			jbox>=subbox.safe[_y_] && jbox<subbox.Lgwbl[_y_]-subbox.safe[_y_] && 
+			kbox>=subbox.safe[_z_] && kbox<subbox.Lgwbl[_z_]-subbox.safe[_z_] );
 
       if (!skip)
 	{
@@ -331,40 +257,41 @@ int build_groups(int Npeaks, double zstop, int first_call)
 	      switch (nn)
 		{
 		case 0:
-		  i1=( subbox.pbc_x && ibox==0 ? subbox.Lgwbl_x-1 : ibox-1 );
+		  i1=( subbox.pbc[_x_] && ibox==0 ? subbox.Lgwbl[_x_]-1 : ibox-1 );
 		  j1=jbox;
 		  k1=kbox;
 		  break;
 		case 1:
-		  i1=( subbox.pbc_x && ibox==subbox.Lgwbl_x-1 ? 0 : ibox+1 );
+		  i1=( subbox.pbc[_x_] && ibox==subbox.Lgwbl[_x_]-1 ? 0 : ibox+1 );
 		  j1=jbox;
 		  k1=kbox;
 		  break;
 		case 2:
 		  i1=ibox;
-		  j1=( subbox.pbc_y && jbox==0 ? subbox.Lgwbl_y-1 : jbox-1 );
+		  j1=( subbox.pbc[_y_] && jbox==0 ? subbox.Lgwbl[_y_]-1 : jbox-1 );
 		  k1=kbox;
 		  break;
 		case 3:
 		  i1=ibox;
-		  j1=( subbox.pbc_y && jbox==subbox.Lgwbl_y-1 ? 0 : jbox+1 );
+		  j1=( subbox.pbc[_y_] && jbox==subbox.Lgwbl[_y_]-1 ? 0 : jbox+1 );
 		  k1=kbox;
 		  break;
 		case 4:
 		  i1=ibox;
 		  j1=jbox;
-		  k1=( subbox.pbc_z && kbox==0 ? subbox.Lgwbl_z-1 : kbox-1 );
+		  k1=( subbox.pbc[_z_] && kbox==0 ? subbox.Lgwbl[_z_]-1 : kbox-1 );
 		  break;
 		case 5:
 		  i1=ibox;
 		  j1=jbox;
-		  k1=( subbox.pbc_z && kbox==subbox.Lgwbl_z-1 ? 0 : kbox+1 );
+		  k1=( subbox.pbc[_z_] && kbox==subbox.Lgwbl[_z_]-1 ? 0 : kbox+1 );
 		  break;
 		}
 
 #ifdef CLASSIC_FRAGMENTATION
-	      neigh[nn] = group_ID[i1 + j1 *subbox.Lgwbl_x + k1 *Lgridxy];
-	      peak_cond &= (frag[iz].Fmax > frag[i1 +j1*subbox.Lgwbl_x + k1*Lgridxy].Fmax);
+	      pos = COORD_TO_INDEX(i1,j1,k1,subbox.Lgwbl);
+	      neigh[nn] = group_ID[pos];
+	      peak_cond &= (frag[iz].Fmax > frag[pos].Fmax);
 #else
 	      pos = find_location(i1,j1,k1);
 	      if (pos>=0)
@@ -382,7 +309,7 @@ int build_groups(int Npeaks, double zstop, int first_call)
 		  fil_list[nf][1]=j1;
 		  fil_list[nf][2]=k1;
 #ifdef CLASSIC_FRAGMENTATION
-		  fil_list[nf][3]=i1 + j1*subbox.Lgwbl_x + k1*Lgridxy;
+		  fil_list[nf][3]=pos;
 #else
 		  fil_list[nf][3]=indices[pos];
 #endif
@@ -418,10 +345,10 @@ int build_groups(int Npeaks, double zstop, int first_call)
 		}
 
 	      /* switching PBCs off for the check */
-	      storex=subbox.pbc_x;
-	      storey=subbox.pbc_y;
-	      storez=subbox.pbc_z;
-	      subbox.pbc_x=subbox.pbc_y=subbox.pbc_z=0;
+	      storex=subbox.pbc[_x_];
+	      storey=subbox.pbc[_y_];
+	      storez=subbox.pbc[_z_];
+	      subbox.pbc[_x_]=subbox.pbc[_y_]=subbox.pbc[_z_]=0;
 
 	      for (ig1=0; ig1<neigrp; ig1++)
 		{
@@ -433,9 +360,9 @@ int build_groups(int Npeaks, double zstop, int first_call)
 		      thisgroup=neigh[ig1];
 
 		      /* loop on replications */
-		      for (irep=0; irep<plc.Nreplications; irep++) // ???
-			if (frag[iz].Fmax < plc.repls[irep].F1 &&
-			    frag[iz].Fmax > plc.repls[irep].F2)
+		      for (irep=0; irep<plc.Nreplications; irep++)
+			if (!(frag[iz].Fmax > plc.repls[irep].F1 || 
+			      groups[thisgroup].Flast < plc.repls[irep].F2))
 			  {
 			    replicate[0]=plc.repls[irep].i;
 			    replicate[1]=plc.repls[irep].j;
@@ -468,9 +395,9 @@ int build_groups(int Npeaks, double zstop, int first_call)
 	      
 		}
 	      /* restoring PBCs */
-	      subbox.pbc_x=storex;
-	      subbox.pbc_y=storey;
-	      subbox.pbc_z=storez;
+	      subbox.pbc[_x_]=storex;
+	      subbox.pbc[_y_]=storey;
+	      subbox.pbc[_z_]=storez;
 
 	    }
 	  else if (plc.Fstart>0. && frag[iz].Fmax<plc.Fstart)
@@ -573,8 +500,7 @@ int build_groups(int Npeaks, double zstop, int first_call)
 
 	 /* if the points touches only one group, check whether to accrete the point on it */
 
-	 condition_for_accretion(ibox,jbox,kbox,iz
-		   ,frag[iz].Fmax,neigh[0],&d2,&r2);
+	 condition_for_accretion(1,ibox,jbox,kbox,iz,frag[iz].Fmax,neigh[0],&d2,&r2);
 
 	   if (d2<r2)
 	     {
@@ -613,12 +539,11 @@ int build_groups(int Npeaks, double zstop, int first_call)
           accretion on a group?
  	  *********************/
 
-	 best_ratio=pow(10.*subbox.Lgwbl_x,2.0);
+	 best_ratio=pow(10.*subbox.Lgwbl[_x_],2.0);
 	 accgrp=-1;
 	 for (ig1=0; ig1<neigrp; ig1++)
 	   {
-	     condition_for_accretion(ibox,jbox,kbox,iz
-		       ,frag[iz].Fmax,neigh[ig1],&d2,&r2);
+	     condition_for_accretion(2,ibox,jbox,kbox,iz,frag[iz].Fmax,neigh[ig1],&d2,&r2);
 	       ratio=d2/r2;
 	     if (ratio<1.0 && ratio<best_ratio)
 	     {
@@ -701,12 +626,11 @@ int build_groups(int Npeaks, double zstop, int first_call)
 	       if (neigh[nn]>FILAMENT)
 		 neigrp++;
 
-	     best_ratio=pow(10.*subbox.Lgwbl_x,2.0);
+	     best_ratio=pow(10.*subbox.Lgwbl[_x_],2.0);
 	     accgrp=-1;
 	     for (ig1=0; ig1<neigrp; ig1++)
 	       {
-		 condition_for_accretion(ibox,jbox,kbox,iz
-			   ,frag[iz].Fmax,neigh[ig1],&d2,&r2);
+		 condition_for_accretion(3,ibox,jbox,kbox,iz,frag[iz].Fmax,neigh[ig1],&d2,&r2);
 		   ratio=d2/r2;
 		 if (ratio<best_ratio)
 		   {
@@ -754,17 +678,23 @@ int build_groups(int Npeaks, double zstop, int first_call)
 
        }
 
-      /* Checks whether to accrete all the neighbouring filaments */
+      /* Checks whether to accrete all the neighbouring filaments;
+	 first it checks conditions for all filament particles,  
+	 then it accretes those that should */
 
       if (accrflag && nf && !skip)
-      	for (ifil=0; ifil<nf; ifil++)
-      	  {
-
-	    condition_for_accretion(fil_list[ifil][0], fil_list[ifil][1],fil_list[ifil][2],
-				    fil_list[ifil][3],frag[iz].Fmax,to_group, &d2,&r2);
-
-	    if (d2<r2)
+	{
+	  for (ifil=0; ifil<nf; ifil++)
+	    {
+	      condition_for_accretion(4,fil_list[ifil][0], fil_list[ifil][1],fil_list[ifil][2],
+				      fil_list[ifil][3],frag[iz].Fmax,to_group, &d2,&r2);
+	      if (d2<r2)
+		fil_list[ifil][3]*=-1;
+	    }
+	  for (ifil=0; ifil<nf; ifil++)
+	    if (fil_list[ifil][3]<0)
 	      {
+		fil_list[ifil][3]*=-1;
 		accretion(to_group, fil_list[ifil][0], fil_list[ifil][1],
 			  fil_list[ifil][2],fil_list[ifil][3],frag[iz].Fmax);
 		groups[FILAMENT].Mass--;
@@ -778,15 +708,15 @@ int build_groups(int Npeaks, double zstop, int first_call)
 	{
 
 	  /* first write to disc what you have */
-	  if (write_PLC())
+	  if (write_PLC(0))
 	    return 1;
 	  plc.Nstored=0;
 
 	  /* switching PBCs off for the check */
-	  storex=subbox.pbc_x;
-	  storey=subbox.pbc_y;
-	  storez=subbox.pbc_z;
-	  subbox.pbc_x=subbox.pbc_y=subbox.pbc_z=0;
+	  storex=subbox.pbc[_x_];
+	  storey=subbox.pbc[_y_];
+	  storez=subbox.pbc[_z_];
+	  subbox.pbc[_x_]=subbox.pbc[_y_]=subbox.pbc[_z_]=0;
 
 	  last_check_done=1;
 	  for (ig1=FILAMENT+1; ig1<=ngroups; ig1++)
@@ -832,16 +762,16 @@ int build_groups(int Npeaks, double zstop, int first_call)
 	    }
 
 	  /* restoring PBCs */
-	  subbox.pbc_x=storex;
-	  subbox.pbc_y=storey;
-	  subbox.pbc_z=storez;
+	  subbox.pbc[_x_]=storex;
+	  subbox.pbc[_y_]=storey;
+	  subbox.pbc[_z_]=storez;
 
 	  if (!ThisTask)
 	    printf("[%s] PLC: Last check on groups done, Task 0 stored %d halos (max:%d)\n",
 		   fdate(),plc.Nstored,plc.Nmax);
 	  cputime.plc += MPI_Wtime()-cputmp;
 
-	  if (write_PLC())
+	  if (write_PLC(1))
 	    return 1;
 	}
 #endif
@@ -857,6 +787,41 @@ int build_groups(int Npeaks, double zstop, int first_call)
 	       this_z/(nstep_p)*5,frag[iz].Fmax,
 	       frag[iz].Fmax-1.0
 	       );
+
+      /* Give output if relevant */
+      while (this_z==nstep-1 || frag[iz].Fmax < outputs.F[iout])
+	{
+	  cputmp=MPI_Wtime();
+
+	  if (!ThisTask)
+	    printf("[%s] Writing output at z=%f\n",fdate(), 
+		   outputs.z[iout]);
+
+	  if (write_catalog(iout))
+	    return 1;
+
+	  if (params.WriteSnapshot && write_snapshot(iout))
+	    return 1;
+
+	  if (compute_mf(iout))
+	    return 1;
+
+	  if (iout==outputs.n-1)
+	    {
+#ifdef TIMELESS_SNAPSHOT
+	      if (params.WriteTimelessSnapshot && write_timeless_snapshot())
+		return 1;
+#endif
+	      if (write_histories())
+		return 1;
+	    }
+
+	  cputime.io += MPI_Wtime() - cputmp;
+
+	  iout++;
+	  if (this_z==nstep-1)
+	    break;
+	}
 
     }
 
@@ -1122,7 +1087,7 @@ void accretion(int group,int i,int j,int k,int indx,PRODFLOAT F)
 /* CONDITIONS */
 
 
-void condition_for_accretion(int i,int j,int k,int ind,PRODFLOAT Fmax, int grp,double *dd,double *rr)
+void condition_for_accretion(int call, int i,int j,int k,int ind,PRODFLOAT Fmax, int grp,double *dd,double *rr)
 {
   /* Condition for accretion */
 
@@ -1143,12 +1108,12 @@ void condition_for_accretion(int i,int j,int k,int ind,PRODFLOAT Fmax, int grp,d
       dy=distance(1,&obj1,&obj2);
       d2+=dy*dy;
       if (d2<*rr)
-	{
-	  dz=distance(2,&obj1,&obj2);
-	  d2+=dz*dz;
-	  if (d2<=*rr)
-	    *dd=d2;
-	}
+  	{
+  	  dz=distance(2,&obj1,&obj2);
+  	  d2+=dz*dz;
+  	  if (d2<=*rr)
+  	    *dd=d2;
+  	}
     }
 
 }
@@ -1432,8 +1397,7 @@ PRODFLOAT q2x(int i,pos_data *myobj,int order)
   /* it moves an object from the Lagrangian to the Eulerian space,
    in sub-box coordinates */
 
-  int p;
-  PRODFLOAT L,pos;
+  PRODFLOAT pos;
 
 #ifndef RECOMPUTE_DISPLACEMENTS
 
@@ -1449,7 +1413,7 @@ PRODFLOAT q2x(int i,pos_data *myobj,int order)
 
 #else
 
-// IMPLEMENTARE L'INTERPOLAZIONE PRIMA DEL PRIMO REDSHIFT
+// CAMBIARE
 
   pos = myobj->q[i] + (myobj->v[i]*(1.-myobj->w) + myobj->v_aft[i]*myobj->w); // * myobj->D;
 #ifdef TWO_LPT
@@ -1464,26 +1428,10 @@ PRODFLOAT q2x(int i,pos_data *myobj,int order)
 
 #endif
 
-  switch (i)
+  if (subbox.pbc[i])
     {
-    case 0:
-      p=subbox.pbc_x;
-      L=(double)subbox.Lgwbl_x;
-      break;
-    case 1:
-      p=subbox.pbc_y;
-      L=(double)subbox.Lgwbl_y;
-      break;
-    case 2:
-      p=subbox.pbc_z;
-      L=(double)subbox.Lgwbl_z;
-      break;
-    }
-
-  if (p)
-    {
-      if (pos>=L) pos-=L;
-      if (pos<0)  pos+=L;
+      if (pos>=subbox.Lgwbl[i]) pos-=subbox.Lgwbl[i];
+      if (pos< 0.0) pos+=subbox.Lgwbl[i];
     }
 
   return pos;
@@ -1528,32 +1476,16 @@ PRODFLOAT vel(int i,pos_data *myobj)
 
 PRODFLOAT distance(int i,pos_data *obj1,pos_data *obj2)
 {
-  PRODFLOAT d,L;
-  int p;
-
-  switch (i)
-    {
-    case 0:
-      p=subbox.pbc_x;
-      L=(double)subbox.Lgwbl_x;
-      break;
-    case 1:
-      p=subbox.pbc_y;
-      L=(double)subbox.Lgwbl_y;
-      break;
-    case 2:
-      p=subbox.pbc_z;
-      L=(double)subbox.Lgwbl_z;
-      break;
-    }	
+  PRODFLOAT d;
 
   /* here displacements are computed at the ORDER_FOR_GROUPS order */
   d=q2x(i,obj2,ORDER_FOR_GROUPS)-q2x(i,obj1,ORDER_FOR_GROUPS);
 
-  if (p)
+  if (subbox.pbc[i])
     {
-      if (d > L/2) d -= L;
-      if (d < -L/2.) d += L;
+      PRODFLOAT halfL=(PRODFLOAT)subbox.Lgwbl[i]/2.;
+      if (d >  halfL) d -= subbox.Lgwbl[i];
+      if (d < -halfL) d += subbox.Lgwbl[i];
     }
 
   return d;
@@ -1567,46 +1499,31 @@ void update(pos_data *obj1, pos_data *obj2)
 {
   /* Updates the centre position of group */
 
-  double d,L;
-  int i,p;
+  double d;
+  int i;
 
   for (i=0;i<3;i++)
     {
-      switch (i)
-	{
-	case 0:
-	  p=subbox.pbc_x;
-	  L=(double)subbox.Lgwbl_x;
-	  break;
-	case 1:
-	  p=subbox.pbc_y;
-	  L=(double)subbox.Lgwbl_y;
-	  break;
-	case 2:
-	  p=subbox.pbc_z;
-	  L=(double)subbox.Lgwbl_z;
-	  break;
-	}
-
       d = fabs(obj1->q[i] - obj2->q[i]);
-      if (!p)
+      if (!subbox.pbc[i])
         obj1->q[i] = (obj1->q[i]*obj1->M + obj2->q[i]*obj2->M)/(double)(obj1->M + obj2->M);
       else
 	{
+	  PRODFLOAT halfL=subbox.Lgwbl[i]/2.;
 	  /* PBC must be considered */
-	  if (d <= L/2.)
+	  if (d <= halfL)
 	    /* in this case the distance without PBC is correct */
 	    obj1->q[i] = (obj1->q[i]*obj1->M + obj2->q[i]*obj2->M)/(double)(obj1->M + obj2->M);
-	  else if (obj1->q[i] > L/2)
+	  else if (obj1->q[i] > halfL)
 	    /* in this case xc is in the second half, and obj2->q[i] -> obj2->q[i]+Lgrid */
-	    obj1->q[i] = (obj1->q[i]*obj1->M+(obj2->q[i]+L)*obj2->M)/(double)(obj1->M+obj2->M);
+	    obj1->q[i] = (obj1->q[i]*obj1->M+(obj2->q[i]+subbox.Lgwbl[i])*obj2->M)/(double)(obj1->M+obj2->M);
 	  else
 	    /* in this case xc is in the first half, and obj2->q[i] -> obj2->q[i]-Lgrid */
-	    obj1->q[i] = (obj1->q[i]*obj1->M+(obj2->q[i]-L)*obj2->M)/(double)(obj1->M+obj2->M);
+	    obj1->q[i] = (obj1->q[i]*obj1->M+(obj2->q[i]-subbox.Lgwbl[i])*obj2->M)/(double)(obj1->M+obj2->M);
 
 	  /* checks PBC again */
-	  if (p && obj1->q[i]>L) obj1->q[i]-=L;
-	  if (p && obj1->q[i]<0) obj1->q[i]+=L;
+	  if (subbox.pbc[i] && obj1->q[i]>subbox.Lgwbl[i]) obj1->q[i]-=subbox.Lgwbl[i];
+	  if (subbox.pbc[i] && obj1->q[i]<0) obj1->q[i]+=subbox.Lgwbl[i];
 	}
 
       /* velocity */
@@ -1658,8 +1575,8 @@ double condition_PLC(PRODFLOAT F)
   for (i=0, condition=0.0; i<3; i++)
     {
       /* displacement is done up to ORDER_FOR_CATALOG */
-      diff1 = q2x(i,&obj1,ORDER_FOR_CATALOG) + start[i] - ( plc.center[i] -
-					  Lgrid[i]*replicate[i] );
+      diff1 = q2x(i,&obj1,ORDER_FOR_CATALOG) + subbox.stabl[i] - ( plc.center[i] -
+					  MyGrids[0].GSglobal[i]*replicate[i] );
       condition+=diff1*diff1;
     }
 
@@ -1690,7 +1607,7 @@ int store_PLC(PRODFLOAT F)
     {
       /* displacement is done up to ORDER_FOR_CATALOG */
       x[i] = params.InterPartDist * 
-	( q2x(i,&obj1,ORDER_FOR_CATALOG) + start[i] - ( plc.center[i] - Lgrid[i]*replicate[i] ) );
+	( q2x(i,&obj1,ORDER_FOR_CATALOG) + subbox.stabl[i] - ( plc.center[i] - MyGrids[0].GSglobal[i]*replicate[i] ) );
     }
 
   coord_transformation_cartesian_polar(x,&rhor,&theta,&phi);
@@ -1717,6 +1634,12 @@ int store_PLC(PRODFLOAT F)
       /* plcgroups[plc.Nstored].rhor=rhor; */
       /* plcgroups[plc.Nstored].theta=theta; */
       /* plcgroups[plc.Nstored].phi=phi; */
+
+
+      int iz = (int)((plcgroups[plc.Nstored].z - params.LastzForPLC)/plc.delta_z);
+      if (iz==plc.nzbins)
+	iz--;
+      plc.nz[iz]+=1.0;
 
       plc.Nstored++;
     }
@@ -1786,7 +1709,7 @@ int quick_build_groups(int Npeaks)
      no PLC, no counters, no outputs */
   int merge[NV][NV], neigh[NV], fil_list[NV][4];
   int nn,ifil,neigrp,pos;
-  int iz,kk,i1,j1,k1,skip;
+  int iz,i1,j1,k1,skip;
   int ig3,small,large,nf,to_group,accgrp,ig1,ig2;
   int accrflag,nstep,nmerge,nstep_p,peak_cond;
   double ratio,best_ratio,d2,r2;
@@ -1825,41 +1748,23 @@ int quick_build_groups(int Npeaks)
 	neigh[i1]=0;          // number of neighbours
 
       /* grid coordinates from the indices (sub-box coordinates) */
-      ibox = frag_pos[iz]%subbox.Lgwbl_x;
-      kk   = frag_pos[iz]/subbox.Lgwbl_x;
-      jbox = kk%subbox.Lgwbl_y;
-      kbox = kk/subbox.Lgwbl_y;
+      INDEX_TO_COORD(frag_pos[iz],ibox,jbox,kbox,subbox.Lgwbl);
 
       /* skips if the point is at the border (and PBCs are not active) */
       skip=0;
-      if ( !subbox.pbc_x && (ibox==0 || ibox==subbox.Lgwbl_x-1) ) ++skip;
-      if ( !subbox.pbc_y && (jbox==0 || jbox==subbox.Lgwbl_y-1) ) ++skip;
-      if ( !subbox.pbc_z && (kbox==0 || kbox==subbox.Lgwbl_z-1) ) ++skip;
+      if ( !subbox.pbc[_x_] && (ibox==0 || ibox==subbox.Lgwbl[_x_]-1) ) ++skip;
+      if ( !subbox.pbc[_y_] && (jbox==0 || jbox==subbox.Lgwbl[_y_]-1) ) ++skip;
+      if ( !subbox.pbc[_z_] && (kbox==0 || kbox==subbox.Lgwbl[_z_]-1) ) ++skip;
 
-      /* particle coordinates in the box, imposing PBCs */
-      global_x = ibox + subbox.stabl_x;
-      if (global_x<0) global_x+=MyGrids[0].GSglobal[0];
-      if (global_x>=MyGrids[0].GSglobal[0]) global_x-=MyGrids[0].GSglobal[0];
-      global_y = jbox + subbox.stabl_y;
-      if (global_y<0) global_y+=MyGrids[0].GSglobal[1];
-      if (global_y>=MyGrids[0].GSglobal[1]) global_y-=MyGrids[0].GSglobal[1];
-      global_z = kbox + subbox.stabl_z;
-      if (global_z<0) global_z+=MyGrids[0].GSglobal[2];
-      if (global_z>=MyGrids[0].GSglobal[2]) global_z-=MyGrids[0].GSglobal[2];
-#ifdef ROTATE_BOX
-      particle_name=(long long)global_x + 
-	  ( (long long)global_z + 
-	    (long long)global_y * (long long)MyGrids[0].GSglobal[2] ) * 
-	  (long long)MyGrids[0].GSglobal[0];
-#else
-      particle_name=(long long)global_x + 
-	  ( (long long)global_y + 
-	    (long long)global_z * (long long)MyGrids[0].GSglobal[1] ) * 
-	  (long long)MyGrids[0].GSglobal[0];
-#endif
-      good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
-			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
-			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
+      particle_name = 
+	COORD_TO_INDEX((long long)((ibox + subbox.stabl[_x_] + MyGrids[0].GSglobal[_x_])%MyGrids[0].GSglobal[_x_]),
+		       (long long)((jbox + subbox.stabl[_y_] + MyGrids[0].GSglobal[_y_])%MyGrids[0].GSglobal[_y_]),
+		       (long long)((kbox + subbox.stabl[_z_] + MyGrids[0].GSglobal[_z_])%MyGrids[0].GSglobal[_z_]),
+		       MyGrids[0].GSglobal);
+
+      good_particle = ( ibox>=subbox.safe[_x_] && ibox<subbox.Lgwbl[_x_]-subbox.safe[_x_] && 
+			jbox>=subbox.safe[_y_] && jbox<subbox.Lgwbl[_y_]-subbox.safe[_y_] && 
+			kbox>=subbox.safe[_z_] && kbox<subbox.Lgwbl[_z_]-subbox.safe[_z_] );
 
       if (!skip)
 	{
@@ -1870,34 +1775,34 @@ int quick_build_groups(int Npeaks)
 	      switch (nn)
 		{
 		case 0:
-		  i1=( subbox.pbc_x && ibox==0 ? subbox.Lgwbl_x-1 : ibox-1 );
+		  i1=( subbox.pbc[_x_] && ibox==0 ? subbox.Lgwbl[_x_]-1 : ibox-1 );
 		  j1=jbox;
 		  k1=kbox;
 		  break;
 		case 1:
-		  i1=( subbox.pbc_x && ibox==subbox.Lgwbl_x-1 ? 0 : ibox+1 );
+		  i1=( subbox.pbc[_x_] && ibox==subbox.Lgwbl[_x_]-1 ? 0 : ibox+1 );
 		  j1=jbox;
 		  k1=kbox;
 		  break;
 		case 2:
 		  i1=ibox;
-		  j1=( subbox.pbc_y && jbox==0 ? subbox.Lgwbl_y-1 : jbox-1 );
+		  j1=( subbox.pbc[_y_] && jbox==0 ? subbox.Lgwbl[_y_]-1 : jbox-1 );
 		  k1=kbox;
 		  break;
 		case 3:
 		  i1=ibox;
-		  j1=( subbox.pbc_y && jbox==subbox.Lgwbl_y-1 ? 0 : jbox+1 );
+		  j1=( subbox.pbc[_y_] && jbox==subbox.Lgwbl[_y_]-1 ? 0 : jbox+1 );
 		  k1=kbox;
 		  break;
 		case 4:
 		  i1=ibox;
 		  j1=jbox;
-		  k1=( subbox.pbc_z && kbox==0 ? subbox.Lgwbl_z-1 : kbox-1 );
+		  k1=( subbox.pbc[_z_] && kbox==0 ? subbox.Lgwbl[_z_]-1 : kbox-1 );
 		  break;
 		case 5:
 		  i1=ibox;
 		  j1=jbox;
-		  k1=( subbox.pbc_z && kbox==subbox.Lgwbl_z-1 ? 0 : kbox+1 );
+		  k1=( subbox.pbc[_z_] && kbox==subbox.Lgwbl[_z_]-1 ? 0 : kbox+1 );
 		  break;
 		}
 
@@ -1986,7 +1891,7 @@ int quick_build_groups(int Npeaks)
 	  **********************************************************************/
 	 /* if the points touches only one group, check whether to accrete the point on it */
 
-	 condition_for_accretion(ibox,jbox,kbox,iz,frag[iz].Fmax,neigh[0],&d2,&r2);
+	 condition_for_accretion(1,ibox,jbox,kbox,iz,frag[iz].Fmax,neigh[0],&d2,&r2);
 	 if (d2<r2)
 	     {
 	       accrflag=1;
@@ -2007,11 +1912,11 @@ int quick_build_groups(int Npeaks)
 	  **********************************************************************/
 	 /* In this case the point touches more than one group */
 
-	 best_ratio=pow(10.*subbox.Lgwbl_x,2.0);
+	 best_ratio=pow(10.*subbox.Lgwbl[_x_],2.0);
 	 accgrp=-1;
 	 for (ig1=0; ig1<neigrp; ig1++)
 	   {
-	     condition_for_accretion(ibox,jbox,kbox,iz,frag[iz].Fmax,neigh[ig1],&d2,&r2);
+	     condition_for_accretion(2,ibox,jbox,kbox,iz,frag[iz].Fmax,neigh[ig1],&d2,&r2);
 	       ratio=d2/r2;
 	     if (ratio<1.0 && ratio<best_ratio)
 	     {
@@ -2082,11 +1987,11 @@ int quick_build_groups(int Npeaks)
 	       if (neigh[nn]>FILAMENT)
 		 neigrp++;
 
-	     best_ratio=pow(10.*subbox.Lgwbl_x,2.0);
+	     best_ratio=pow(10.*subbox.Lgwbl[_x_],2.0);
 	     accgrp=-1;
 	     for (ig1=0; ig1<neigrp; ig1++)
 	       {
-		 condition_for_accretion(ibox,jbox,kbox,iz,frag[iz].Fmax,neigh[ig1],&d2,&r2);
+		 condition_for_accretion(3,ibox,jbox,kbox,iz,frag[iz].Fmax,neigh[ig1],&d2,&r2);
 		   ratio=d2/r2;
 		 if (ratio<best_ratio)
 		   {
@@ -2122,16 +2027,23 @@ int quick_build_groups(int Npeaks)
 	 /* end of cases */
        }
 
-      /* Checks whether to accrete all the neighbouring filaments */
-
+      /* Checks whether to accrete all the neighbouring filaments;
+	 first it checks conditions for all filament particles,  
+	 then it accretes those that should */
       if (accrflag && nf && !skip)
-      	for (ifil=0; ifil<nf; ifil++)
-      	  {
-	    condition_for_accretion(fil_list[ifil][0], fil_list[ifil][1],fil_list[ifil][2],
-				    fil_list[ifil][3],frag[iz].Fmax,to_group, &d2,&r2);
-
-	    if (d2<r2)
+	{
+	  for (ifil=0; ifil<nf; ifil++)
+	    {
+	      condition_for_accretion(4,fil_list[ifil][0], fil_list[ifil][1],fil_list[ifil][2],
+				      fil_list[ifil][3],frag[iz].Fmax,to_group, &d2,&r2);
+	      if (d2<r2)
+		fil_list[ifil][3]*=-1;
+	    }
+	  
+	  for (ifil=0; ifil<nf; ifil++)
+	    if (fil_list[ifil][3]<0)
 	      {
+		fil_list[ifil][3]*=-1;
 		accretion(to_group, fil_list[ifil][0], fil_list[ifil][1],
 			  fil_list[ifil][2],fil_list[ifil][3],frag[iz].Fmax);
 		groups[FILAMENT].Mass--;
@@ -2172,10 +2084,10 @@ int update_map(unsigned int *nadd)
       
       for (i1=ig-size; i1<ig+size; i1++)
 	{
-	  if (i1<0 || i1>=subbox.Lgwbl_x)
+	  if (i1<0 || i1>=subbox.Lgwbl[_x_])
 		{
-		  if (subbox.pbc_x)
-		    i = ( i1<0 ? i1+subbox.Lgwbl_x : i1-subbox.Lgwbl_x );
+		  if (subbox.pbc[_x_])
+		    i = ( i1<0 ? i1+subbox.Lgwbl[_x_] : i1-subbox.Lgwbl[_x_] );
 		  else
 		    i = -1;
 		}
@@ -2184,10 +2096,10 @@ int update_map(unsigned int *nadd)
 
 	  for (j1=jg-size; j1<jg+size; j1++)
 	    {
-	      if (j1<0 || j1>=subbox.Lgwbl_y)
+	      if (j1<0 || j1>=subbox.Lgwbl[_y_])
 		{
-		  if (subbox.pbc_y)
-		    j = ( j1<0 ? j1+subbox.Lgwbl_y : j1-subbox.Lgwbl_y );
+		  if (subbox.pbc[_y_])
+		    j = ( j1<0 ? j1+subbox.Lgwbl[_y_] : j1-subbox.Lgwbl[_y_] );
 		  else
 		    j = -1;
 		}
@@ -2196,10 +2108,10 @@ int update_map(unsigned int *nadd)
 	      
 	      for (k1=kg-size; k1<kg+size; k1++)
 		{
-		  if (k1<0 || k1>=subbox.Lgwbl_z)
+		  if (k1<0 || k1>=subbox.Lgwbl[_z_])
 		    {
-		      if (subbox.pbc_z)
-			k = ( k1<0 ? k1+subbox.Lgwbl_z : k1-subbox.Lgwbl_z );
+		      if (subbox.pbc[_z_])
+			k = ( k1<0 ? k1+subbox.Lgwbl[_z_] : k1-subbox.Lgwbl[_z_] );
 		      else
 			k = -1;
 		    }

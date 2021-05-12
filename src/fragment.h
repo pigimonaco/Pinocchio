@@ -75,7 +75,7 @@ typedef struct
 } Segment_data;
 Segment_data Segment;
 
-void condition_for_accretion(int, int, int, int, PRODFLOAT, int, double *, double *);
+void condition_for_accretion(int, int, int, int, int, PRODFLOAT, int, double *, double *); // LEVARE primo argomento
 void condition_for_merging(PRODFLOAT, int, int, int *);
 void set_obj(int, PRODFLOAT, pos_data *);
 void set_obj_vel(int, PRODFLOAT, pos_data *);

@@ -56,21 +56,21 @@ int distribute(void)
   int log_ntask, bit, receiver, sender;
 
   /* this defines the box that the task possesses in the FFT space */
-  my_fft_box[0] = MyGrids[0].GSstart[0];
-  my_fft_box[1] = MyGrids[0].GSstart[1];
-  my_fft_box[2] = MyGrids[0].GSstart[2];
-  my_fft_box[3] = MyGrids[0].GSlocal[0];
-  my_fft_box[4] = MyGrids[0].GSlocal[1];
-  my_fft_box[5] = MyGrids[0].GSlocal[2];
+  my_fft_box[0] = MyGrids[0].GSstart[_x_];
+  my_fft_box[1] = MyGrids[0].GSstart[_y_];
+  my_fft_box[2] = MyGrids[0].GSstart[_z_];
+  my_fft_box[3] = MyGrids[0].GSlocal[_x_];
+  my_fft_box[4] = MyGrids[0].GSlocal[_y_];
+  my_fft_box[5] = MyGrids[0].GSlocal[_z_];
 
   /* this defines the box that the task possesses in the subbox space 
      (the starting coordinate may be negative, so it is regularized with PBCs) */
-  my_subbox[0] = subbox.stabl_x;
-  my_subbox[1] = subbox.stabl_y;
-  my_subbox[2] = subbox.stabl_z;
-  my_subbox[3] = subbox.Lgwbl_x;
-  my_subbox[4] = subbox.Lgwbl_y;
-  my_subbox[5] = subbox.Lgwbl_z;
+  my_subbox[0] = subbox.stabl[_x_];
+  my_subbox[1] = subbox.stabl[_y_];
+  my_subbox[2] = subbox.stabl[_z_];
+  my_subbox[3] = subbox.Lgwbl[_x_];
+  my_subbox[4] = subbox.Lgwbl[_y_];
+  my_subbox[5] = subbox.Lgwbl[_z_];
 
   /* let's synchronize the tasks here */
   fflush(stdout);
@@ -153,13 +153,9 @@ int distribute(void)
 int intersection(int *fbox, int *sbox, int *ibox)
 {
 
-  unsigned int istart[3], istop[3], istart2[3], istop2[3], dim, Nint, Lbox[3], 
+  unsigned int istart[3], istop[3], istart2[3], istop2[3], dim, Nint,
     stop1, stop2, this, off;
   unsigned int ISTARTx, ISTOPx, ISTARTy, ISTOPy, ISTARTz, ISTOPz, ax, ay, az;
-  /* this will be useless when merging with pfft */
-  Lbox[0]=MyGrids[0].GSglobal[0];
-  Lbox[1]=MyGrids[0].GSglobal[1];
-  Lbox[2]=MyGrids[0].GSglobal[2];
 
   /* intersection of the two boxes is considered dimension by dimension */
   Nint=1;
@@ -167,12 +163,12 @@ int intersection(int *fbox, int *sbox, int *ibox)
     {
       /* in case, fix negative starting point */
       if (sbox[dim]<0)
-	sbox[dim]+=Lbox[dim];
+	sbox[dim]+=MyGrids[0].GSglobal[dim];
 
       /* first stopping point for subbox is at most the global box edge */
       stop1=fbox[dim]+fbox[dim+3];
-      if (sbox[dim]+sbox[dim+3] > Lbox[dim])
-	stop2=Lbox[dim];
+      if (sbox[dim]+sbox[dim+3] > MyGrids[0].GSglobal[dim])
+	stop2=MyGrids[0].GSglobal[dim];
       else
 	stop2=sbox[dim]+sbox[dim+3];
 
@@ -182,9 +178,9 @@ int intersection(int *fbox, int *sbox, int *ibox)
 
       /* if the subbox goes beyond the global box edge, 
 	 apply PBCs to the other segment and check the intersection */
-      if ( (stop2=sbox[dim]+sbox[dim+3]) > Lbox[dim] )
+      if ( (stop2=sbox[dim]+sbox[dim+3]) > MyGrids[0].GSglobal[dim] )
 	{
-	  stop2 = stop2%Lbox[dim];
+	  stop2 = stop2%MyGrids[0].GSglobal[dim];
 	  istart2[dim] = ( fbox[dim] > 0 ? fbox[dim] : 0);
 	  istop2[dim] = ( stop1 < stop2 ? stop1 : stop2 );
 	}
@@ -533,18 +529,20 @@ unsigned int fft_space_index(unsigned int pos, int *box)
      (2) from that to global position without PBCs,
      (3) then we impose PBCs
      (4) then we compute the position in the local FFT box
-     (5) and finally we compute the particle index 
-     (these are the logical steps, formulas are a bit more compact)
+     (5) and finally we compute the local particle index 
+     (these are the logical steps, formulas are more compact)
   */
 
-  unsigned int ip = pos % box[3];
-  unsigned int kk = pos / box[3];
-  unsigned int jp = kk % box[4];
-  unsigned int kp = kk / box[4];
+  unsigned int ip, jp, kp;
 
-  return ( (ip + box[0]) % MyGrids[0].GSglobal[0] - MyGrids[0].GSstart[0]) + (MyGrids[0].GSlocal[0]) * 
-    ( ( (jp + box[1]) % MyGrids[0].GSglobal[1] - MyGrids[0].GSstart[1]) 
-      + ( (kp + box[2]) % MyGrids[0].GSglobal[2] - MyGrids[0].GSstart[2]) * MyGrids[0].GSlocal[1]);
+  INDEX_TO_COORD(pos, ip, jp, kp, (box+3));
+
+  return 
+    COORD_TO_INDEX((ip + box[0]) % MyGrids[0].GSglobal[_x_] - MyGrids[0].GSstart[_x_],
+		   (jp + box[1]) % MyGrids[0].GSglobal[_y_] - MyGrids[0].GSstart[_y_],
+		   (kp + box[2]) % MyGrids[0].GSglobal[_z_] - MyGrids[0].GSstart[_z_],
+		   MyGrids[0].GSlocal);
+
 }
 
 
@@ -553,25 +551,19 @@ unsigned int subbox_space_index(unsigned int pos, int *box)
   /* here we go 
      (1) from index pos to relative position in intersection,
      (2) from that to global position, imposting PBCs,
-     (3) then we compute the position in the local subbox 
+     (3) then we compute the position in the local subbox, imposing PBCs again,
      (4) and finally the index */
 
-  unsigned int ip = pos % box[3];
-  unsigned int kk = pos / box[3];
-  unsigned int jp = kk % box[4];
-  unsigned int kp = kk / box[4];
+  unsigned int ip, jp, kp;
 
-  int sub_x = ((ip + box[0])%MyGrids[0].GSglobal[0] - subbox.stabl_x + MyGrids[0].GSglobal[0])%MyGrids[0].GSglobal[0];
-  int sub_y = ((jp + box[1])%MyGrids[0].GSglobal[1] - subbox.stabl_y + MyGrids[0].GSglobal[1])%MyGrids[0].GSglobal[1];
-  int sub_z = ((kp + box[2])%MyGrids[0].GSglobal[2] - subbox.stabl_z + MyGrids[0].GSglobal[2])%MyGrids[0].GSglobal[2];
+  INDEX_TO_COORD(pos, ip, jp, kp, (box+3)); /* coords within the intersection */
 
-  int rr=sub_x + (sub_y + sub_z*subbox.Lgwbl_y)*subbox.Lgwbl_x;
+  return 
+    COORD_TO_INDEX(((ip + box[_x_])%MyGrids[0].GSglobal[_x_] - subbox.stabl[_x_] + MyGrids[0].GSglobal[_x_])%MyGrids[0].GSglobal[_x_],
+		   ((jp + box[_y_])%MyGrids[0].GSglobal[_y_] - subbox.stabl[_y_] + MyGrids[0].GSglobal[_y_])%MyGrids[0].GSglobal[_y_],
+		   ((kp + box[_z_])%MyGrids[0].GSglobal[_z_] - subbox.stabl[_z_] + MyGrids[0].GSglobal[_z_])%MyGrids[0].GSglobal[_z_],
+		   subbox.Lgwbl);
 
-  if ( (rr<0) || (rr>subbox.Npart) ) 
-    printf(" %d   %d %d %d   %d %d %d    %d\n",
-	   pos, ip, jp, kp, sub_x, sub_y, sub_z, sub_x + (sub_y + sub_z*subbox.Lgwbl_y)*subbox.Lgwbl_x);
-
-  return sub_x + (sub_y + sub_z*subbox.Lgwbl_y)*subbox.Lgwbl_x;
 }
 
 

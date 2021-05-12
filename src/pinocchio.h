@@ -48,9 +48,9 @@
 #endif
 
 /* this library is used to vectorize the computation of collapse times */
-#if !(defined(__aarch64__) || defined(__arm__))
-#include <immintrin.h>
-#endif
+/* #if !(defined(__aarch64__) || defined(__arm__)) */
+/* #include <immintrin.h> */
+/* #endif */
 
 #define ALIGN 32
 
@@ -70,7 +70,10 @@
 #define TWO_LPT
 #endif
 
-// SI PUO` NON MANTENERE
+/* these templates define how to pass from coordinates to indices */
+#define INDEX_TO_COORD(I,X,Y,Z,L) ({Z=(I)%L[_z_]; int _KK_=(I)/L[_z_]; Y=_KK_%L[_y_]; X=_KK_/L[_y_];})
+#define COORD_TO_INDEX(X,Y,Z,L) ((Z) + L[_z_]*((Y) + L[_y_]*(X)))
+
 #define _x_ 0
 #define _y_ 1
 #define _z_ 2
@@ -117,6 +120,7 @@ extern int ThisTask,NTasks;
 /* extern int pfft_flags_c2r, pfft_flags_r2c; */
 extern MPI_Comm FFT_Comm;
 
+//#ifdef VETTORIALIZZA
 /* vectorialization */
 #define DVEC_SIZE 4
 
@@ -133,6 +137,7 @@ typedef union
   ivec V;
   int  v[DVEC_SIZE];
 } ivec_u;
+//#endif
 
 typedef struct
 {
@@ -270,11 +275,11 @@ typedef struct
     StartingzForPLC, LastzForPLC, InputSpectrum_UnitLength_in_cm, WDM_PartMass_in_kev, 
     BoundaryLayerFactor, Largest, MaxMemPerParticle, k_for_GM, PredPeakFactor, PLCAperture,
     PLCCenter[3], PLCAxis[3];
-  char RunFlag[SBLENGTH],DataDir[SBLENGTH],TabulatedEoSfile[LBLENGTH],ParameterFile[LBLENGTH],
+  char RunFlag[SBLENGTH],DumpDir[SBLENGTH],TabulatedEoSfile[LBLENGTH],ParameterFile[LBLENGTH],
     OutputList[LBLENGTH],FileWithInputSpectrum[LBLENGTH],CTtableFile[LBLENGTH];
-  int GridSize[3],WriteRmax, WriteFmax, WriteVmax, 
+  int GridSize[3],WriteProducts,WriteDensity,DumpProducts,ReadProductsFromDumps,
     CatalogInAscii, DoNotWriteCatalogs, DoNotWriteHistories, WriteSnapshot, WriteTimelessSnapshot,
-    OutputInH100, RandomSeed, MaxMem, NumFiles, MinMassForCat, 
+    OutputInH100, RandomSeed, MaxMem, NumFiles, 
     BoxInH100, simpleLambda, AnalyticMassFunction, MinHaloMass, PLCProvideConeData,
     use_transposed_fft, use_inplace_fft;
 #ifdef READ_PK_TABLE
@@ -293,16 +298,16 @@ extern output_data outputs;
 
 typedef struct
 {
-  unsigned int safe, Npart, Ngood, Nstored, PredNpeaks, maplength;
+  unsigned int Npart, Ngood, Nstored, PredNpeaks, maplength;
   unsigned int Nalloc;
-  int nbox_x,  nbox_y,  nbox_z;
-  int mybox_x, mybox_y, mybox_z;
-  int Lgrid_x, Lgrid_y, Lgrid_z; 
-  int Lgwbl_x, Lgwbl_y, Lgwbl_z; 
-  int start_x, start_y, start_z;
-  int stabl_x, stabl_y, stabl_z;
-  int safe_x,  safe_y,  safe_z;
-  int pbc_x,   pbc_y,   pbc_z;
+  int nbox[3];
+  int mybox[3];
+  int Lgrid[3]; 
+  int Lgwbl[3]; 
+  int start[3];
+  int stabl[3];
+  int safe[3];
+  int pbc[3];
   double SafetyBorder,overhead;
 } subbox_data;
 extern subbox_data subbox;
@@ -359,9 +364,12 @@ typedef struct
 typedef struct
 {
   int Nreplications, Nmax, Nstored, Nhalotot;
+  double Nexpected;
   double Fstart,Fstop,center[3];
   double xvers[3],yvers[3],zvers[3];
   replication_data *repls;
+  int nzbins;
+  double delta_z,*nz;
 } plc_data;
 extern plc_data plc;
 
@@ -385,6 +393,7 @@ extern double f_m, f_rm, espo, f_a, f_ra, f_200, sigmaD0;
 #define NWINT 1000
 extern gsl_integration_workspace *workspace;
 extern gsl_rng *random_generator;
+#define TOLERANCE ((double)1.e-4)
 
 typedef struct
 {
@@ -431,7 +440,6 @@ int factor(int , int ); //QUESTO DOVE STA?
 
 /* prototypes for functions defined in collapse_times.c */
 int compute_collapse_times(int);
-int compute_velocities();
 #ifdef TABULATED_CT
 int initialize_collapse_times(int, int);
 int reset_collapse_times(int);
@@ -448,6 +456,7 @@ void write_in_cvector(int, double *);
 void write_from_cvector(int, double *);
 void write_in_rvector(int, double *);
 void write_from_rvector(int, double *);
+int store_velocities();
 
 // PROBABILMENTE DA TOGLIERE DOPO IL DEBUG
 void dump_cvector(double*, int, int, ptrdiff_t *, ptrdiff_t *,  char *, int);
@@ -474,16 +483,13 @@ int set_grids(void);
 int set_subboxes(void);
 int set_smoothing(void);
 
-/* prototypes in write_fields.c */
-int write_fields(void);
-int write_density(int);
-//int write_product(int, char*);
-
 /* prototypes in write_snapshot.c */
 int write_snapshot(int);
-int write_LPT_snapshot(double);
+int write_products();
+int write_density(int);
+//int write_LPT_snapshot(double);
 #ifdef TIMELESS_SNAPSHOT
-int write_timeless_snapshot(void);
+//int write_timeless_snapshot(void);
 #endif
 
 /* prototypes for functions defined in cosmo.c */
@@ -527,6 +533,8 @@ int read_parameter_file();
 int compute_fmax(void);
 int compute_displacements(void);
 char *fdate(void);
+int dump_products(void);
+int read_dumps(void);
 
 #ifdef TWO_LPT
 /* prototypes for functions defined in LPT.c */
@@ -541,6 +549,8 @@ int fragment_driver(void);
 int get_mapup_bit(unsigned int);
 int get_map_bit(int, int, int);
 void set_mapup_bit(int, int, int);
+int estimate_file_size(void);
+double compute_Nhalos_in_PLC(double, double);
 
 /* prototypes for functions defined in build_groups.c */
 int build_groups(int,double,int);
@@ -551,7 +561,3 @@ int update_map(unsigned int *);
 //#ifdef WHITENOISE
 //int read_white_noise(void);
 //#endif
-
-
-//LEVARE
-int test_GM(void);

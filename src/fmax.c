@@ -61,6 +61,7 @@ int compute_fmax(void)
   /****************************
    * CYCLE ON SMOOTHING RADII *
    ****************************/
+
   for (ismooth=0; ismooth<Smoothing.Nsmooth; ismooth++)
     {
       if (!ThisTask)
@@ -191,7 +192,7 @@ int compute_fmax(void)
   if (!ThisTask)
     printf("[%s] Storing velocities\n",fdate());
 
-  if (compute_velocities())
+  if (store_velocities())
     return 1;
 
   cputmp=MPI_Wtime()-cputmp;
@@ -208,8 +209,8 @@ int compute_fmax(void)
   /* Writes the results in files in the Data/ directory if required */
   cputmp=MPI_Wtime();
 
-  if (write_fields())
-    return 1;
+  /* if (write_fields()) */
+  /*   return 1; */
 
   cputime.io+=MPI_Wtime()-cputmp;
 
@@ -356,3 +357,143 @@ int compute_displacements(void)
 
   return 0;
 }
+
+
+#include <sys/stat.h>
+
+int dump_products()
+{
+  /* dumps fmax products on files to reuse them */
+
+  struct stat dr;
+  FILE *file;
+  char fname[LBLENGTH];
+
+  /* Task 0 checks that the DumpProducts directory exists, or creates it 
+     and writes a summary file to check that one does not start from a different run */
+  if (!ThisTask)
+    {
+      if(stat(params.DumpDir,&dr))
+	  {
+	    printf("Creating directory %s\n",params.DumpDir);
+	    if (mkdir(params.DumpDir,0755))
+	      {
+		printf("ERROR IN CREATING DIRECTORY %s (task 0)\n",params.DumpDir);
+		return 1;
+	      }
+	  }
+
+      sprintf(fname,"%ssummary",params.DumpDir);
+      file=fopen(fname,"w");
+      fprintf(file,"%d   # NTasks\n",NTasks);
+      fprintf(file,"%d   # random seed\n",params.RandomSeed);
+      fprintf(file,"%d   # grid size\n",params.GridSize[0]);
+      fprintf(file,"%d   # length of product_data\n",(int)sizeof(product_data));
+      fclose(file);
+
+      /* dumps the true variances */
+      sprintf(fname,"%sTrueVariance",params.DumpDir);
+      file=fopen(fname,"wb");
+      fwrite(Smoothing.TrueVariance, sizeof(double), Smoothing.Nsmooth, file);
+      fclose(file);
+    }
+
+  /* all tasks must wait for Task 0 to open the directory (if needed) */
+  MPI_Barrier(MPI_COMM_WORLD);
+
+  /* each task writes a separate dump file */
+  sprintf(fname,"%sTask.%d",params.DumpDir,ThisTask);
+  file=fopen(fname,"wb");
+  if (file==0x0)
+    {
+      printf("ERROR on Task %d: could not open file %s\n",ThisTask, fname);
+      return 1;
+    }
+
+  // NOTE: with LEAPFROG one needs to swap also kdensity and kvectors
+  fwrite(products, sizeof(product_data), MyGrids[0].total_local_size, file);
+  fclose(file);
+
+  return 0;
+}
+
+
+int read_dumps()
+{
+  /* reads in fmax products from files */
+  FILE *file;
+  char fname[LBLENGTH],buf[SBLENGTH];
+  int myNTasks, myRandomSeed, myGridSize, myPDlength;
+
+  /* Task 0 checks that the DumpProducts/summary exists and is compatible with the present run */
+  if (!ThisTask)
+    {
+      sprintf(fname,"%ssummary",params.DumpDir);
+      file=fopen(fname,"r");
+      (void)fgets(buf, SBLENGTH, file);
+      sscanf(buf,"%d",&myNTasks);
+      (void)fgets(buf, SBLENGTH, file);
+      sscanf(buf,"%d",&myRandomSeed);
+      (void)fgets(buf, SBLENGTH, file);
+      sscanf(buf,"%d",&myGridSize);
+      (void)fgets(buf, SBLENGTH, file);
+      sscanf(buf,"%d",&myPDlength);
+      fclose(file);
+      
+      int error=0;
+      if (NTasks != myNTasks)
+	{
+	  printf("ERROR: the number of tasks in %s does not match - %d vs %d\n",
+		 fname, myNTasks, NTasks);
+	  error++;
+	}
+      if (params.RandomSeed != myRandomSeed)
+	{
+	  printf("ERROR: the random seed in %s does not match - %d vs %d\n",
+		 fname, myRandomSeed, params.RandomSeed);
+	  error++;
+	}
+      if (params.GridSize[0] != myGridSize)
+	{
+	  printf("ERROR: the grid size in %s does not match - %d vs %d\n",
+		 fname, myGridSize, params.GridSize[0]);
+	  error++;
+	}
+      if (myPDlength != (int)sizeof(product_data))
+	{
+	  printf("ERROR: the length of product_data in %s does not match - %d vs %d\n",
+		 fname, myPDlength, (int)sizeof(product_data));
+	  error++;
+	}
+      if (error)
+	return 1;
+
+      /* reads and broadcasts true variances */
+      sprintf(fname,"%sTrueVariance",params.DumpDir);
+      file=fopen(fname,"rb");
+      if (file==0x0)
+	{
+	  printf("ERROR on Task 0: could not open file %s\n",fname);
+	  return 1;
+	}
+      fread(Smoothing.TrueVariance, sizeof(double), Smoothing.Nsmooth, file);
+      fclose(file);
+    }
+  MPI_Bcast(Smoothing.TrueVariance, Smoothing.Nsmooth, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  
+  /* each task reads a separate dump file */
+  sprintf(fname,"%sTask.%d",params.DumpDir,ThisTask);
+  file=fopen(fname,"rb");
+  if (file==0x0)
+    {
+      printf("ERROR on Task %d: could not open file %s\n",ThisTask, fname);
+      return 1;
+    }
+
+  // NOTE: with LEAPFROG one needs to read in also kdensity and kvectors
+  fread(products, sizeof(product_data), MyGrids[0].total_local_size, file);
+  fclose(file);
+
+  return 0;
+}
+

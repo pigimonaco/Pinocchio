@@ -27,11 +27,8 @@
 #include "pinocchio.h"
 #include "fragment.h"
 
-void WriteBlockName(FILE *,int, char*);
-void my_strcpy(char *,char *, int);
 
 //#define LONGIDS
-#define WRITE_INFO_BLOCK
 //#define POS_IN_KPC
 #define FORCE_PARTICLE_NUMBER      /* DO NOT ACTIVATE THESE */
 //#define ONLY_LPT_DISPLACEMENTS     /* TWO OPTIONS TOGETHER */
@@ -71,187 +68,393 @@ typedef struct
   char     fill[52];  /* filling to 256 Bytes */
 } SnapshotHeader_data;
 
-#ifdef WRITE_INFO_BLOCK
 typedef struct
 {
   char name[4], type[8];
   int ndim, active[6];
-} InfoBlock_data;
-#endif
+  size_t sizeof_type;
+  void *data;
+} Block_data;
 
+Block_data *InfoBlock;
+int NBlocks, NextBlock;
+
+typedef struct
+{
+  float axis[3];
+} AuxStruct;
+
+MPI_Status status;
+
+void WriteBlockName(FILE *,int, char*);
+void my_strcpy(char *,char *, int);
+int write_header(int);
+int write_block(Block_data);
+void free_block(Block_data);
+int add_to_info(Block_data);
+int write_info_block(void);
+int count_particles_for_final_snapshot(void);
+int initialize_ID_subvolumes(Block_data*);
+int initialize_POS_withNFW(Block_data*);
+int initialize_VEL_withNFW(Block_data*);
+int initialize_ID_fftspace(Block_data*);
+int initialize_FMAX_fftspace(Block_data*);
+int initialize_RMAX_fftspace(Block_data*);
+int initialize_VEL_fftspace(Block_data*);
+#ifdef TWO_LPT
+int initialize_VEL_2LPT_fftspace(Block_data*);
+#ifdef THREE_LPT
+int initialize_VEL_3LPT_1_fftspace(Block_data*);
+int initialize_VEL_3LPT_2_fftspace(Block_data*);
+#endif
+#endif
+int initialize_density(int, Block_data*);
+
+#ifdef ROTATE_BOX
+static int rot[3]={1,2,0};
+#else
+static int rot[3]={0,1,2};
+#endif
 
 /* In this routine each task outputs all the particles belonging to good groups.
    If FORCE_PARTICLE_NUMBER is not active, some particles will be duplicated 
    but if FORCE_PARTICLE_NUMBER is active, some groups will have 
    fewer particles that their putative mass */
+
+char filename[LBLENGTH];
+FILE *file;
+int NTasksPerFile,collector,ThisFile,NPartInFile,myNpart,myiout;
+int *Npart_array;
+
 int write_snapshot(int iout)
 {
   /* writes displacements of all particles in a GADGET format 
      particles in halos are distributed around the center of mass
      as NFW spheres with virial velocity distribution */
 
-  int NTasksPerFile,collector,itask,next,ThisFile,index,npart,i,j,dummy,myNpart,NInFile,
-    good_particle;
-  int SGrid[3],Lgridxy,ibox,jbox,kbox,kk,global_x,global_y,global_z, part;
-  unsigned long long int myNtotal, longdummy, NPartTot;
-  double vfact, rvir, MyPos[3], *MyVel, Dz, conc, rnd, nfwfac, area, xrnd, yrnd, 
-    probfunc, u, theta, sigma;
-  MyVel=MyPos;
-  char filename[LBLENGTH],wn[5],wt[9];
-  FILE *file;
+  Block_data block;
+
+  /* Snapshot filename */
+  sprintf(filename,"pinocchio.%s.snapshot_%03d",params.RunFlag,iout);
+
+  int my_snap_type=0;
+  myiout=iout;
+
+  /* allocates structure to handle the INFO block */
+  NBlocks=3;
+  NextBlock=0;
+  InfoBlock=(Block_data *)calloc(NBlocks, sizeof(Block_data));
+
+  if (!ThisTask)
+    printf("[%s] Writing snapshot file %s\n",fdate(),filename);
+
+  /* this routine opens the file */
+  if (write_header(my_snap_type))
+    return 1;
+
+  /* writing of IDs */
+  if (initialize_ID_subvolumes(&block))
+    return 1;
+  if (add_to_info(block))
+    return 1;
+  if (write_block(block))
+    return 1;
+  free_block(block);
+
+  /* writing of POS */
+  if (initialize_POS_withNFW(&block))
+    return 1;
+  if (add_to_info(block))
+    return 1;
+  if (write_block(block))
+    return 1;
+  free_block(block);
+
+  /* writing of VEL */
+  if (initialize_VEL_withNFW(&block))
+    return 1;
+  if (add_to_info(block))
+    return 1;
+  if (write_block(block))
+    return 1;
+  free_block(block);
+
+  /* writing of INFO block */
+  if (write_info_block())
+    return 1;
+  free(Npart_array);
+  free(InfoBlock);
+
+  /* collector task closes the file */
+  if (ThisTask==collector)
+    fclose(file);
+
+  fflush(stdout);
+  MPI_Barrier(MPI_COMM_WORLD);
+  
+  return 0;
+
+}
+
+
+int write_products()
+{
+  /* writes the fmax products as in a snapshot format */
+
+  Block_data block;
+
+  /* Snapshot filename */
+  sprintf(filename,"pinocchio.%s.products.out",params.RunFlag);
+
+  int my_snap_type=1;
+
+  /* allocates structure to handle the INFO block */
+#ifdef TWO_LPT
+#ifdef THREE_LPT
+  NBlocks=7;
+#else
+  NBlocks=5;
+#endif
+#else
+  NBlocks=4;
+#endif
+  NextBlock=0;
+  InfoBlock=(Block_data *)calloc(NBlocks, sizeof(Block_data));
+
+  if (!ThisTask)
+    printf("[%s] Writing products in snapshot file %s\n",fdate(),filename);
+
+  /* this routine opens the file */
+  if (write_header(my_snap_type))
+    return 1;
+
+  /* writing of IDs */
+  if (initialize_ID_fftspace(&block))
+    return 1;
+  if (add_to_info(block))
+    return 1;
+  if (write_block(block))
+    return 1;
+  free_block(block);
+
+  /* writing of RMAX */
+  if (initialize_RMAX_fftspace(&block))
+    return 1;
+  if (add_to_info(block))
+    return 1;
+  if (write_block(block))
+    return 1;
+  free_block(block);
+
+  /* writing of FMAX */
+  if (initialize_FMAX_fftspace(&block))
+    return 1;
+  if (add_to_info(block))
+    return 1;
+  if (write_block(block))
+    return 1;
+  free_block(block);
+
+  /* writing of VEL */
+  if (initialize_VEL_fftspace(&block))
+    return 1;
+  if (add_to_info(block))
+    return 1;
+  if (write_block(block))
+    return 1;
+  free_block(block);
+
+#ifdef TWO_LPT
+  /* writing of VEL2 */
+  if (initialize_VEL_2LPT_fftspace(&block))
+    return 1;
+  if (add_to_info(block))
+    return 1;
+  if (write_block(block))
+    return 1;
+  free_block(block);
+
+#ifdef THREE_LPT
+  /* writing of VL31 */
+  if (initialize_VEL_3LPT_1_fftspace(&block))
+    return 1;
+  if (add_to_info(block))
+    return 1;
+  if (write_block(block))
+    return 1;
+  free_block(block);
+
+  /* writing of VL32 */
+  if (initialize_VEL_3LPT_2_fftspace(&block))
+    return 1;
+  if (add_to_info(block))
+    return 1;
+  if (write_block(block))
+    return 1;
+  free_block(block);
+#endif
+#endif
+
+  /* writing of INFO block */
+  if (write_info_block())
+    return 1;
+  free(InfoBlock);
+
+  /* collector task closes the file */
+  if (ThisTask==collector)
+    fclose(file);
+
+  fflush(stdout);
+  MPI_Barrier(MPI_COMM_WORLD);
+  
+  return 0;
+}
+
+int write_density(int ThisGrid)
+{
+  /* writes the fmax products as in a snapshot format */
+
+  Block_data block;
+
+  /* Snapshot filename */
+  sprintf(filename,"pinocchio.%s.density.out",params.RunFlag);
+
+  int my_snap_type=1;
+
+  /* allocates structure to handle the INFO block */
+  NBlocks=2;
+  NextBlock=0;
+  InfoBlock=(Block_data *)calloc(NBlocks, sizeof(Block_data));
+
+  if (!ThisTask)
+    printf("[%s] Writing density in snapshot file %s\n",fdate(),filename);
+
+  /* this routine opens the file */
+  if (write_header(my_snap_type))
+    return 1;
+
+  /* writing of IDs */
+  if (initialize_ID_fftspace(&block))
+    return 1;
+  if (add_to_info(block))
+    return 1;
+  if (write_block(block))
+    return 1;
+  free_block(block);
+
+  /* writing of density */
+  if (initialize_density(ThisGrid, &block))
+    return 1;
+  if (add_to_info(block))
+    return 1;
+  if (write_block(block))
+    return 1;
+  free_block(block);
+
+  /* writing of INFO block */
+  if (write_info_block())
+    return 1;
+  free(InfoBlock);
+
+  /* collector task closes the file */
+  if (ThisTask==collector)
+    fclose(file);
+
+  fflush(stdout);
+  MPI_Barrier(MPI_COMM_WORLD);
+  
+  return 0;
+
+}
+
+
+int write_header(int snap_type)
+{
+
+  /* This function counts the number of particles that the task will write in the snapshot
+     and writes the snapshot header.
+     The type of particles depend on the type of snapshot that is being written...
+  */
+
+  int itask, dummy;
+  unsigned long long int myNtotal;
+  char my_filename[LBLENGTH],tag[SBLENGTH];
+  int *tmp_array;
   SnapshotHeader_data Header;
-  MYIDTYPE *ID,*GRID;
-  MPI_Status status;
-  typedef struct
-  {
-    float axis[3];
-  } AuxStruct;
-  
-  AuxStruct *Pos,*Vel;
-#ifdef WRITE_FMAX_TO_SNAPSHOT
-  float *FMAX;
-  int *RMAX;
-#endif
-
-#ifdef WRITE_INFO_BLOCK
-#ifndef ONLY_LPT_DISPLACEMENTS
-#ifndef WRITE_FMAX_TO_SNAPSHOT
-#define NBLOCKS 4
-#else
-#define NBLOCKS 6
-#endif
-#else
-#define NBLOCKS 3
-#endif
-  InfoBlock_data InfoBlock[NBLOCKS];
-#endif
-  
-#ifdef ROTATE_BOX
-  static int rot[3]={1,2,0};
-#else
-  static int rot[3]={0,1,2};
-#endif
-
-
-#ifdef ONLY_LPT_DISPLACEMENTS
-  if (!ThisTask)
-    {
-      printf("directive ONLY_LPT_DISPLACEMENTS is present\n");
-      printf("the code will use LPT displacements for all particles\n");
-    }
-#endif
-
-#ifdef FORCE_PARTICLE_NUMBER
-  if (!ThisTask)
-    {
-      printf("directive FORCE_PARTICLE_NUMBER is present\n");
-      printf("the code will conserve the number of particles and will not check for group consistency\n");
-    }
-#endif
-
-
 
   NTasksPerFile=NTasks/params.NumFiles;
   ThisFile=ThisTask/NTasksPerFile;
   collector=ThisFile*NTasksPerFile;
 
-  SGrid[0]=(double)subbox.stabl_x;
-  SGrid[1]=(double)subbox.stabl_y;
-  SGrid[2]=(double)subbox.stabl_z;
-  NPartTot = 
-    (unsigned long long int)MyGrids[0].GSglobal[0] * 
-    (unsigned long long int)MyGrids[0].GSglobal[1] * 
-    (unsigned long long int)MyGrids[0].GSglobal[2];
-  Lgridxy = subbox.Lgwbl_x * subbox.Lgwbl_y;
-
-  Dz = GrowingMode(outputs.z[iout],params.k_for_GM);
-
-  /* Each task counts the number of particles that will be output */
-  /* first loop is on good particles that are not in groups */
-  for (i=0, myNpart=0; i<subbox.Npart; i++)
+  switch (snap_type)
     {
-      /* grid coordinates from the indices (sub-box coordinates) */
-      kbox=i/Lgridxy;
-      kk=i-kbox*Lgridxy;
-      jbox=kk/subbox.Lgwbl_x;
-      ibox=kk-jbox*subbox.Lgwbl_x;
-      good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
-			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
-			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
-      if (good_particle
-#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
-	  && group_ID[i]<=FILAMENT
-#endif
-	  )
-	myNpart++;
+    case 0: /* particles live in the subvolume domain */
+      myNpart = count_particles_for_final_snapshot(); // SEPARARE FORCE_PARTICLE_NUMBER QUI
+      break;
+    case 1: /* particles live in the fft domain */
+      myNpart = MyGrids[0].total_local_size; // NON E` VERO!!!
+      break;
+    default:
+      myNpart = 0;
+      break;
     }
 
-#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
-  /* second loop is on good groups */
-  for (i=FILAMENT+1; i<=ngroups; i++)
-    if (groups[i].point >= 0 && groups[i].good)
-      myNpart+=groups[i].Mass;
-#endif
+  /* Number of particles in each file */
+  Npart_array = (int*)calloc(params.NumFiles, sizeof(int));
+  tmp_array   = (int*)calloc(params.NumFiles, sizeof(int));
+  tmp_array[collector]=myNpart;
 
+  /* this computes the number of particles in each file */
+  MPI_Reduce(tmp_array, Npart_array, params.NumFiles, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Bcast(Npart_array, params.NumFiles, MPI_INT, 0, MPI_COMM_WORLD);
+  NPartInFile=Npart_array[collector];
 
-  /* Task 0 counts the total number of particles that will be contained in the snapshot */
-  longdummy=(unsigned long long)myNpart;
-  MPI_Reduce(&longdummy, &myNtotal, 1, MPI_LONG_LONG_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+  /* total number of particles that will be contained in the complete snapshot */
+  for (myNtotal=0, itask=0; itask<params.NumFiles; itask++)
+    myNtotal+=Npart_array[itask];
+
+  /* sets arrays to zero (probably superfluous) */
+  memset(tmp_array, 0, params.NumFiles*sizeof(int));
+  memset(Npart_array, 0, params.NumFiles*sizeof(int));
+  tmp_array[collector]=myNpart;
+
+  /* this computes the largest number of particles a task can have for each collector */
+  MPI_Reduce(tmp_array, Npart_array, params.NumFiles, MPI_INT, MPI_MAX, 0, MPI_COMM_WORLD);
+  MPI_Bcast(Npart_array, params.NumFiles, MPI_INT, 0, MPI_COMM_WORLD);
+  free(tmp_array);
 
   if (!ThisTask)
-    printf("[%s] The snapshot will contain a total of %Ld particles (true total number: %Ld, duplication: %f)\n",
-	   fdate(), myNtotal, NPartTot, (double)(myNtotal-NPartTot)/(double)NPartTot);
-
-  /* collector task computes the total number of particles in the file */
-  for (next=0; next<NTasksPerFile; next++)
-    {
-      itask=collector+next;
-      if (!next)
-	{
-	  if (ThisTask==collector)  
-	    NInFile=myNpart;
-	}
-      else
-	{
-	  if (ThisTask==collector)
-	    {
-	      npart=0;
-	      MPI_Recv(&npart, 1, MPI_INT, itask, 0, MPI_COMM_WORLD, &status);
-	      NInFile+=npart;
-	    }
-	  else if (ThisTask==itask)
-	    MPI_Send(&myNpart, 1, MPI_INT, collector, 0, MPI_COMM_WORLD);
-	}
-    }
+    printf("[%s] The snapshot will contain a total of %Ld particles (true total number: %Ld, duplication factor: %f percent)\n",
+	   fdate(), myNtotal, MyGrids[0].Ntotal, 100.*(double)(myNtotal-MyGrids[0].Ntotal)/(double)MyGrids[0].Ntotal);
 
   /* The collector task opens the file and writes the header */
   if (ThisTask==collector)
     {
+      strcpy(my_filename,filename);
       if (params.NumFiles>1)
-	sprintf(filename,"pinocchio.%6.4f.%s.snapshot.out.%d",
-		outputs.z[iout],params.RunFlag,ThisFile);
-      else
-	sprintf(filename,"pinocchio.%6.4f.%s.snapshot.out",
-		outputs.z[iout],params.RunFlag);
+	{
+	  sprintf(tag,".%d",ThisFile);
+	  strcat(my_filename,tag);
+	}
 
       if (!ThisTask)
-	printf("[%s] Task 0 will write %d particles in snapshot file %s\n",fdate(),NInFile,filename);
+	printf("[%s] Task 0 will write %d particles in snapshot file %s\n",fdate(),NPartInFile,my_filename);
 
-      if ( (file=fopen(filename,"w"))==0x0)
+      if ( (file=fopen(my_filename,"w"))==0x0)
 	{
-	  printf("Error on Task 0: cannot open file %s\n",filename);
+	  printf("Error on Task %d: cannot open file %s\n",ThisTask,my_filename);
 	  return 1;
 	}
 
       /* writes information on the snapshot header */
       memset(&Header, 0, sizeof(SnapshotHeader_data));
 
-      Header.NPart[1]=NInFile;
+      Header.NPart[1]=NPartInFile;
       Header.Mass[1]=params.ParticleMass*params.Hubble100*1e-10;
       Header.NPartTotal[1]=(unsigned int)( (myNtotal<<32) >>32 );
       Header.npartTotalHighWord[1]=(unsigned int)(myNtotal>>32);
-      Header.Time=1./(1+outputs.z[iout]);
-      Header.RedShift=outputs.z[iout];
+      Header.Time=1./(1+outputs.z[myiout]);
+      Header.RedShift=outputs.z[myiout];
       Header.flag_sfr=0;
       Header.flag_feedback=0;
       Header.flag_cooling=0;
@@ -275,275 +478,23 @@ int write_snapshot(int iout)
       fwrite(&Header, dummy, 1, file);
       fwrite(&dummy, sizeof(dummy), 1, file);
 
-#ifdef WRITE_INFO_BLOCK
-      /* info block */
-      memset(&InfoBlock, 0, NBLOCKS*sizeof(InfoBlock_data));
-
-      int tb=0;
-      my_strcpy(InfoBlock[tb].name,"ID  ",4);
-#ifdef LONGIDS
-      my_strcpy(InfoBlock[tb].type,"LLONG   ",8);
-#else
-      my_strcpy(InfoBlock[tb].type,"LONG    ",8);
-#endif
-      InfoBlock[tb].ndim=1;
-      for (i=0; i<6; i++)
-	InfoBlock[tb].active[i]=1;
-      if (!ThisTask)
-	{
-	  my_strcpy(wn,InfoBlock[tb].name,4);
-	  wn[4]='\0';
-	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[8]='\0';
-	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
-		 wn,wt,
-		 /* InfoBlock[tb].name, */
-		 /* InfoBlock[tb].type, */
-		 InfoBlock[tb].ndim,
-		 InfoBlock[tb].active[0],
-		 InfoBlock[tb].active[1],
-		 InfoBlock[tb].active[2],
-		 InfoBlock[tb].active[3],
-		 InfoBlock[tb].active[4],
-		 InfoBlock[tb].active[5]);
-	}
-      ++tb;
-
-      my_strcpy(InfoBlock[tb].name,"POS ",4);
-      my_strcpy(InfoBlock[tb].type,"FLOATN  ",8);
-      InfoBlock[tb].ndim=3;
-      for (i=0; i<6; i++)
-	InfoBlock[tb].active[i]=1;
-      if (!ThisTask)
-	{
-	  my_strcpy(wn,InfoBlock[tb].name,4);
-	  wn[4]='\0';
-	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[8]='\0';
-	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
-		 wn,wt,
-		 /* InfoBlock[tb].name, */
-		 /* InfoBlock[tb].type, */
-		 InfoBlock[tb].ndim,
-		 InfoBlock[tb].active[0],
-		 InfoBlock[tb].active[1],
-		 InfoBlock[tb].active[2],
-		 InfoBlock[tb].active[3],
-		 InfoBlock[tb].active[4],
-		 InfoBlock[tb].active[5]);
-	}
-      ++tb;
-
-      my_strcpy(InfoBlock[tb].name,"VEL ",4);
-      my_strcpy(InfoBlock[tb].type,"FLOATN  ",8);
-      InfoBlock[tb].ndim=3;
-      for (i=0; i<6; i++)
-	InfoBlock[tb].active[i]=1;
-      if (!ThisTask)
-	{
-	  my_strcpy(wn,InfoBlock[tb].name,4);
-	  wn[4]='\0';
-	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[8]='\0';
-	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
-		 wn,wt,
-		 /* InfoBlock[tb].name, */
-		 /* InfoBlock[tb].type, */
-		 InfoBlock[tb].ndim,
-		 InfoBlock[tb].active[0],
-		 InfoBlock[tb].active[1],
-		 InfoBlock[tb].active[2],
-		 InfoBlock[tb].active[3],
-		 InfoBlock[tb].active[4],
-		 InfoBlock[tb].active[5]);
-	}
-      ++tb;
-
-#ifndef ONLY_LPT_DISPLACEMENTS
-      my_strcpy(InfoBlock[tb].name,"GRID",4);
-#ifdef LONGIDS
-      my_strcpy(InfoBlock[tb].type,"LLONG   ",8);
-#else
-      my_strcpy(InfoBlock[tb].type,"LONG    ",8);
-#endif
-      InfoBlock[tb].ndim=1;
-      for (i=0; i<6; i++)
-	InfoBlock[tb].active[i]=1;
-      if (!ThisTask)
-	{
-	  my_strcpy(wn,InfoBlock[tb].name,4);
-	  wn[4]='\0';
-	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[8]='\0';
-	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
-		 wn,wt,
-		 /* InfoBlock[tb].name, */
-		 /* InfoBlock[tb].type, */
-		 InfoBlock[tb].ndim,
-		 InfoBlock[tb].active[0],
-		 InfoBlock[tb].active[1],
-		 InfoBlock[tb].active[2],
-		 InfoBlock[tb].active[3],
-		 InfoBlock[tb].active[4],
-		 InfoBlock[tb].active[5]);
-	}
-      ++tb;
-
-#ifdef WRITE_FMAX_TO_SNAPSHOT
-      my_strcpy(InfoBlock[tb].name,"FMAX",4);
-      my_strcpy(InfoBlock[tb].type,"FLOAT   ",8);
-      InfoBlock[tb].ndim=1;
-      for (i=0; i<6; i++)
-	InfoBlock[tb].active[i]=1;
-      if (!ThisTask)
-	{
-	  my_strcpy(wn,InfoBlock[tb].name,4);
-	  wn[4]='\0';
-	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[8]='\0';
-	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
-		 wn,wt,
-		 /* InfoBlock[tb].name, */
-		 /* InfoBlock[tb].type, */
-		 InfoBlock[tb].ndim,
-		 InfoBlock[tb].active[0],
-		 InfoBlock[tb].active[1],
-		 InfoBlock[tb].active[2],
-		 InfoBlock[tb].active[3],
-		 InfoBlock[tb].active[4],
-		 InfoBlock[tb].active[5]);
-	}
-      ++tb;
-
-      my_strcpy(InfoBlock[tb].name,"RMAX",4);
-      my_strcpy(InfoBlock[tb].type,"LONG    ",8);
-      InfoBlock[tb].ndim=1;
-      for (i=0; i<6; i++)
-	InfoBlock[tb].active[i]=1;
-      if (!ThisTask)
- 	{
-	  my_strcpy(wn,InfoBlock[tb].name,4);
-	  wn[4]='\0';
-	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[8]='\0';
-	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
-		 wn,wt,
-		 /* InfoBlock[tb].name, */
-		 /* InfoBlock[tb].type, */
-		 InfoBlock[tb].ndim,
-		 InfoBlock[tb].active[0],
-		 InfoBlock[tb].active[1],
-		 InfoBlock[tb].active[2],
-		 InfoBlock[tb].active[3],
-		 InfoBlock[tb].active[4],
-		 InfoBlock[tb].active[5]);
-	}
-     ++tb;
-
-#endif
-#endif
-
-      dummy=NBLOCKS*sizeof(InfoBlock_data);
-      WriteBlockName(file,dummy,"INFO");
-      fwrite(&dummy, sizeof(dummy), 1, file);
-      fwrite(&InfoBlock, dummy, 1, file);
-      fwrite(&dummy, sizeof(dummy), 1, file);
-#endif
-
     }
 
-  /* each task builds its catalogue: IDs */
-  ID = (MYIDTYPE*)malloc(myNpart * sizeof(MYIDTYPE));
-  /* first loop is on good particles that are not in groups */
-  for (i=0, index=0; i<subbox.Npart; i++)
-    {
-      /* grid coordinates from the indices (sub-box coordinates) */
-      kbox=i/Lgridxy;
-      kk=i-kbox*Lgridxy;
-      jbox=kk/subbox.Lgwbl_x;
-      ibox=kk-jbox*subbox.Lgwbl_x;
-      good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
-			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
-			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
-      if (good_particle
-#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
-	  && group_ID[i]<=FILAMENT
-#endif
-	  )
-	{
-	  /* particle coordinates in the box, imposing PBCs */
-	  global_x = ibox + subbox.stabl_x;
-	  if (global_x<0) global_x+=MyGrids[0].GSglobal[0];
-	  if (global_x>=MyGrids[0].GSglobal[0]) global_x-=MyGrids[0].GSglobal[0];
-	  global_y = jbox + subbox.stabl_y;
-	  if (global_y<0) global_y+=MyGrids[0].GSglobal[1];
-	  if (global_y>=MyGrids[0].GSglobal[1]) global_y-=MyGrids[0].GSglobal[1];
-	  global_z = kbox + subbox.stabl_z;
-	  if (global_z<0) global_z+=MyGrids[0].GSglobal[2];
-	  if (global_z>=MyGrids[0].GSglobal[2]) global_z-=MyGrids[0].GSglobal[2];
-#ifdef ROTATE_BOX
-	  ID[index]=1+(MYIDTYPE)global_x + 
-	    ( (MYIDTYPE)global_z + 
-	      (MYIDTYPE)global_y * (MYIDTYPE)MyGrids[0].GSglobal[2] ) * 
-	    (MYIDTYPE)MyGrids[0].GSglobal[0];
-#else
-	  ID[index]=1+(MYIDTYPE)global_x + 
-	    ( (MYIDTYPE)global_y + 
-	      (MYIDTYPE)global_z * (MYIDTYPE)MyGrids[0].GSglobal[1] ) * 
-	    (MYIDTYPE)MyGrids[0].GSglobal[0];
-#endif
-	  ++index;
-	}
-    }
+  return 0;
+}
 
-#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
-  /* second loop is on good groups */
-  for (i=FILAMENT+1; i<=ngroups; i++)
-    if (groups[i].point >= 0 && groups[i].good)
-      {
-	next=groups[i].point;
-	for (npart=0; npart<groups[i].Mass; npart++)
-	  {
-	    kbox=next/Lgridxy;
-	    kk=next-kbox*Lgridxy;
-	    jbox=kk/subbox.Lgwbl_x;
-	    ibox=kk-jbox*subbox.Lgwbl_x;
-	    /* particle coordinates in the box, imposing PBCs */
-	    global_x = ibox + subbox.stabl_x;
-	    if (global_x<0) global_x+=MyGrids[0].GSglobal[0];
-	    if (global_x>=MyGrids[0].GSglobal[0]) global_x-=MyGrids[0].GSglobal[0];
-	    global_y = jbox + subbox.stabl_y;
-	    if (global_y<0) global_y+=MyGrids[0].GSglobal[1];
-	    if (global_y>=MyGrids[0].GSglobal[1]) global_y-=MyGrids[0].GSglobal[1];
-	    global_z = kbox + subbox.stabl_z;
-	    if (global_z<0) global_z+=MyGrids[0].GSglobal[2];
-	    if (global_z>=MyGrids[0].GSglobal[2]) global_z-=MyGrids[0].GSglobal[2];
-#ifdef ROTATE_BOX
-	    ID[index]=1+(MYIDTYPE)global_x + 
-	      ( (MYIDTYPE)global_z + 
-		(MYIDTYPE)global_y * (MYIDTYPE)MyGrids[0].GSglobal[2] ) * 
-	      (MYIDTYPE)MyGrids[0].GSglobal[0];
-#else
-	    ID[index]=1+(MYIDTYPE)global_x + 
-	      ( (MYIDTYPE)global_y + 
-		(MYIDTYPE)global_z * (MYIDTYPE)MyGrids[0].GSglobal[1] ) * 
-	      (MYIDTYPE)MyGrids[0].GSglobal[0];
-#endif
-	    ++index;
-	    next=linking_list[next];
-	  }
-      }
 
-#endif
+int write_block(Block_data block)
+{
+  /* writes a specified block in the snapshot */
+  int dummy, npart, next, itask;
 
-  /* writing of IDs */
   if (ThisTask==collector)
     {
-      dummy=NInFile*sizeof(MYIDTYPE);
-      WriteBlockName(file,dummy,"ID  ");
+      dummy=NPartInFile*block.sizeof_type;
+      WriteBlockName(file,dummy,block.name);
       fwrite(&dummy, sizeof(dummy), 1, file);
-      fwrite(ID, sizeof(MYIDTYPE), myNpart, file); 
-      free(ID);
+      fwrite(block.data, block.sizeof_type, myNpart, file);
     }
 
   for (next=1; next<NTasksPerFile; next++)
@@ -553,16 +504,13 @@ int write_snapshot(int iout)
 	{
 	  npart=0;
 	  MPI_Recv(&npart, 1, MPI_INT, itask, 0, MPI_COMM_WORLD, &status);
-	  ID=(MYIDTYPE*)malloc(npart * sizeof(MYIDTYPE));
-	  MPI_Recv(ID, npart*sizeof(MYIDTYPE), MPI_BYTE, itask, 0, MPI_COMM_WORLD, &status);
-	  fwrite(ID, sizeof(MYIDTYPE), npart, file);
-	  free(ID);
+	  MPI_Recv(block.data, npart*block.sizeof_type, MPI_BYTE, itask, 0, MPI_COMM_WORLD, &status);
+	  fwrite(block.data, block.sizeof_type, npart, file);
 	}
       else if (ThisTask==itask)
 	{
 	  MPI_Send(&myNpart, 1, MPI_INT, collector, 0, MPI_COMM_WORLD);
-	  MPI_Send(ID, myNpart*sizeof(MYIDTYPE), MPI_BYTE, collector, 0, MPI_COMM_WORLD);
-	  free(ID);
+	  MPI_Send(block.data, myNpart*block.sizeof_type, MPI_BYTE, collector, 0, MPI_COMM_WORLD);
 	}
     }
 
@@ -570,21 +518,404 @@ int write_snapshot(int iout)
   if (ThisTask==collector)
     fwrite(&dummy, sizeof(dummy), 1, file);
 
+  return 0;
+}
 
-  /* each task builds its catalogue: Pos */
-  Pos = (AuxStruct *)calloc(myNpart , sizeof(AuxStruct));
+void free_block(Block_data block)
+{
 
-  /* the first loop is on particles outside groups */
-  for (i=0, index=0; i<subbox.Npart; i++)
+  free(block.data);
+
+}
+
+int add_to_info(Block_data block)
+{
+  /* adds a block to the structure needed to write the INFO block */
+  if (ThisTask!=collector)
+    return 0;
+
+  if (NextBlock>=NBlocks)
+    {
+      if (!ThisTask)
+	printf("ERROR: I am trying to write the %d N-th block but NBLOCKS=%d\n",
+	       NextBlock+1,NBlocks);
+      return 1;
+    }
+
+  my_strcpy(InfoBlock[NextBlock].name,block.name,4);
+  my_strcpy(InfoBlock[NextBlock].type,block.type,8);
+  InfoBlock[NextBlock].ndim=block.ndim;
+  /* pinocchio snapshots have only one particle type */
+  for (int i=0; i<6; i++)
+    InfoBlock[NextBlock].active[i]=(i==1);
+
+  NextBlock++;
+
+  return 0;
+}
+
+
+int write_info_block(void)
+{
+  /* writes the INFO block */
+  int dummy,tb;
+  char wn[5],wt[9];
+
+  if (ThisTask!=collector)
+    return 0;
+
+  for (tb=0; tb<NBlocks; tb++)
+    {
+
+      if (!ThisTask)
+ 	{
+	  my_strcpy(wn,InfoBlock[tb].name,4);
+	  wn[4]='\0';
+	  my_strcpy(wt,InfoBlock[tb].type,8);
+	  wt[8]='\0';
+	  printf("Written block: name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
+		 wn,wt,
+		 InfoBlock[tb].ndim,
+		 InfoBlock[tb].active[0],
+		 InfoBlock[tb].active[1],
+		 InfoBlock[tb].active[2],
+		 InfoBlock[tb].active[3],
+		 InfoBlock[tb].active[4],
+		 InfoBlock[tb].active[5]);
+	}
+    }
+
+  dummy=NBlocks*40;
+  WriteBlockName(file,dummy,"INFO");
+  fwrite(&dummy, sizeof(dummy), 1, file);
+  for (tb=0; tb<NBlocks; tb++)
+    fwrite(&InfoBlock[tb], sizeof(char), 40, file);
+  fwrite(&dummy, sizeof(dummy), 1, file);
+
+  return 0;
+}
+
+
+int count_particles_for_final_snapshot(void)
+{
+  /* This function counts the number of particles that will be written by ThisTask.
+     These live in the subbox space, each task outputs all particles that are assigned
+     to its halos, even if they live in different sub-volumes. Note that this 
+     does not guarantee particle conservation.
+   */
+
+  int Lgridxy, myN, i, ibox,jbox,kbox,kk, good_particle;
+
+  /* this is relevant when the particles live in the sub-volume domain */
+  Lgridxy = subbox.Lgwbl[_x_] * subbox.Lgwbl[_y_];
+
+  /* Each task counts the number of particles that will be output */
+  /* first loop is on good particles that are not in groups */
+  for (i=0, myN=0; i<subbox.Npart; i++)
     {
       /* grid coordinates from the indices (sub-box coordinates) */
       kbox=i/Lgridxy;
       kk=i-kbox*Lgridxy;
-      jbox=kk/subbox.Lgwbl_x;
-      ibox=kk-jbox*subbox.Lgwbl_x;
-      good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
-			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
-			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
+      jbox=kk/subbox.Lgwbl[_x_];
+      ibox=kk-jbox*subbox.Lgwbl[_x_];
+      good_particle = ( ibox>=subbox.safe[_x_] && ibox<subbox.Lgwbl[_x_]-subbox.safe[_x_] && 
+			jbox>=subbox.safe[_y_] && jbox<subbox.Lgwbl[_y_]-subbox.safe[_y_] && 
+			kbox>=subbox.safe[_z_] && kbox<subbox.Lgwbl[_z_]-subbox.safe[_z_] );
+      if (good_particle
+#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER) // PROBABILMENTE SI PUO` TOGLIERE
+	  && group_ID[i]<=FILAMENT
+#endif
+	  )
+	myN++;
+    }
+
+#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
+  /* second loop is on good groups */
+  for (i=FILAMENT+1; i<=ngroups; i++)
+    if (groups[i].point >= 0 && groups[i].good)
+      myN+=groups[i].Mass;
+#endif
+
+  return myN;
+}
+
+
+int initialize_ID_fftspace(Block_data *block)
+{
+  /* this routine initializes the ID block when particles live in sub-volume domain */
+
+  my_strcpy(block->name,"ID  ",4);
+#ifdef LONGIDS
+  my_strcpy(block->type,"LLONG   ",8);
+  block->sizeof_type = sizeof(unsigned long long);
+#else
+  my_strcpy(block->type,"LONG    ",8);
+  block->sizeof_type = sizeof(unsigned int);
+#endif
+  block->ndim=1;
+
+  /* each task builds its catalogue: IDs */
+  block->data = (void *)malloc(Npart_array[collector] * sizeof(MYIDTYPE));
+  if (block->data==0x0)
+    {
+      printf("ERROR on Task %d: could not allocate block to be written in snapshot\n",ThisTask);
+      return 1;
+    }
+
+  fflush(stdout);
+  MPI_Barrier(MPI_COMM_WORLD);
+
+  /* loop on all particles */
+  for (int local_x = 0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)
+    {
+      int idx_x = local_x * MyGrids[0].GSlocal[_y_];
+      MYIDTYPE IDX_x = (local_x + MyGrids[0].GSstart[_x_]) * MyGrids[0].GSglobal[_y_];
+      for (int local_y = 0; local_y < MyGrids[0].GSlocal[_y_]; local_y++)
+	{
+	  int idx_y = (idx_x + local_y) * MyGrids[0].GSlocal[_z_];
+	  MYIDTYPE IDX_y = (IDX_x + local_y + MyGrids[0].GSstart[_y_]) * MyGrids[0].GSglobal[_z_];
+	  for (int local_z = 0; local_z < MyGrids[0].GSlocal[_z_]; local_z++)
+	    {
+
+	      /* NB this is coherent with INDEX_TO_COORD */
+	      ((MYIDTYPE*)block->data)[idx_y + local_z] = 1 + IDX_y + local_z + MyGrids[0].GSstart[_z_];
+
+	    }
+	}
+    }
+
+  return 0;
+}
+
+
+int initialize_density(int ThisGrid, Block_data *block)
+{
+  /* this routine initializes the density */
+
+  my_strcpy(block->name,"DENS",4);
+  my_strcpy(block->type,"FLOATN  ",8);
+  block->sizeof_type = sizeof(float);
+  block->ndim=1;
+
+  /* each task builds its catalogue: IDs */
+  block->data = (void *)malloc(Npart_array[collector] * sizeof(float));
+  if (block->data==0x0)
+    {
+      printf("ERROR on Task %d: could not allocate block to be written in snapshot\n",ThisTask);
+      return 1;
+    }
+
+  /* loop on all particles */
+  for (int i=0; i < MyGrids[0].total_local_size; i++)
+    ((float*)block->data)[i] = density[ThisGrid][i];
+
+  return 0;
+}
+
+int initialize_FMAX_fftspace(Block_data *block)
+{
+  /* this routine initializes the ID block when particles live in sub-volume domain */
+
+  my_strcpy(block->name,"FMAX",4);
+  my_strcpy(block->type,"FLOATN  ",8);
+  block->sizeof_type = sizeof(float);
+  block->ndim=1;
+
+  /* each task builds its catalogue: IDs */
+  block->data = (void *)malloc(Npart_array[collector] * sizeof(float));
+  if (block->data==0x0)
+    {
+      printf("ERROR on Task %d: could not allocate block to be written in snapshot\n",ThisTask);
+      return 1;
+    }
+
+  /* loop on all particles */
+  for (int i=0; i < MyGrids[0].total_local_size; i++)
+    ((float*)block->data)[i] = products[i].Fmax;
+
+  return 0;
+}
+
+int initialize_RMAX_fftspace(Block_data *block)
+{
+  /* this routine initializes the ID block when particles live in sub-volume domain */
+
+  my_strcpy(block->name,"RMAX",4);
+  my_strcpy(block->type,"LONG    ",8);
+  block->sizeof_type = sizeof(int);
+  block->ndim=1;
+
+  /* each task builds its catalogue: IDs */
+  block->data = (void *)malloc(Npart_array[collector] * sizeof(int));
+  if (block->data==0x0)
+    {
+      printf("ERROR on Task %d: could not allocate block to be written in snapshot\n",ThisTask);
+      return 1;
+    }
+
+  /* loop on all particles */
+  for (int i=0; i < MyGrids[0].total_local_size; i++)
+    ((int*)block->data)[i] = products[i].Rmax;
+
+  return 0;
+}
+
+int initialize_VEL_fftspace(Block_data *block)
+{
+  /* this routine initializes the ID block when particles live in sub-volume domain */
+
+  my_strcpy(block->name,"VEL ",4);
+  my_strcpy(block->type,"FLOATN  ",8);
+  block->sizeof_type = sizeof(AuxStruct);
+  block->ndim=3;
+
+  /* each task builds its catalogue */
+  block->data = (void *)malloc(Npart_array[collector] * sizeof(AuxStruct));
+  if (block->data==0x0)
+    {
+      printf("ERROR on Task %d: could not allocate block to be written in snapshot\n",ThisTask);
+      return 1;
+    }
+
+  /* loop on all particles */
+  for (int i=0; i < MyGrids[0].total_local_size; i++)
+    {
+      ((AuxStruct*)block->data)[i].axis[0] = products[i].Vel[0];
+      ((AuxStruct*)block->data)[i].axis[1] = products[i].Vel[1];
+      ((AuxStruct*)block->data)[i].axis[2] = products[i].Vel[2];
+    }
+
+  return 0;
+}
+
+#ifdef TWO_LPT
+int initialize_VEL_2LPT_fftspace(Block_data *block)
+{
+  /* this routine initializes the ID block when particles live in sub-volume domain */
+
+  my_strcpy(block->name,"VEL2",4);
+  my_strcpy(block->type,"FLOATN  ",8);
+  block->sizeof_type = sizeof(AuxStruct);
+  block->ndim=3;
+
+  /* each task builds its catalogue */
+  block->data = (void *)malloc(Npart_array[collector] * sizeof(AuxStruct));
+  if (block->data==0x0)
+    {
+      printf("ERROR on Task %d: could not allocate block to be written in snapshot\n",ThisTask);
+      return 1;
+    }
+
+  /* loop on all particles */
+  for (int i=0; i < MyGrids[0].total_local_size; i++)
+    {
+      ((AuxStruct*)block->data)[i].axis[0] = products[i].Vel_2LPT[0];
+      ((AuxStruct*)block->data)[i].axis[1] = products[i].Vel_2LPT[1];
+      ((AuxStruct*)block->data)[i].axis[2] = products[i].Vel_2LPT[2];
+    }
+
+  return 0;
+}
+
+#ifdef THREE_LPT
+int initialize_VEL_3LPT_1_fftspace(Block_data *block)
+{
+  /* this routine initializes the ID block when particles live in sub-volume domain */
+
+  my_strcpy(block->name,"VL31",4);
+  my_strcpy(block->type,"FLOATN  ",8);
+  block->sizeof_type = sizeof(AuxStruct);
+  block->ndim=3;
+
+  /* each task builds its catalogue */
+  block->data = (void *)malloc(Npart_array[collector] * sizeof(AuxStruct));
+  if (block->data==0x0)
+    {
+      printf("ERROR on Task %d: could not allocate block to be written in snapshot\n",ThisTask);
+      return 1;
+    }
+
+  /* loop on all particles */
+  for (int i=0; i < MyGrids[0].total_local_size; i++)
+    {
+      ((AuxStruct*)block->data)[i].axis[0] = products[i].Vel_3LPT_1[0];
+      ((AuxStruct*)block->data)[i].axis[1] = products[i].Vel_3LPT_1[1];
+      ((AuxStruct*)block->data)[i].axis[2] = products[i].Vel_3LPT_1[2];
+    }
+
+  return 0;
+}
+int initialize_VEL_3LPT_2_fftspace(Block_data *block)
+{
+  /* this routine initializes the ID block when particles live in sub-volume domain */
+
+  my_strcpy(block->name,"VL32",4);
+  my_strcpy(block->type,"FLOATN  ",8);
+  block->sizeof_type = sizeof(AuxStruct);
+  block->ndim=3;
+
+  /* each task builds its catalogue */
+  block->data = (void *)malloc(Npart_array[collector] * sizeof(AuxStruct));
+  if (block->data==0x0)
+    {
+      printf("ERROR on Task %d: could not allocate block to be written in snapshot\n",ThisTask);
+      return 1;
+    }
+
+  /* loop on all particles */
+  for (int i=0; i < MyGrids[0].total_local_size; i++)
+    {
+      ((AuxStruct*)block->data)[i].axis[0] = products[i].Vel_3LPT_2[0];
+      ((AuxStruct*)block->data)[i].axis[1] = products[i].Vel_3LPT_2[1];
+      ((AuxStruct*)block->data)[i].axis[2] = products[i].Vel_3LPT_2[2];
+    }
+
+  return 0;
+}
+#endif
+#endif
+
+// DA QUI IN POI E` TUTTO DA CAPIRE COME FARE
+
+int initialize_ID_subvolumes(Block_data *block)
+{
+  /* this routine initializes the ID block when particles live in sub-volume domain */
+  int index, i, ibox, jbox, kbox, kk, good_particle, global[3], Lgridxy;
+
+  Lgridxy = subbox.Lgwbl[_x_] * subbox.Lgwbl[_y_];
+
+  my_strcpy(block->name,"ID  ",4);
+#ifdef LONGIDS
+  my_strcpy(block->type,"LLONG   ",8);
+  block->sizeof_type = sizeof(unsigned long long);
+#else
+  my_strcpy(block->type,"LONG    ",8);
+  block->sizeof_type = sizeof(unsigned int);
+#endif
+  block->ndim=1;
+
+  /* each task builds its catalogue: IDs */
+  block->data = (void *)malloc(Npart_array[collector] * sizeof(MYIDTYPE));
+  if (block->data==0x0)
+    {
+      printf("ERROR on Task %d: could not allocate block to be written in snapshot\n",ThisTask);
+      return 1;
+    }
+
+  /* first loop is on good particles that are not in groups */
+  for (i=0, index=0; i<subbox.Npart; i++)
+    {
+      /* grid coordinates from the indices (sub-box coordinates) */
+#ifdef CLASSIC_FRAGMENTATION
+      INDEX_TO_COORD(i,ibox,jbox,kbox,subbox.Lgwbl);
+#else
+      INDEX_TO_COORD(frag_pos[i],ibox,jbox,kbox,subbox.Lgwbl);
+#endif
+
+      good_particle = ( ibox>=subbox.safe[_x_] && ibox<subbox.Lgwbl[_x_]-subbox.safe[_x_] && 
+			jbox>=subbox.safe[_y_] && jbox<subbox.Lgwbl[_y_]-subbox.safe[_y_] && 
+			kbox>=subbox.safe[_z_] && kbox<subbox.Lgwbl[_z_]-subbox.safe[_z_] );
+
       if (good_particle
 #if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
 	  && group_ID[i]<=FILAMENT
@@ -592,15 +923,110 @@ int write_snapshot(int iout)
 	  )
 	{
 	  /* particle coordinates in the box, imposing PBCs */
-	  global_x = ibox + subbox.stabl_x;
-	  if (global_x<0) global_x+=MyGrids[0].GSglobal[0];
-	  if (global_x>=MyGrids[0].GSglobal[0]) global_x-=MyGrids[0].GSglobal[0];
-	  global_y = jbox + subbox.stabl_y;
-	  if (global_y<0) global_y+=MyGrids[0].GSglobal[1];
-	  if (global_y>=MyGrids[0].GSglobal[1]) global_y-=MyGrids[0].GSglobal[1];
-	  global_z = kbox + subbox.stabl_z;
-	  if (global_z<0) global_z+=MyGrids[0].GSglobal[2];
-	  if (global_z>=MyGrids[0].GSglobal[2]) global_z-=MyGrids[0].GSglobal[2];
+	  ((MYIDTYPE*)block->data)[index]=1+
+	    COORD_TO_INDEX((long long)((ibox + subbox.stabl[_x_] + MyGrids[0].GSglobal[_x_])%MyGrids[0].GSglobal[_x_]),
+			   (long long)((jbox + subbox.stabl[_y_] + MyGrids[0].GSglobal[_y_])%MyGrids[0].GSglobal[_y_]),
+			   (long long)((kbox + subbox.stabl[_z_] + MyGrids[0].GSglobal[_z_])%MyGrids[0].GSglobal[_z_]),
+			   MyGrids[0].GSglobal);
+	  ++index;
+	}
+    }
+
+#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
+  /* second loop is on good groups */
+  int next;
+  for (i=FILAMENT+1; i<=ngroups; i++)
+    if (groups[i].point >= 0 && groups[i].good)
+      {
+	next=groups[i].point;
+	for (int npart=0; npart<groups[i].Mass; npart++)
+	  {
+	    kbox=next/Lgridxy;
+	    kk=next-kbox*Lgridxy;
+	    jbox=kk/subbox.Lgwbl[_x_];
+	    ibox=kk-jbox*subbox.Lgwbl[_x_];
+	    /* particle coordinates in the box, imposing PBCs */
+	    global[_x_] = ibox + subbox.stabl[_x_];
+	    if (global[_x_]<0) global[_x_]+=MyGrids[0].GSglobal[_x_];
+	    if (global[_x_]>=MyGrids[0].GSglobal[_x_]) global[_x_]-=MyGrids[0].GSglobal[_x_];
+	    global[_y_] = jbox + subbox.stabl[_y_];
+	    if (global[_y_]<0) global[_y_]+=MyGrids[0].GSglobal[_y_];
+	    if (global[_y_]>=MyGrids[0].GSglobal[_y_]) global[_y_]-=MyGrids[0].GSglobal[_y_];
+	    global[_z_] = kbox + subbox.stabl[_z_];
+	    if (global[_z_]<0) global[_z_]+=MyGrids[0].GSglobal[_z_];
+	    if (global[_z_]>=MyGrids[0].GSglobal[_z_]) global[_z_]-=MyGrids[0].GSglobal[_z_];
+#ifdef ROTATE_BOX
+	    ((MYIDTYPE*)block->data)[index]=1+(MYIDTYPE)global[_x_] + 
+	      ( (MYIDTYPE)global[_z_] + 
+		(MYIDTYPE)global[_y_] * (MYIDTYPE)MyGrids[0].GSglobal[_z_] ) * 
+	      (MYIDTYPE)MyGrids[0].GSglobal[_x_];
+#else
+	    ((MYIDTYPE*)block->data)[index]=1+(MYIDTYPE)global[_x_] + 
+	      ( (MYIDTYPE)global[_y_] + 
+		(MYIDTYPE)global[_z_] * (MYIDTYPE)MyGrids[0].GSglobal[_y_] ) * 
+	      (MYIDTYPE)MyGrids[0].GSglobal[_x_];
+#endif
+	    ++index;
+	    next=linking_list[next];
+	  }
+      }
+
+#endif
+
+  return 0;
+}
+
+
+int initialize_POS_withNFW(Block_data *block)
+{
+  /* */
+  int index, i, ibox, jbox, kbox, kk, good_particle, global[3], j, part;
+  double MyPos[3], conc, rvir, rnd, nfwfac, area, xrnd, yrnd, probfunc, u, theta;
+
+  int Lgridxy = subbox.Lgwbl[_x_] * subbox.Lgwbl[_y_];
+
+  my_strcpy(block->name,"POS ",4);
+  my_strcpy(block->type,"FLOATN  ",8);
+  block->sizeof_type = sizeof(AuxStruct);
+  block->ndim=3;
+
+  /* each task builds its catalogue: Pos */
+  block->data = (void *)malloc(Npart_array[collector] * sizeof(AuxStruct));
+  if (block->data==0x0)
+    {
+      printf("ERROR on Task %d: could not allocate block to be written in snapshot\n",ThisTask);
+      return 1;
+    }
+
+  double Dz = GrowingMode(outputs.z[myiout],params.k_for_GM);
+
+  /* the first loop is on particles outside groups */
+  for (i=0, index=0; i<subbox.Npart; i++)
+    {
+      /* grid coordinates from the indices (sub-box coordinates) */
+      kbox=i/Lgridxy;
+      kk=i-kbox*Lgridxy;
+      jbox=kk/subbox.Lgwbl[_x_];
+      ibox=kk-jbox*subbox.Lgwbl[_x_];
+      good_particle = ( ibox>=subbox.safe[_x_] && ibox<subbox.Lgwbl[_x_]-subbox.safe[_x_] && 
+			jbox>=subbox.safe[_y_] && jbox<subbox.Lgwbl[_y_]-subbox.safe[_y_] && 
+			kbox>=subbox.safe[_z_] && kbox<subbox.Lgwbl[_z_]-subbox.safe[_z_] );
+      if (good_particle
+#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
+	  && group_ID[i]<=FILAMENT
+#endif
+	  )
+	{
+	  /* particle coordinates in the box, imposing PBCs */
+	  global[_x_] = ibox + subbox.stabl[_x_];
+	  if (global[_x_]<0) global[_x_]+=MyGrids[0].GSglobal[_x_];
+	  if (global[_x_]>=MyGrids[0].GSglobal[_x_]) global[_x_]-=MyGrids[0].GSglobal[_x_];
+	  global[_y_] = jbox + subbox.stabl[_y_];
+	  if (global[_y_]<0) global[_y_]+=MyGrids[0].GSglobal[_y_];
+	  if (global[_y_]>=MyGrids[0].GSglobal[_y_]) global[_y_]-=MyGrids[0].GSglobal[_y_];
+	  global[_z_] = kbox + subbox.stabl[_z_];
+	  if (global[_z_]<0) global[_z_]+=MyGrids[0].GSglobal[_z_];
+	  if (global[_z_]>=MyGrids[0].GSglobal[_z_]) global[_z_]-=MyGrids[0].GSglobal[_z_];
 
 	  /* particles outside groups (uncollapsed and filament particles)
 	     are displaced with LPT */
@@ -608,26 +1034,27 @@ int write_snapshot(int iout)
 	  if (group_ID[i]<=FILAMENT)
 	    {
 #endif
-	      set_point(global_x,global_y,global_z,i,outputs.F[iout],&obj);
+	      set_point(global[_x_],global[_y_],global[_z_],i,outputs.F[myiout],&obj);
 	      for (j=0; j<3; j++)
 		{
-		  Pos[index].axis[j]=(float)(q2x(rot[j], &obj, ORDER_FOR_CATALOG) * 
-					     params.InterPartDist * params.Hubble100);
-		  if (Pos[index].axis[j] >= params.BoxSize_h100)
-		    Pos[index].axis[j] -= (float)params.BoxSize_h100;
-		  if (Pos[index].axis[j] < 0.0) 
-		    Pos[index].axis[j] += (float)params.BoxSize_h100;
+		  ((AuxStruct*)block->data)[index].axis[j]=
+		    (float)(q2x(rot[j], &obj, ORDER_FOR_CATALOG) * 
+			    params.InterPartDist * params.Hubble100);
+		  if (((AuxStruct*)block->data)[index].axis[j] >= params.BoxSize_h100)
+		    ((AuxStruct*)block->data)[index].axis[j] -= (float)params.BoxSize_h100;
+		  if (((AuxStruct*)block->data)[index].axis[j] < 0.0) 
+		    ((AuxStruct*)block->data)[index].axis[j] += (float)params.BoxSize_h100;
 #ifdef POS_IN_KPC
-		  Pos[index].axis[j] *= 1000.;
+		  ((AuxStruct*)block->data)[index].axis[j] *= 1000.;
 #endif
 		}
 #ifdef FORCE_PARTICLE_NUMBER
 	    }
 	  else
 	    {
-	      set_obj(group_ID[i], outputs.F[iout], &obj);
+	      set_obj(group_ID[i], outputs.F[myiout], &obj);
 	      for (j=0; j<3; j++)
-		MyPos[j]=(float)((q2x(rot[j], &obj, ORDER_FOR_CATALOG) + SGrid[rot[j]]) *
+		MyPos[j]=(float)((q2x(rot[j], &obj, ORDER_FOR_CATALOG) + subbox.stabl[rot[j]]) *
 				 params.InterPartDist * params.Hubble100);
 	      /* particles in the group are distributed as NFW */
 	      /* Concentration taken from Bhattacharya, et al. 2013 */
@@ -635,7 +1062,7 @@ int write_snapshot(int iout)
 		* pow( (1.12*pow(groups[group_ID[i]].Mass*params.ParticleMass*params.Hubble100 
 				 /5.e13,0.3) + 0.53)/Dz , -0.35);
 	      rvir = pow(0.01 * GRAVITY * groups[group_ID[i]].Mass*params.ParticleMass /
-		   pow(Hubble(outputs.z[iout]),2.0), 1./3.) * (1. + outputs.z[iout]) * params.Hubble100;
+		   pow(Hubble(outputs.z[myiout]),2.0), 1./3.) * (1. + outputs.z[myiout]) * params.Hubble100;
 
 	      part=0;
 	      do
@@ -653,18 +1080,18 @@ int write_snapshot(int iout)
 		      u = -1.+2.*gsl_rng_uniform(random_generator);
 		      theta = 2.*PI*gsl_rng_uniform(random_generator);
 
-		      Pos[index].axis[0] = MyPos[0] + (float)(xrnd * rvir * sqrt(1.-u*u)*cos(theta));
-		      Pos[index].axis[1] = MyPos[1] + (float)(xrnd * rvir * sqrt(1.-u*u)*sin(theta));
-		      Pos[index].axis[2] = MyPos[2] + (float)(xrnd * rvir * u);
+		      ((AuxStruct*)block->data)[index].axis[_x_] = MyPos[_x_] + (float)(xrnd * rvir * sqrt(1.-u*u)*cos(theta));
+		      ((AuxStruct*)block->data)[index].axis[_y_] = MyPos[_y_] + (float)(xrnd * rvir * sqrt(1.-u*u)*sin(theta));
+		      ((AuxStruct*)block->data)[index].axis[_z_] = MyPos[_z_] + (float)(xrnd * rvir * u);
 
 		      for (j=0; j<3; j++)
 			{
-			  if (Pos[index].axis[j] >= params.BoxSize_h100) 
-			    Pos[index].axis[j] -= (float)params.BoxSize_h100;
-			  if (Pos[index].axis[j] < 0.0) 
-			    Pos[index].axis[j] += (float)params.BoxSize_h100;
+			  if (((AuxStruct*)block->data)[index].axis[j] >= params.BoxSize_h100) 
+			    ((AuxStruct*)block->data)[index].axis[j] -= (float)params.BoxSize_h100;
+			  if (((AuxStruct*)block->data)[index].axis[j] < 0.0) 
+			    ((AuxStruct*)block->data)[index].axis[j] += (float)params.BoxSize_h100;
 #ifdef POS_IN_KPC
-			  Pos[index].axis[j] *= 1000.;
+			  ((AuxStruct*)block->data)[index].axis[j] *= 1000.;
 #endif
 			}
 		      part=1;
@@ -685,9 +1112,9 @@ int write_snapshot(int iout)
     if (groups[i].point >= 0 && groups[i].good)
       {
 	/* the center of mass of groups is displaced with LPT */
-	set_obj(i, outputs.F[iout], &obj);
+	set_obj(i, outputs.F[myiout], &obj);
 	for (j=0; j<3; j++)
-	  MyPos[j]=(float)((q2x(rot[j], &obj, ORDER_FOR_CATALOG) + SGrid[rot[j]]) *
+	  MyPos[j]=(float)((q2x(rot[j], &obj, ORDER_FOR_CATALOG) + subbox.stabl[rot[j]]) *
 			   params.InterPartDist * params.Hubble100);
 
 	/* virial radius and concentration of the group */
@@ -696,7 +1123,7 @@ int write_snapshot(int iout)
 	  * pow( (1.12*pow(groups[i].Mass*params.ParticleMass*params.Hubble100 /5.e13,0.3)+ 0.53)/Dz ,
 		 -0.35);
 	rvir = pow(0.01 * GRAVITY * groups[i].Mass*params.ParticleMass /
-		   pow(Hubble(outputs.z[iout]),2.0), 1./3.) * (1. + outputs.z[iout]) * params.Hubble100;
+		   pow(Hubble(outputs.z[myiout]),2.0), 1./3.) * (1. + outputs.z[myiout]) * params.Hubble100;
 
 	/* particles in the group are distributed as NFW */
 	part=0;
@@ -715,18 +1142,18 @@ int write_snapshot(int iout)
 		u = -1.+2.*gsl_rng_uniform(random_generator);
 		theta = 2.*PI*gsl_rng_uniform(random_generator);
 
-		Pos[index].axis[0] = MyPos[0] + (float)(xrnd * rvir * sqrt(1.-u*u)*cos(theta));
-		Pos[index].axis[1] = MyPos[1] + (float)(xrnd * rvir * sqrt(1.-u*u)*sin(theta));
-		Pos[index].axis[2] = MyPos[2] + (float)(xrnd * rvir * u);
+		((AuxStruct*)block->data)[index].axis[_x_] = MyPos[_x_] + (float)(xrnd * rvir * sqrt(1.-u*u)*cos(theta));
+		((AuxStruct*)block->data)[index].axis[_y_] = MyPos[_y_] + (float)(xrnd * rvir * sqrt(1.-u*u)*sin(theta));
+		((AuxStruct*)block->data)[index].axis[_z_] = MyPos[_z_] + (float)(xrnd * rvir * u);
 
 		for (j=0; j<3; j++)
 		  {
-		    if (Pos[index].axis[j] >= params.BoxSize_h100) 
-		      Pos[index].axis[j] -= (float)params.BoxSize_h100;
-		    if (Pos[index].axis[j] < 0.0) 
-		      Pos[index].axis[j] += (float)params.BoxSize_h100;
+		    if (((AuxStruct*)block->data)[index].axis[j] >= params.BoxSize_h100) 
+		      ((AuxStruct*)block->data)[index].axis[j] -= (float)params.BoxSize_h100;
+		    if (((AuxStruct*)block->data)[index].axis[j] < 0.0) 
+		      ((AuxStruct*)block->data)[index].axis[j] += (float)params.BoxSize_h100;
 #ifdef POS_IN_KPC
-		    Pos[index].axis[j] *= 1000.;
+		    ((AuxStruct*)block->data)[index].axis[j] *= 1000.;
 #endif
 		  }
 		index++;
@@ -737,55 +1164,44 @@ int write_snapshot(int iout)
       }
 #endif
 
-  /* writing of Pos */
-  if (ThisTask==collector)
-    {
-      dummy=NInFile*sizeof(AuxStruct);
-      WriteBlockName(file,dummy,"POS ");
-      fwrite(&dummy, sizeof(dummy), 1, file);
-      fwrite(Pos, sizeof(AuxStruct), myNpart, file);
-      free(Pos);
-    }
+  return 0;
 
-  for (next=1; next<NTasksPerFile; next++)
-    {
-      itask=collector+next;
-      if (ThisTask==collector)
-	{
-	  npart=0;
-	  MPI_Recv(&npart, 1, MPI_INT, itask, 0, MPI_COMM_WORLD, &status);
-	  Pos = (AuxStruct *)malloc(npart * sizeof(AuxStruct));
-	  MPI_Recv(Pos, npart*sizeof(AuxStruct), MPI_BYTE, itask, 0, MPI_COMM_WORLD, &status);
-	  fwrite(Pos, sizeof(AuxStruct), npart, file);
-	  free(Pos);
-	}
-      else if (ThisTask==itask)
-	{
-	  MPI_Send(&myNpart, 1, MPI_INT, collector, 0, MPI_COMM_WORLD);
-	  MPI_Send(Pos, sizeof(AuxStruct)*myNpart, MPI_BYTE, collector, 0, MPI_COMM_WORLD);
-	  free(Pos);
-	}
-    }
+}
 
-  /* collector task closes the block */
-  if (ThisTask==collector)
-    fwrite(&dummy, sizeof(dummy), 1, file);
 
+int initialize_VEL_withNFW(Block_data *block)
+{
+
+  int index, i, ibox, jbox, kbox, kk, good_particle, global[3], j;
+  double MyVel[3], vfact, sigma, rvir;
+
+  int Lgridxy = subbox.Lgwbl[_x_] * subbox.Lgwbl[_y_];
+
+  my_strcpy(block->name,"VEL ",4);
+  my_strcpy(block->type,"FLOATN  ",8);
+  block->sizeof_type = sizeof(AuxStruct);
+  block->ndim=3;
 
   /* each task builds its catalogue: Vel */
-  Vel = (AuxStruct *)malloc(myNpart * sizeof(AuxStruct));
-  vfact=sqrt(1.+outputs.z[iout]);
+  block->data = (void *)malloc(Npart_array[collector] * sizeof(AuxStruct));
+  if (block->data==0x0)
+    {
+      printf("ERROR on Task %d: could not allocate block to be written in snapshot\n",ThisTask);
+      return 1;
+    }
+
+  vfact=sqrt(1.+outputs.z[myiout]);
   /* the first loop is on particles outside groups */
   for (i=0, index=0; i<subbox.Npart; i++)
     {
       /* grid coordinates from the indices (sub-box coordinates) */
       kbox=i/Lgridxy;
       kk=i-kbox*Lgridxy;
-      jbox=kk/subbox.Lgwbl_x;
-      ibox=kk-jbox*subbox.Lgwbl_x;
-      good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
-			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
-			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
+      jbox=kk/subbox.Lgwbl[_x_];
+      ibox=kk-jbox*subbox.Lgwbl[_x_];
+      good_particle = ( ibox>=subbox.safe[_x_] && ibox<subbox.Lgwbl[_x_]-subbox.safe[_x_] && 
+			jbox>=subbox.safe[_y_] && jbox<subbox.Lgwbl[_y_]-subbox.safe[_y_] && 
+			kbox>=subbox.safe[_z_] && kbox<subbox.Lgwbl[_z_]-subbox.safe[_z_] );
       if (good_particle
 #if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
 	  && group_ID[i]<=FILAMENT
@@ -793,15 +1209,15 @@ int write_snapshot(int iout)
 	  )
 	{
 	  /* particle coordinates in the box, imposing PBCs */
-	  global_x = ibox + subbox.stabl_x;
-	  if (global_x<0) global_x+=MyGrids[0].GSglobal[0];
-	  if (global_x>=MyGrids[0].GSglobal[0]) global_x-=MyGrids[0].GSglobal[0];
-	  global_y = jbox + subbox.stabl_y;
-	  if (global_y<0) global_y+=MyGrids[0].GSglobal[1];
-	  if (global_y>=MyGrids[0].GSglobal[1]) global_y-=MyGrids[0].GSglobal[1];
-	  global_z = kbox + subbox.stabl_z;
-	  if (global_z<0) global_z+=MyGrids[0].GSglobal[2];
-	  if (global_z>=MyGrids[0].GSglobal[2]) global_z-=MyGrids[0].GSglobal[2];
+	  global[_x_] = ibox + subbox.stabl[_x_];
+	  if (global[_x_]<0) global[_x_]+=MyGrids[0].GSglobal[_x_];
+	  if (global[_x_]>=MyGrids[0].GSglobal[_x_]) global[_x_]-=MyGrids[0].GSglobal[_x_];
+	  global[_y_] = jbox + subbox.stabl[_y_];
+	  if (global[_y_]<0) global[_y_]+=MyGrids[0].GSglobal[_y_];
+	  if (global[_y_]>=MyGrids[0].GSglobal[_y_]) global[_y_]-=MyGrids[0].GSglobal[_y_];
+	  global[_z_] = kbox + subbox.stabl[_z_];
+	  if (global[_z_]<0) global[_z_]+=MyGrids[0].GSglobal[_z_];
+	  if (global[_z_]>=MyGrids[0].GSglobal[_z_]) global[_z_]-=MyGrids[0].GSglobal[_z_];
 	  
 	  /* particles outside groups (uncollapsed and filament particles)
 	     are displaced with LPT */
@@ -809,24 +1225,26 @@ int write_snapshot(int iout)
 	  if (group_ID[i]<=FILAMENT)
 	    {
 #endif
-	      set_point(global_x,global_y,global_z,i,outputs.F[iout],&obj);
+	      set_point(global[_x_],global[_y_],global[_z_],i,outputs.F[myiout],&obj);
 	      for (j=0; j<3; j++)
 		/* GADGET format requires velocities to be divided by sqrt(a) */
-		Vel[index].axis[j]=(float)(vel(rot[j], &obj)*vfact);
+		((AuxStruct*)block->data)[index].axis[j]=(float)(vel(rot[j], &obj)*vfact);
 #ifdef FORCE_PARTICLE_NUMBER
 	    }
 	  else
 	    {
 	      /* the center of mass of groups is displaced with LPT */
-	      set_obj(group_ID[i], outputs.F[iout], &obj);
-	      set_obj_vel(group_ID[i], outputs.F[iout], &obj);
+	      set_obj(group_ID[i], outputs.F[myiout], &obj);
+	      set_obj_vel(group_ID[i], outputs.F[myiout], &obj);
 	      for (j=0; j<3; j++)
 		MyVel[j]=(float)(vel(rot[j], &obj)*vfact);
 
+	      rvir = pow(0.01 * GRAVITY * groups[group_ID[i]].Mass*params.ParticleMass /
+		   pow(Hubble(outputs.z[myiout]),2.0), 1./3.) * (1. + outputs.z[myiout]) * params.Hubble100;
 	      sigma = sqrt(GRAVITY * groups[group_ID[i]].Mass * params.ParticleMass / 3./ rvir);
 
 	      for (j=0; j<3; j++)
-		Vel[index].axis[j]=MyVel[j] + gsl_ran_gaussian(random_generator, sigma) * vfact;
+		((AuxStruct*)block->data)[index].axis[j]=MyVel[j] + gsl_ran_gaussian(random_generator, sigma) * vfact;
 	    }
 #endif
 	  ++index;
@@ -840,1552 +1258,29 @@ int write_snapshot(int iout)
     if (groups[i].point >= 0 && groups[i].good)
       {
 	/* the center of mass of groups is displaced with LPT */
-	set_obj(i, outputs.F[iout], &obj);
-	set_obj_vel(i, outputs.F[iout], &obj);
+	set_obj(i, outputs.F[myiout], &obj);
+	set_obj_vel(i, outputs.F[myiout], &obj);
 	for (j=0; j<3; j++)
 	  MyVel[j]=(float)(vel(rot[j], &obj)*vfact);
 
 	/* /\* virial radius and concentration of the group *\/ */
-	/* Dz = GrowingMode(outputs.z[iout],params.k_for_GM); */
+	/* Dz = GrowingMode(outputs.z[myiout],params.k_for_GM); */
 	/* /\* this is the virial radius in physical true kpc *\/ */
 	/* rvir = pow(0.01 * GRAVITY * groups[i].Mass*params.ParticleMass / */
-	/* 	   pow(Hubble(outputs.z[iout]),2.0), 1./3.);   */
+	/* 	   pow(Hubble(outputs.z[myiout]),2.0), 1./3.);   */
 	sigma = sqrt(GRAVITY * groups[i].Mass * params.ParticleMass / 3./ rvir);
 
 	for (npart=0; npart<groups[i].Mass; npart++)
 	  {
 	    for (j=0; j<3; j++)
-	      Vel[index].axis[j]=MyVel[j] + gsl_ran_gaussian(random_generator, sigma) * vfact;
+	      ((AuxStruct*)block->data)[index].axis[j]=MyVel[j] + gsl_ran_gaussian(random_generator, sigma) * vfact;
 	    ++index;
 	  }
       }
 #endif
 
-  /* writing of Vel */
-  if (ThisTask==collector)
-    {
-      dummy=NInFile*sizeof(AuxStruct);
-      WriteBlockName(file,dummy,"VEL ");
-      fwrite(&dummy, sizeof(dummy), 1, file);
-      fwrite(Vel, sizeof(AuxStruct), myNpart, file);
-      free(Vel);
-    }
-
-  for (next=1; next<NTasksPerFile; next++)
-    {
-      itask=collector+next;
-      if (ThisTask==collector)
-	{
-	  npart=0;
-	  MPI_Recv(&npart, 1, MPI_INT, itask, 0, MPI_COMM_WORLD, &status);
-	  Vel = (AuxStruct *)malloc(npart * sizeof(AuxStruct));
-	  MPI_Recv(Vel, npart*sizeof(AuxStruct), MPI_BYTE, itask, 0, MPI_COMM_WORLD, &status);
-	  fwrite(Vel, sizeof(AuxStruct), npart, file);
-	  free(Vel);
-	}
-      else if (ThisTask==itask)
-	{
-	  MPI_Send(&myNpart, 1, MPI_INT, collector, 0, MPI_COMM_WORLD);
-	  MPI_Send(Vel, sizeof(AuxStruct)*myNpart, MPI_BYTE, collector, 0, MPI_COMM_WORLD);
-	  free(Vel);
-	}
-    }
-
-  /* collector task closes the block */
-  if (ThisTask==collector)
-    fwrite(&dummy, sizeof(dummy), 1, file);
-
-#ifndef ONLY_LPT_DISPLACEMENTS
-  /* each task builds its catalogue: GRID */
-  GRID = (MYIDTYPE*)malloc(myNpart * sizeof(MYIDTYPE));
-  /* first loop is on good particles that are not in groups */
-  for (i=0, index=0; i<subbox.Npart; i++)
-    {
-      /* grid coordinates from the indices (sub-box coordinates) */
-      kbox=i/Lgridxy;
-      kk=i-kbox*Lgridxy;
-      jbox=kk/subbox.Lgwbl_x;
-      ibox=kk-jbox*subbox.Lgwbl_x;
-      good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
-			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
-			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
-#ifndef FORCE_PARTICLE_NUMBER
-      if (group_ID[i]<=FILAMENT && good_particle)
-	GRID[index++]=group_ID[i];
-#else
-      if (good_particle)
-	{
-	  if (group_ID[i]<=FILAMENT)
-	    GRID[index++]=group_ID[i];
-	  else
-	    GRID[index++]=groups[group_ID[i]].name;
-	}
-#endif
-
-    }
-
-#ifndef FORCE_PARTICLE_NUMBER
-  /* second loop is on good groups */
-  for (i=FILAMENT+1; i<=ngroups; i++)
-    if (groups[i].point >= 0 && groups[i].good)
-      {
-	next=groups[i].point;
-	for (npart=0; npart<groups[i].Mass; npart++)
-	  {
-	    GRID[index++]=groups[i].name;
-	    next=linking_list[next];
-	  }
-      }
-#endif
-
-  /* writing of GRIDs */
-  if (ThisTask==collector)
-    {
-      dummy=NInFile*sizeof(MYIDTYPE);
-      WriteBlockName(file,dummy,"GRID");
-      fwrite(&dummy, sizeof(dummy), 1, file);
-      fwrite(GRID, sizeof(MYIDTYPE), myNpart, file); 
-      free(GRID);
-    }
-
-  for (next=1; next<NTasksPerFile; next++)
-    {
-      itask=collector+next;
-      if (ThisTask==collector)
-	{
-	  npart=0;
-	  MPI_Recv(&npart, 1, MPI_INT, itask, 0, MPI_COMM_WORLD, &status);
-	  GRID=(MYIDTYPE*)malloc(npart * sizeof(MYIDTYPE));
-	  MPI_Recv(GRID, npart*sizeof(MYIDTYPE), MPI_BYTE, itask, 0, MPI_COMM_WORLD, &status);
-	  fwrite(GRID, sizeof(MYIDTYPE), npart, file);
-	  free(GRID);
-	}
-      else if (ThisTask==itask)
-	{
-	  MPI_Send(&myNpart, 1, MPI_INT, collector, 0, MPI_COMM_WORLD);
-	  MPI_Send(GRID, myNpart*sizeof(MYIDTYPE), MPI_BYTE, collector, 0, MPI_COMM_WORLD);
-	  free(GRID);
-	}
-    }
-
-  /* collector task closes the block */
-  if (ThisTask==collector)
-    fwrite(&dummy, sizeof(dummy), 1, file);
-
-#ifdef WRITE_FMAX_TO_SNAPSHOT
-
-  /* each task builds its catalogue: FMAX */
-  FMAX = (float*)malloc(myNpart * sizeof(float));
-  /* first loop is on good particles that are not in groups */
-  for (i=0, index=0; i<subbox.Npart; i++)
-    {
-      /* grid coordinates from the indices (sub-box coordinates) */
-      kbox=i/Lgridxy;
-      kk=i-kbox*Lgridxy;
-      jbox=kk/subbox.Lgwbl_x;
-      ibox=kk-jbox*subbox.Lgwbl_x;
-      good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
-			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
-			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
-      if (good_particle
-#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
-	  && group_ID[i]<=FILAMENT
-#endif
-	  )
-	FMAX[index++]=frag[i].Fmax;
-    }
-
-#ifndef FORCE_PARTICLE_NUMBER
-  /* second loop is on good groups */
-  for (i=FILAMENT+1; i<=ngroups; i++)
-    if (groups[i].point >= 0 && groups[i].good)
-      {
-	next=groups[i].point;
-	for (npart=0; npart<groups[i].Mass; npart++)
-	  {
-	    FMAX[index++]=frag[next].Fmax;
-	    next=linking_list[next];
-	  }
-      }
-#endif
-
-  /* writing of FMAX */
-  if (ThisTask==collector)
-    {
-      dummy=NInFile*sizeof(float);
-      WriteBlockName(file,dummy,"FMAX");
-      fwrite(&dummy, sizeof(dummy), 1, file);
-      fwrite(FMAX, sizeof(float), myNpart, file); 
-      free(FMAX);
-    }
-
-  for (next=1; next<NTasksPerFile; next++)
-    {
-      itask=collector+next;
-      if (ThisTask==collector)
-	{
-	  npart=0;
-	  MPI_Recv(&npart, 1, MPI_INT, itask, 0, MPI_COMM_WORLD, &status);
-	  FMAX=(float*)malloc(npart * sizeof(float));
-	  MPI_Recv(FMAX, npart*sizeof(float), MPI_BYTE, itask, 0, MPI_COMM_WORLD, &status);
-	  fwrite(FMAX, sizeof(float), npart, file);
-	  free(FMAX);
-	}
-      else if (ThisTask==itask)
-	{
-	  MPI_Send(&myNpart, 1, MPI_INT, collector, 0, MPI_COMM_WORLD);
-	  MPI_Send(FMAX, myNpart*sizeof(float), MPI_BYTE, collector, 0, MPI_COMM_WORLD);
-	  free(FMAX);
-	}
-    }
-
-  /* collector task closes the block */
-  if (ThisTask==collector)
-    fwrite(&dummy, sizeof(dummy), 1, file);
-
-
-
-  /* each task builds its catalogue: RMAX */
-  RMAX = (int*)malloc(myNpart * sizeof(int));
-  /* first loop is on good particles that are not in groups */
-  for (i=0, index=0; i<subbox.Npart; i++)
-    {
-      /* grid coordinates from the indices (sub-box coordinates) */
-      kbox=i/Lgridxy;
-      kk=i-kbox*Lgridxy;
-      jbox=kk/subbox.Lgwbl_x;
-      ibox=kk-jbox*subbox.Lgwbl_x;
-      good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
-			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
-			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
-      if (good_particle
-#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
-	  && group_ID[i]<=FILAMENT
-#endif
-	  )
-	RMAX[index++]=frag[i].Rmax;
-    }
-
-#ifndef FORCE_PARTICLE_NUMBER
-  /* second loop is on good groups */
-  for (i=FILAMENT+1; i<=ngroups; i++)
-    if (groups[i].point >= 0 && groups[i].good)
-      {
-	next=groups[i].point;
-	for (npart=0; npart<groups[i].Mass; npart++)
-	  {
-	    RMAX[index++]=frag[next].Rmax;
-	    next=linking_list[next];
-	  }
-      }
-#endif
-
-  /* writing of RMAX */
-  if (ThisTask==collector)
-    {
-      dummy=NInFile*sizeof(int);
-      WriteBlockName(file,dummy,"RMAX");
-      fwrite(&dummy, sizeof(dummy), 1, file);
-      fwrite(RMAX, sizeof(int), myNpart, file); 
-      free(RMAX);
-    }
-
-  for (next=1; next<NTasksPerFile; next++)
-    {
-      itask=collector+next;
-      if (ThisTask==collector)
-	{
-	  npart=0;
-	  MPI_Recv(&npart, 1, MPI_INT, itask, 0, MPI_COMM_WORLD, &status);
-	  RMAX=(int*)malloc(npart * sizeof(int));
-	  MPI_Recv(RMAX, npart*sizeof(int), MPI_BYTE, itask, 0, MPI_COMM_WORLD, &status);
-	  fwrite(RMAX, sizeof(int), npart, file);
-	  free(RMAX);
-	}
-      else if (ThisTask==itask)
-	{
-	  MPI_Send(&myNpart, 1, MPI_INT, collector, 0, MPI_COMM_WORLD);
-	  MPI_Send(RMAX, myNpart*sizeof(int), MPI_BYTE, collector, 0, MPI_COMM_WORLD);
-	  free(RMAX);
-	}
-    }
-
-  /* collector task closes the block */
-  if (ThisTask==collector)
-    fwrite(&dummy, sizeof(dummy), 1, file);
-
-
-#endif
-#endif
-
-
-  /* collector task closes the file */
-  if (ThisTask==collector)
-    fclose(file);
-
   return 0;
 }
-
-
-
-#ifdef TIMELESS_SNAPSHOT
-/* In this routine a snapshot is written that contains all information
-   needed to reconstruct at the post-processing level the full matter
-   density field */
-int write_timeless_snapshot(void)
-{
-/* NB this has fewer options the other code, because it is thought to 
-   be used for post-processing only */
-
-  int NTasksPerFile,collector,itask,next,ThisFile,index,npart,i,j,dummy,myNpart,NInFile,
-    good_particle;
-  int Lgridxy,ibox,jbox,kbox,kk,global_x,global_y,global_z;
-  unsigned long long int NPartTot;
-  char filename[LBLENGTH],wn[5],wt[9];
-  FILE *file;
-  SnapshotHeader_data Header;
-  MYIDTYPE *ID;
-  MPI_Status status;
-  typedef struct
-  {
-    float axis[3];
-  } AuxStruct;
-  
-  AuxStruct *Vel;
-  float *FMAX,*ZACC;
-  int *RMAX;
-
-/* 1 ID
-   2 VZEL
-   3 V2
-   4 V3_1
-   5 V3_2
-   6 FMAX
-   7 RMAX
-   8 ZACC */
-
-#define NBLOCKS_T 8
-  InfoBlock_data InfoBlock[NBLOCKS_T];
-  
-#ifdef ROTATE_BOX
-  static int rot[3]={1,2,0};
-#else
-  static int rot[3]={0,1,2};
-#endif
-
-  NTasksPerFile=NTasks/params.NumFiles;
-  ThisFile=ThisTask/NTasksPerFile;
-  collector=ThisFile*NTasksPerFile;
-
-  NPartTot = 
-    (unsigned long long int)MyGrids[0].GSglobal[0] * 
-    (unsigned long long int)MyGrids[0].GSglobal[1] * 
-    (unsigned long long int)MyGrids[0].GSglobal[2];
-  Lgridxy = subbox.Lgwbl_x * subbox.Lgwbl_y;
-
-
-  /* this is the total number of particles for the task */
-  for (i=0, myNpart=0; i<subbox.Npart; i++)
-    {
-      /* grid coordinates from the indices (sub-box coordinates) */
-      kbox=i/Lgridxy;
-      kk=i-kbox*Lgridxy;
-      jbox=kk/subbox.Lgwbl_x;
-      ibox=kk-jbox*subbox.Lgwbl_x;
-      good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
-			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
-			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
-      if (good_particle)
-	myNpart++;
-    }
-
-  /* collector task computes the total number of particles in the file */
-  for (next=0; next<NTasksPerFile; next++)
-    {
-      itask=collector+next;
-      if (!next)
-	{
-	  if (ThisTask==collector)  
-	    NInFile=myNpart;
-	}
-      else
-	{
-	  if (ThisTask==collector)
-	    {
-	      npart=0;
-	      MPI_Recv(&npart, 1, MPI_INT, itask, 0, MPI_COMM_WORLD, &status);
-	      NInFile+=npart;
-	    }
-	  else if (ThisTask==itask)
-	    MPI_Send(&myNpart, 1, MPI_INT, collector, 0, MPI_COMM_WORLD);
-	}
-    }
-
-
-  /* The collector task opens the file and writes the header */
-  if (ThisTask==collector)
-    {
-      if (params.NumFiles>1)
-	sprintf(filename,"pinocchio.%s.t_snapshot.out.%d",params.RunFlag,ThisFile);
-      else
-	sprintf(filename,"pinocchio.%s.t_snapshot.out",params.RunFlag);
-	    
-
-      if (!ThisTask)
-	printf("[%s] Task 0 will write %d particles in snapshot file %s\n",fdate(),NInFile,filename);
-
-      if ( (file=fopen(filename,"w"))==0x0)
-	{
-	  printf("Error on Task 0: cannot open file %s\n",filename);
-	  return 1;
-	}
-
-      /* writes information on the snapshot header */
-      memset(&Header, 0, sizeof(SnapshotHeader_data));
-
-      Header.NPart[1]=NInFile;
-      Header.Mass[1]=params.ParticleMass*params.Hubble100*1e-10;
-      Header.NPartTotal[1]=(unsigned int)( (NPartTot<<32) >>32 );
-      Header.npartTotalHighWord[1]=(unsigned int)(NPartTot>>32);
-      Header.Time=1.;
-      Header.RedShift=0.0;
-      Header.flag_sfr=0;
-      Header.flag_feedback=0;
-      Header.flag_cooling=0;
-      Header.num_files=params.NumFiles;
-      Header.BoxSize=params.BoxSize_h100;
-#ifdef POS_IN_KPC
-      Header.BoxSize*=1000.;
-#endif
-      Header.Omega0=params.Omega0;
-      Header.OmegaLambda=params.OmegaLambda;
-      Header.HubbleParam=params.Hubble100;
-      Header.flag_stellarage=0;
-      Header.flag_metals=0;
-      Header.flag_entropy_instead_u=0;
-      Header.flag_metalcooling=0;
-      Header.flag_stellarevolution=0;
-
-      dummy=sizeof(SnapshotHeader_data);
-      WriteBlockName(file,dummy,"HEAD");
-      fwrite(&dummy, sizeof(dummy), 1, file);
-      fwrite(&Header, dummy, 1, file);
-      fwrite(&dummy, sizeof(dummy), 1, file);
-
-      /* info block */
-      memset(&InfoBlock, 0, NBLOCKS_T*sizeof(InfoBlock_data));
-      int tb=0;
-      my_strcpy(InfoBlock[tb].name,"ID  ",4);
-#ifdef LONGIDS
-      my_strcpy(InfoBlock[tb].type,"LLONG   ",8);
-#else
-      my_strcpy(InfoBlock[tb].type,"LONG    ",8);
-#endif
-      InfoBlock[tb].ndim=1;
-      for (i=0; i<6; i++)
-	InfoBlock[tb].active[i]=0;
-      InfoBlock[tb].active[1]=1;
-      if (!ThisTask)	
-	{
-	  my_strcpy(wn,InfoBlock[tb].name,4);
-	  wn[4]='\0';
-	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[8]='\0';
-	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
-		 wn,wt,
-		 /* InfoBlock[tb].name, */
-		 /* InfoBlock[tb].type, */
-		 InfoBlock[tb].ndim,
-		 InfoBlock[tb].active[0],
-		 InfoBlock[tb].active[1],
-		 InfoBlock[tb].active[2],
-		 InfoBlock[tb].active[3],
-		 InfoBlock[tb].active[4],
-		 InfoBlock[tb].active[5]);
-	}
-      ++tb;
-
-      my_strcpy(InfoBlock[tb].name,"VZEL",4);
-      my_strcpy(InfoBlock[tb].type,"FLOATN  ",8);
-      InfoBlock[tb].ndim=3;
-      for (i=0; i<6; i++)
-	InfoBlock[tb].active[i]=0;
-      InfoBlock[tb].active[1]=1;
-      if (!ThisTask)
-	{
-	  my_strcpy(wn,InfoBlock[tb].name,4);
-	  wn[4]='\0';
-	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[8]='\0';
-	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
-		 wn,wt,
-		 /* InfoBlock[tb].name, */
-		 /* InfoBlock[tb].type, */
-		 InfoBlock[tb].ndim,
-		 InfoBlock[tb].active[0],
-		 InfoBlock[tb].active[1],
-		 InfoBlock[tb].active[2],
-		 InfoBlock[tb].active[3],
-		 InfoBlock[tb].active[4],
-		 InfoBlock[tb].active[5]);
-	}
-      ++tb;
-
-#ifdef TWO_LPT
-      my_strcpy(InfoBlock[tb].name,"V2  ",4);
-      my_strcpy(InfoBlock[tb].type,"FLOATN  ",8);
-      InfoBlock[tb].ndim=3;
-      for (i=0; i<6; i++)
-	InfoBlock[tb].active[i]=0;
-      InfoBlock[tb].active[1]=1;
-      if (!ThisTask)
-	{
-	  my_strcpy(wn,InfoBlock[tb].name,4);
-	  wn[4]='\0';
-	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[8]='\0';
-	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
-		 wn,wt,
-		 /* InfoBlock[tb].name, */
-		 /* InfoBlock[tb].type, */
-		 InfoBlock[tb].ndim,
-		 InfoBlock[tb].active[0],
-		 InfoBlock[tb].active[1],
-		 InfoBlock[tb].active[2],
-		 InfoBlock[tb].active[3],
-		 InfoBlock[tb].active[4],
-		 InfoBlock[tb].active[5]);
-	}
-      ++tb;
-
-#ifdef THREE_LPT
-      my_strcpy(InfoBlock[tb].name,"V3_1",4);
-      my_strcpy(InfoBlock[tb].type,"FLOATN  ",8);
-      InfoBlock[tb].ndim=3;
-      for (i=0; i<6; i++)
-	InfoBlock[tb].active[i]=0;
-      InfoBlock[tb].active[1]=1;
-      if (!ThisTask)
-	{
-	  my_strcpy(wn,InfoBlock[tb].name,4);
-	  wn[4]='\0';
-	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[8]='\0';
-	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
-		 wn,wt,
-		 /* InfoBlock[tb].name, */
-		 /* InfoBlock[tb].type, */
-		 InfoBlock[tb].ndim,
-		 InfoBlock[tb].active[0],
-		 InfoBlock[tb].active[1],
-		 InfoBlock[tb].active[2],
-		 InfoBlock[tb].active[3],
-		 InfoBlock[tb].active[4],
-		 InfoBlock[tb].active[5]);
-	}
-      ++tb;
-
-      my_strcpy(InfoBlock[tb].name,"V3_2",4);
-      my_strcpy(InfoBlock[tb].type,"FLOATN  ",8);
-      InfoBlock[tb].ndim=3;
-      for (i=0; i<6; i++)
-	InfoBlock[tb].active[i]=0;
-      InfoBlock[tb].active[1]=1;
-      if (!ThisTask)
-	{
-	  my_strcpy(wn,InfoBlock[tb].name,4);
-	  wn[4]='\0';
-	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[8]='\0';
-	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
-		 wn,wt,
-		 /* InfoBlock[tb].name, */
-		 /* InfoBlock[tb].type, */
-		 InfoBlock[tb].ndim,
-		 InfoBlock[tb].active[0],
-		 InfoBlock[tb].active[1],
-		 InfoBlock[tb].active[2],
-		 InfoBlock[tb].active[3],
-		 InfoBlock[tb].active[4],
-		 InfoBlock[tb].active[5]);
-	}
-      ++tb;
-#endif
-#endif
-
-      my_strcpy(InfoBlock[tb].name,"FMAX",4);
-      my_strcpy(InfoBlock[tb].type,"FLOAT   ",8);
-      InfoBlock[tb].ndim=1;
-      for (i=0; i<6; i++)
-	InfoBlock[tb].active[i]=0;
-      InfoBlock[tb].active[1]=1;
-      if (!ThisTask)
-	{
-	  my_strcpy(wn,InfoBlock[tb].name,4);
-	  wn[4]='\0';
-	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[8]='\0';
-	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
-		 wn,wt,
-		 /* InfoBlock[tb].name, */
-		 /* InfoBlock[tb].type, */
-		 InfoBlock[tb].ndim,
-		 InfoBlock[tb].active[0],
-		 InfoBlock[tb].active[1],
-		 InfoBlock[tb].active[2],
-		 InfoBlock[tb].active[3],
-		 InfoBlock[tb].active[4],
-		 InfoBlock[tb].active[5]);
-	}
-      ++tb;
-
-      my_strcpy(InfoBlock[tb].name,"RMAX",4);
-      my_strcpy(InfoBlock[tb].type,"LONG    ",8);
-      InfoBlock[tb].ndim=1;
-      for (i=0; i<6; i++)
-	InfoBlock[tb].active[i]=0;
-      InfoBlock[tb].active[1]=1;
-      if (!ThisTask)
-	{
-	  my_strcpy(wn,InfoBlock[tb].name,4);
-	  wn[4]='\0';
-	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[8]='\0';
-	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
-		 wn,wt,
-		 /* InfoBlock[tb].name, */
-		 /* InfoBlock[tb].type, */
-		 InfoBlock[tb].ndim,
-		 InfoBlock[tb].active[0],
-		 InfoBlock[tb].active[1],
-		 InfoBlock[tb].active[2],
-		 InfoBlock[tb].active[3],
-		 InfoBlock[tb].active[4],
-		 InfoBlock[tb].active[5]);
-	}
-      ++tb;
-
-      my_strcpy(InfoBlock[tb].name,"ZACC",4);
-      my_strcpy(InfoBlock[tb].type,"FLOAT   ",8);
-      InfoBlock[tb].ndim=1;
-      for (i=0; i<6; i++)
-	InfoBlock[tb].active[i]=0;
-      InfoBlock[tb].active[1]=1;
-      if (!ThisTask)
-	{
-	  my_strcpy(wn,InfoBlock[tb].name,4);
-	  wn[4]='\0';
-	  my_strcpy(wt,InfoBlock[tb].type,8);
-	  wt[8]='\0';
-	  printf("name=%s, type=%s, ndim=%d, active=[%d,%d,%d,%d,%d,%d]\n",
-		 wn,wt,
-		 /* InfoBlock[tb].name, */
-		 /* InfoBlock[tb].type, */
-		 InfoBlock[tb].ndim,
-		 InfoBlock[tb].active[0],
-		 InfoBlock[tb].active[1],
-		 InfoBlock[tb].active[2],
-		 InfoBlock[tb].active[3],
-		 InfoBlock[tb].active[4],
-		 InfoBlock[tb].active[5]);
-	}
-      ++tb;
-
-      dummy=NBLOCKS_T*sizeof(InfoBlock_data);
-      WriteBlockName(file,dummy,"INFO");
-      fwrite(&dummy, sizeof(dummy), 1, file);
-      fwrite(&InfoBlock, dummy, 1, file);
-      fwrite(&dummy, sizeof(dummy), 1, file);
-
-    }
-
-
-  /* ****************** ID ****************** */
-
-  /* each task builds its catalogue: IDs */
-  ID = (MYIDTYPE*)malloc(myNpart * sizeof(MYIDTYPE));
-  /* loop on good particles */
-  for (i=0, index=0; i<subbox.Npart; i++)
-    {
-      /* grid coordinates from the indices (sub-box coordinates) */
-      kbox=i/Lgridxy;
-      kk=i-kbox*Lgridxy;
-      jbox=kk/subbox.Lgwbl_x;
-      ibox=kk-jbox*subbox.Lgwbl_x;
-      good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
-			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
-			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
-      if (good_particle)
-	{
-	  /* particle coordinates in the box, imposing PBCs */
-	  global_x = ibox + subbox.stabl_x;
-	  if (global_x<0) global_x+=MyGrids[0].GSglobal[0];
-	  if (global_x>=MyGrids[0].GSglobal[0]) global_x-=MyGrids[0].GSglobal[0];
-	  global_y = jbox + subbox.stabl_y;
-	  if (global_y<0) global_y+=MyGrids[0].GSglobal[1];
-	  if (global_y>=MyGrids[0].GSglobal[1]) global_y-=MyGrids[0].GSglobal[1];
-	  global_z = kbox + subbox.stabl_z;
-	  if (global_z<0) global_z+=MyGrids[0].GSglobal[2];
-	  if (global_z>=MyGrids[0].GSglobal[2]) global_z-=MyGrids[0].GSglobal[2];
-#ifdef ROTATE_BOX
-	  ID[index]=1+(MYIDTYPE)global_x + 
-	    ( (MYIDTYPE)global_z + 
-	      (MYIDTYPE)global_y * (MYIDTYPE)MyGrids[0].GSglobal[2] ) * 
-	    (MYIDTYPE)MyGrids[0].GSglobal[0];
-#else
-	  ID[index]=1+(MYIDTYPE)global_x + 
-	    ( (MYIDTYPE)global_y + 
-	      (MYIDTYPE)global_z * (MYIDTYPE)MyGrids[0].GSglobal[1] ) * 
-	    (MYIDTYPE)MyGrids[0].GSglobal[0];
-#endif
-	  ++index;
-	}
-    }
-
-  /* writing of IDs */
-  if (ThisTask==collector)
-    {
-      dummy=NInFile*sizeof(MYIDTYPE);
-      WriteBlockName(file,dummy,"ID  ");
-      fwrite(&dummy, sizeof(dummy), 1, file);
-      fwrite(ID, sizeof(MYIDTYPE), myNpart, file); 
-      free(ID);
-    }
-
-  for (next=1; next<NTasksPerFile; next++)
-    {
-      itask=collector+next;
-      if (ThisTask==collector)
-	{
-	  npart=0;
-	  MPI_Recv(&npart, 1, MPI_INT, itask, 0, MPI_COMM_WORLD, &status);
-	  ID=(MYIDTYPE*)malloc(npart * sizeof(MYIDTYPE));
-	  MPI_Recv(ID, npart*sizeof(MYIDTYPE), MPI_BYTE, itask, 0, MPI_COMM_WORLD, &status);
-	  fwrite(ID, sizeof(MYIDTYPE), npart, file);
-	  free(ID);
-	}
-      else if (ThisTask==itask)
-	{
-	  MPI_Send(&myNpart, 1, MPI_INT, collector, 0, MPI_COMM_WORLD);
-	  MPI_Send(ID, myNpart*sizeof(MYIDTYPE), MPI_BYTE, collector, 0, MPI_COMM_WORLD);
-	  free(ID);
-	}
-    }
-
-  /* collector task closes the block */
-  if (ThisTask==collector)
-    fwrite(&dummy, sizeof(dummy), 1, file);
-
-  /* ****************** VZEL ****************** */
-
-  /* each task builds its catalogue: Vzel */
-  Vel = (AuxStruct *)malloc(myNpart * sizeof(AuxStruct));
-  /* loop on good particles */
-  for (i=0, index=0; i<subbox.Npart; i++)
-    {
-      /* grid coordinates from the indices (sub-box coordinates) */
-      kbox=i/Lgridxy;
-      kk=i-kbox*Lgridxy;
-      jbox=kk/subbox.Lgwbl_x;
-      ibox=kk-jbox*subbox.Lgwbl_x;
-      good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
-			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
-			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
-      if (good_particle)
-	{
-	  for (j=0; j<3; j++)
-	    Vel[index].axis[j]=(float)(frag[i].Vel[rot[j]]);
-	  ++index;
-	}
-    }
-
-  /* writing of Vel */
-  if (ThisTask==collector)
-    {
-      dummy=NInFile*sizeof(AuxStruct);
-      WriteBlockName(file,dummy,"VZEL");
-      fwrite(&dummy, sizeof(dummy), 1, file);
-      fwrite(Vel, sizeof(AuxStruct), myNpart, file);
-      free(Vel);
-    }
-
-  for (next=1; next<NTasksPerFile; next++)
-    {
-      itask=collector+next;
-      if (ThisTask==collector)
-	{
-	  npart=0;
-	  MPI_Recv(&npart, 1, MPI_INT, itask, 0, MPI_COMM_WORLD, &status);
-	  Vel = (AuxStruct *)malloc(npart * sizeof(AuxStruct));
-	  MPI_Recv(Vel, npart*sizeof(AuxStruct), MPI_BYTE, itask, 0, MPI_COMM_WORLD, &status);
-	  fwrite(Vel, sizeof(AuxStruct), npart, file);
-	  free(Vel);
-	}
-      else if (ThisTask==itask)
-	{
-	  MPI_Send(&myNpart, 1, MPI_INT, collector, 0, MPI_COMM_WORLD);
-	  MPI_Send(Vel, sizeof(AuxStruct)*myNpart, MPI_BYTE, collector, 0, MPI_COMM_WORLD);
-	  free(Vel);
-	}
-    }
-
-  /* collector task closes the block */
-  if (ThisTask==collector)
-    fwrite(&dummy, sizeof(dummy), 1, file);
-
-#ifdef TWO_LPT
-  /* ****************** V2 ****************** */
-
-  /* each task builds its catalogue: Vzel */
-  Vel = (AuxStruct *)malloc(myNpart * sizeof(AuxStruct));
-  /* loop on good particles */
-  for (i=0, index=0; i<subbox.Npart; i++)
-    {
-      /* grid coordinates from the indices (sub-box coordinates) */
-      kbox=i/Lgridxy;
-      kk=i-kbox*Lgridxy;
-      jbox=kk/subbox.Lgwbl_x;
-      ibox=kk-jbox*subbox.Lgwbl_x;
-      good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
-			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
-			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
-      if (good_particle)
-	{
-	  for (j=0; j<3; j++)
-	    Vel[index].axis[j]=(float)(frag[i].Vel_2LPT[rot[j]]);
-	  ++index;
-	}
-    }
-
-  /* writing of V2 */
-  if (ThisTask==collector)
-    {
-      dummy=NInFile*sizeof(AuxStruct);
-      WriteBlockName(file,dummy,"V2  ");
-      fwrite(&dummy, sizeof(dummy), 1, file);
-      fwrite(Vel, sizeof(AuxStruct), myNpart, file);
-      free(Vel);
-    }
-
-  for (next=1; next<NTasksPerFile; next++)
-    {
-      itask=collector+next;
-      if (ThisTask==collector)
-	{
-	  npart=0;
-	  MPI_Recv(&npart, 1, MPI_INT, itask, 0, MPI_COMM_WORLD, &status);
-	  Vel = (AuxStruct *)malloc(npart * sizeof(AuxStruct));
-	  MPI_Recv(Vel, npart*sizeof(AuxStruct), MPI_BYTE, itask, 0, MPI_COMM_WORLD, &status);
-	  fwrite(Vel, sizeof(AuxStruct), npart, file);
-	  free(Vel);
-	}
-      else if (ThisTask==itask)
-	{
-	  MPI_Send(&myNpart, 1, MPI_INT, collector, 0, MPI_COMM_WORLD);
-	  MPI_Send(Vel, sizeof(AuxStruct)*myNpart, MPI_BYTE, collector, 0, MPI_COMM_WORLD);
-	  free(Vel);
-	}
-    }
-
-  /* collector task closes the block */
-  if (ThisTask==collector)
-    fwrite(&dummy, sizeof(dummy), 1, file);
-
-#ifdef THREE_LPT
-  /* ****************** V3_1 ****************** */
-
-  /* each task builds its catalogue: Vzel */
-  Vel = (AuxStruct *)malloc(myNpart * sizeof(AuxStruct));
-  /* loop on good particles */
-  for (i=0, index=0; i<subbox.Npart; i++)
-    {
-      /* grid coordinates from the indices (sub-box coordinates) */
-      kbox=i/Lgridxy;
-      kk=i-kbox*Lgridxy;
-      jbox=kk/subbox.Lgwbl_x;
-      ibox=kk-jbox*subbox.Lgwbl_x;
-      good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
-			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
-			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
-      if (good_particle)
-	{
-	  for (j=0; j<3; j++)
-	    Vel[index].axis[j]=(float)(frag[i].Vel_3LPT_1[rot[j]]);
-	  ++index;
-	}
-    }
-
-  /* writing of V3_1 */
-  if (ThisTask==collector)
-    {
-      dummy=NInFile*sizeof(AuxStruct);
-      WriteBlockName(file,dummy,"V3_1");
-      fwrite(&dummy, sizeof(dummy), 1, file);
-      fwrite(Vel, sizeof(AuxStruct), myNpart, file);
-      free(Vel);
-    }
-
-  for (next=1; next<NTasksPerFile; next++)
-    {
-      itask=collector+next;
-      if (ThisTask==collector)
-	{
-	  npart=0;
-	  MPI_Recv(&npart, 1, MPI_INT, itask, 0, MPI_COMM_WORLD, &status);
-	  Vel = (AuxStruct *)malloc(npart * sizeof(AuxStruct));
-	  MPI_Recv(Vel, npart*sizeof(AuxStruct), MPI_BYTE, itask, 0, MPI_COMM_WORLD, &status);
-	  fwrite(Vel, sizeof(AuxStruct), npart, file);
-	  free(Vel);
-	}
-      else if (ThisTask==itask)
-	{
-	  MPI_Send(&myNpart, 1, MPI_INT, collector, 0, MPI_COMM_WORLD);
-	  MPI_Send(Vel, sizeof(AuxStruct)*myNpart, MPI_BYTE, collector, 0, MPI_COMM_WORLD);
-	  free(Vel);
-	}
-    }
-
-  /* collector task closes the block */
-  if (ThisTask==collector)
-    fwrite(&dummy, sizeof(dummy), 1, file);
-
-
-  /* ****************** V3_2 ****************** */
-
-  /* each task builds its catalogue: Vzel */
-  Vel = (AuxStruct *)malloc(myNpart * sizeof(AuxStruct));
-  /* loop on good particles */
-  for (i=0, index=0; i<subbox.Npart; i++)
-    {
-      /* grid coordinates from the indices (sub-box coordinates) */
-      kbox=i/Lgridxy;
-      kk=i-kbox*Lgridxy;
-      jbox=kk/subbox.Lgwbl_x;
-      ibox=kk-jbox*subbox.Lgwbl_x;
-      good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
-			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
-			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
-      if (good_particle)
-	{
-	  for (j=0; j<3; j++)
-	    Vel[index].axis[j]=(float)(frag[i].Vel_3LPT_2[rot[j]]);
-	  ++index;
-	}
-    }
-
-  /* writing of V3_1 */
-  if (ThisTask==collector)
-    {
-      dummy=NInFile*sizeof(AuxStruct);
-      WriteBlockName(file,dummy,"V3_2");
-      fwrite(&dummy, sizeof(dummy), 1, file);
-      fwrite(Vel, sizeof(AuxStruct), myNpart, file);
-      free(Vel);
-    }
-
-  for (next=1; next<NTasksPerFile; next++)
-    {
-      itask=collector+next;
-      if (ThisTask==collector)
-	{
-	  npart=0;
-	  MPI_Recv(&npart, 1, MPI_INT, itask, 0, MPI_COMM_WORLD, &status);
-	  Vel = (AuxStruct *)malloc(npart * sizeof(AuxStruct));
-	  MPI_Recv(Vel, npart*sizeof(AuxStruct), MPI_BYTE, itask, 0, MPI_COMM_WORLD, &status);
-	  fwrite(Vel, sizeof(AuxStruct), npart, file);
-	  free(Vel);
-	}
-      else if (ThisTask==itask)
-	{
-	  MPI_Send(&myNpart, 1, MPI_INT, collector, 0, MPI_COMM_WORLD);
-	  MPI_Send(Vel, sizeof(AuxStruct)*myNpart, MPI_BYTE, collector, 0, MPI_COMM_WORLD);
-	  free(Vel);
-	}
-    }
-
-  /* collector task closes the block */
-  if (ThisTask==collector)
-    fwrite(&dummy, sizeof(dummy), 1, file);
-
-#endif
-#endif
-  /* ****************** FMAX ****************** */
-
-  /* each task builds its catalogue: FMAX */
-  FMAX = (float*)malloc(myNpart * sizeof(float));
-  /* first loop is on good particles that are not in groups */
-  for (i=0, index=0; i<subbox.Npart; i++)
-    {
-      /* grid coordinates from the indices (sub-box coordinates) */
-      kbox=i/Lgridxy;
-      kk=i-kbox*Lgridxy;
-      jbox=kk/subbox.Lgwbl_x;
-      ibox=kk-jbox*subbox.Lgwbl_x;
-      good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
-			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
-			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
-      if (good_particle)
-	FMAX[index++]=frag[i].Fmax;
-    }
-
-  /* writing of FMAX */
-  if (ThisTask==collector)
-    {
-      dummy=NInFile*sizeof(float);
-      WriteBlockName(file,dummy,"FMAX");
-      fwrite(&dummy, sizeof(dummy), 1, file);
-      fwrite(FMAX, sizeof(float), myNpart, file); 
-      free(FMAX);
-    }
-
-  for (next=1; next<NTasksPerFile; next++)
-    {
-      itask=collector+next;
-      if (ThisTask==collector)
-	{
-	  npart=0;
-	  MPI_Recv(&npart, 1, MPI_INT, itask, 0, MPI_COMM_WORLD, &status);
-	  FMAX=(float*)malloc(npart * sizeof(float));
-	  MPI_Recv(FMAX, npart*sizeof(float), MPI_BYTE, itask, 0, MPI_COMM_WORLD, &status);
-	  fwrite(FMAX, sizeof(float), npart, file);
-	  free(FMAX);
-	}
-      else if (ThisTask==itask)
-	{
-	  MPI_Send(&myNpart, 1, MPI_INT, collector, 0, MPI_COMM_WORLD);
-	  MPI_Send(FMAX, myNpart*sizeof(float), MPI_BYTE, collector, 0, MPI_COMM_WORLD);
-	  free(FMAX);
-	}
-    }
-
-  /* collector task closes the block */
-  if (ThisTask==collector)
-    fwrite(&dummy, sizeof(dummy), 1, file);
-
-
-  /* ****************** RMAX ****************** */
-
-  /* each task builds its catalogue: RMAX */
-  RMAX = (int*)malloc(myNpart * sizeof(int));
-  /* first loop is on good particles that are not in groups */
-  for (i=0, index=0; i<subbox.Npart; i++)
-    {
-      /* grid coordinates from the indices (sub-box coordinates) */
-      kbox=i/Lgridxy;
-      kk=i-kbox*Lgridxy;
-      jbox=kk/subbox.Lgwbl_x;
-      ibox=kk-jbox*subbox.Lgwbl_x;
-      good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
-			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
-			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
-      if (good_particle)
-	RMAX[index++]=frag[i].Rmax;
-    }
-
-  /* writing of RMAX */
-  if (ThisTask==collector)
-    {
-      dummy=NInFile*sizeof(int);
-      WriteBlockName(file,dummy,"RMAX");
-      fwrite(&dummy, sizeof(dummy), 1, file);
-      fwrite(RMAX, sizeof(int), myNpart, file); 
-      free(RMAX);
-    }
-
-  for (next=1; next<NTasksPerFile; next++)
-    {
-      itask=collector+next;
-      if (ThisTask==collector)
-	{
-	  npart=0;
-	  MPI_Recv(&npart, 1, MPI_INT, itask, 0, MPI_COMM_WORLD, &status);
-	  RMAX=(int*)malloc(npart * sizeof(int));
-	  MPI_Recv(RMAX, npart*sizeof(int), MPI_BYTE, itask, 0, MPI_COMM_WORLD, &status);
-	  fwrite(RMAX, sizeof(int), npart, file);
-	  free(RMAX);
-	}
-      else if (ThisTask==itask)
-	{
-	  MPI_Send(&myNpart, 1, MPI_INT, collector, 0, MPI_COMM_WORLD);
-	  MPI_Send(RMAX, myNpart*sizeof(int), MPI_BYTE, collector, 0, MPI_COMM_WORLD);
-	  free(RMAX);
-	}
-    }
-
-  /* collector task closes the block */
-  if (ThisTask==collector)
-    fwrite(&dummy, sizeof(dummy), 1, file);
-
-  /* ****************** ZACC ****************** */
-
-  /* each task builds its catalogue: ZACC */
-  ZACC = (float*)malloc(myNpart * sizeof(float));
-  /* first loop is on good particles that are not in groups */
-  for (i=0, index=0; i<subbox.Npart; i++)
-    {
-      /* grid coordinates from the indices (sub-box coordinates) */
-      kbox=i/Lgridxy;
-      kk=i-kbox*Lgridxy;
-      jbox=kk/subbox.Lgwbl_x;
-      ibox=kk-jbox*subbox.Lgwbl_x;
-      good_particle = ( ibox>=subbox.safe_x && ibox<subbox.Lgwbl_x-subbox.safe_x && 
-			jbox>=subbox.safe_y && jbox<subbox.Lgwbl_y-subbox.safe_y && 
-			kbox>=subbox.safe_z && kbox<subbox.Lgwbl_z-subbox.safe_z );
-      if (good_particle)
-	ZACC[index++]=frag[i].zacc;
-    }
-
-  /* writing of ZACC */
-  if (ThisTask==collector)
-    {
-      dummy=NInFile*sizeof(float);
-      WriteBlockName(file,dummy,"ZACC");
-      fwrite(&dummy, sizeof(dummy), 1, file);
-      fwrite(ZACC, sizeof(float), myNpart, file); 
-      free(ZACC);
-    }
-
-  for (next=1; next<NTasksPerFile; next++)
-    {
-      itask=collector+next;
-      if (ThisTask==collector)
-	{
-	  npart=0;
-	  MPI_Recv(&npart, 1, MPI_INT, itask, 0, MPI_COMM_WORLD, &status);
-	  ZACC=(float*)malloc(npart * sizeof(float));
-	  MPI_Recv(ZACC, npart*sizeof(float), MPI_BYTE, itask, 0, MPI_COMM_WORLD, &status);
-	  fwrite(ZACC, sizeof(float), npart, file);
-	  free(ZACC);
-	}
-      else if (ThisTask==itask)
-	{
-	  MPI_Send(&myNpart, 1, MPI_INT, collector, 0, MPI_COMM_WORLD);
-	  MPI_Send(ZACC, myNpart*sizeof(float), MPI_BYTE, collector, 0, MPI_COMM_WORLD);
-	  free(ZACC);
-	}
-    }
-
-  /* collector task closes the block */
-  if (ThisTask==collector)
-    fwrite(&dummy, sizeof(dummy), 1, file);
-
-
-  /* collector task closes the file */
-  if (ThisTask==collector)
-    fclose(file);
-
-  return 0;
-}
-#endif
-
-
-int write_LPT_snapshot(double redshift)
-{
-  // TODO: growth rate obtained directly in k-space
-
-  /* writes displacements of all particles in a GADGET format */
-
-  int NTasksPerFile,collector,itask,next,ThisFile,index,x,y,z,NInFile,npart,i,dummy;
-  int SGrid[3],Q[3];  /* LGrid[3],GGrid[3]; */
-  unsigned long long int NPartTot;
-  double vf, G;
-  char filename[LBLENGTH];
-  FILE *file;
-  SnapshotHeader_data Header;
-  MYIDTYPE *ID;
-  MPI_Status status;
-  typedef struct 
-  {
-    float axis[3];
-  } AuxStruct;
-  
-  AuxStruct *Pos,*Vel;
-
-#ifdef WRITE_INFO_BLOCK
-  InfoBlock_data InfoBlock[3];
-#endif
-
-#ifdef TWO_LPT
-  double vf2,G2;
-#ifdef THREE_LPT
-  //double G31,G32;
-#endif
-#endif
-#ifdef ROTATE_BOX
-  static int rot[3]={1,2,0};
-#else
-  static int rot[3]={0,1,2};
-#endif
-
-  NTasksPerFile=NTasks/params.NumFiles;
-  ThisFile=ThisTask/NTasksPerFile;
-  collector=ThisFile*NTasksPerFile;
-
-  /* GADGET format requires velocities to be divided by sqrt(a) */
-  G=GrowingMode(redshift,params.k_for_GM);
-  vf = params.InterPartDist*fomega(redshift,params.k_for_GM)*Hubble(redshift)/sqrt(1.+redshift) * G;
-#ifdef TWO_LPT
-  G2  = GrowingMode_2LPT(redshift,params.k_for_GM);
-  vf2 = params.InterPartDist*fomega_2LPT(redshift,params.k_for_GM)*Hubble(redshift)/sqrt(1.+redshift) * G2;
-#ifdef THREE_LPT
-  //G31  = GrowingMode_3LPT_1(redshift,params.k_for_GM);
-  //G32  = GrowingMode_3LPT_2(redshift,params.k_for_GM);
-#endif
-#endif
-  SGrid[0]=(double)MyGrids[0].GSstart[0];
-  SGrid[1]=(double)MyGrids[0].GSstart[1];
-  SGrid[2]=(double)MyGrids[0].GSstart[2];
-
-  NPartTot = (unsigned long long int)MyGrids[0].GSglobal[0] * 
-    (unsigned long long int)MyGrids[0].GSglobal[1] * 
-    (unsigned long long int)MyGrids[0].GSglobal[2];
-
-  /* collector task computes the total number of particles in the file */
-  for (next=0; next<NTasksPerFile; next++)
-    {
-      itask=collector+next;
-      if (!next)
-	{
-	  if (ThisTask==collector)  
-	    NInFile=MyGrids[0].total_local_size;
-	}
-      else
-	{
-	  if (ThisTask==collector)
-	    {
-	      npart=0;
-	      MPI_Recv(&npart, 1, MPI_INT, itask, 0, MPI_COMM_WORLD, &status);
-	      NInFile+=npart;
-	    }
-	  else if (ThisTask==itask)
-	    MPI_Send(&MyGrids[0].total_local_size, 1, MPI_INT, collector, 0, MPI_COMM_WORLD);
-	}
-    }
-	      
-
-  /* The collector task opens the file and writes the header */
-  if (ThisTask==collector)
-    {
-      if (params.NumFiles>1)
-	sprintf(filename,"pinocchioICs.%6.4f.%s.%d",
-		redshift,params.RunFlag,ThisFile);
-      else
-	sprintf(filename,"pinocchioICs.%6.4f.%s",
-		redshift,params.RunFlag);
-
-      if (!ThisTask)
-	printf("[%s] Writing file %s\n",fdate(),filename);
-
-      if ( (file=fopen(filename,"w"))==0x0)
-	{
-	  printf("Error on Task 0: cannot open file %s\n",filename);
-	  return 1;
-	}
-
-      /* writes information on the snapshot header */
-      memset(&Header, 0, sizeof(SnapshotHeader_data));
-
-      Header.NPart[1]=NInFile;
-      Header.Mass[1]=params.ParticleMass*params.Hubble100*1e-10;
-      Header.NPartTotal[1]=(unsigned int)( (NPartTot<<32) >>32 );
-      Header.npartTotalHighWord[1]=(unsigned int)(NPartTot>>32);
-      Header.Time=1./(1+redshift);
-      Header.RedShift=redshift;
-      Header.flag_sfr=0;
-      Header.flag_feedback=0;
-      Header.flag_cooling=0;
-      Header.num_files=params.NumFiles;
-      Header.BoxSize=params.BoxSize_h100;
-      Header.Omega0=params.Omega0;
-      Header.OmegaLambda=params.OmegaLambda;
-      Header.HubbleParam=params.Hubble100;
-      Header.flag_stellarage=0;
-      Header.flag_metals=0;
-      Header.flag_entropy_instead_u=0;
-      Header.flag_metalcooling=0;
-      Header.flag_stellarevolution=0;
-
-      dummy=sizeof(SnapshotHeader_data);
-      WriteBlockName(file,dummy,"HEAD");
-      fwrite(&dummy, sizeof(dummy), 1, file);
-      fwrite(&Header, dummy, 1, file);
-      fwrite(&dummy, sizeof(dummy), 1, file);
-#ifdef WRITE_INFO_BLOCK
-      /* info block */
-      memset(&InfoBlock, 0, 3*sizeof(InfoBlock_data));
-
-      my_strcpy(InfoBlock[0].name,"POS ",4);
-      my_strcpy(InfoBlock[0].type,"FLOATN  ",8);
-      InfoBlock[0].ndim=3;
-      for (i=0; i<6; i++)
-	InfoBlock[0].active[i]=1;
-
-      my_strcpy(InfoBlock[1].name,"VEL ",4);
-      my_strcpy(InfoBlock[1].type,"FLOATN  ",8);
-      InfoBlock[1].ndim=3;
-      for (i=0; i<6; i++)
-	InfoBlock[1].active[i]=1;
-
-      my_strcpy(InfoBlock[2].name,"ID  ",4);
-#ifdef LONGIDS
-      my_strcpy(InfoBlock[2].type,"LLONG   ",8);
-#else
-      my_strcpy(InfoBlock[2].type,"LONG    ",8);
-#endif
-      InfoBlock[2].ndim=1;
-      for (i=0; i<6; i++)
-	InfoBlock[2].active[i]=1;
-
-      dummy=3*sizeof(InfoBlock_data);
-      WriteBlockName(file,dummy,"INFO");
-      fwrite(&dummy, sizeof(dummy), 1, file);
-      fwrite(&InfoBlock, dummy, 1, file);
-      fwrite(&dummy, sizeof(dummy), 1, file);
-#endif
-
-    }
-
-
-  /* each task builds its catalogue: Pos */
-  if (MyGrids[0].total_local_size)
-    {
-      Pos = (AuxStruct *)malloc(MyGrids[0].total_local_size * sizeof(AuxStruct));
-
-      for (z=0; z<MyGrids[0].GSlocal[2]; z++)
-	{
-	  Q[2]=z;
-	  for (y=0; y<MyGrids[0].GSlocal[1]; y++)
-	    {
-	      Q[1]=y;
-	      for (x=0; x<MyGrids[0].GSlocal[0]; x++)
-		{
-		  Q[0]=x;
-
-		  index = x + MyGrids[0].GSlocal[0] *(y + z* MyGrids[0].GSlocal[1]);
-
-		  for (i=0; i<3; i++)
-		    {
-
-		      Pos[index].axis[i] = (float)(( (double)(Q[rot[i]]+SGrid[rot[i]]) + G*VEL_for_displ[rot[i]][index] )
-						   * params.InterPartDist * params.Hubble100)
-#ifdef TWO_LPT
-			+ (float)(G2 * VEL2_for_displ[rot[i]][index] * params.InterPartDist * params.Hubble100)
-#ifdef THREE_LPT
-
-#endif
-#endif
-			;
-
-		      if (Pos[index].axis[i] < 0) Pos[index].axis[i] += (float)params.BoxSize_h100;
-		      if (Pos[index].axis[i] >= params.BoxSize_h100) Pos[index].axis[i] -= (float)params.BoxSize_h100;
-		    }
-		}
-	    }
-	}
-    }
-
-  /* writing of Pos */
-  if (ThisTask==collector)
-    {
-      if (MyGrids[0].total_local_size)
-	{
-	  dummy=NInFile*sizeof(AuxStruct);
-	  WriteBlockName(file,dummy,"POS ");
-	  fwrite(&dummy, sizeof(dummy), 1, file);
-	  fwrite(Pos, sizeof(AuxStruct), MyGrids[0].total_local_size, file);
-	  free(Pos);
-	}
-    }
-
-  for (next=1; next<NTasksPerFile; next++)
-    {
-      itask=collector+next;
-      if (ThisTask==collector)
-	{
-	  npart=0;
-	  MPI_Recv(&npart, 1, MPI_INT, itask, 0, MPI_COMM_WORLD, &status);
-	  if (npart)
-	    {
-	      Pos = (AuxStruct *)malloc(npart * sizeof(AuxStruct));
-	      MPI_Recv(Pos, npart*sizeof(AuxStruct), MPI_BYTE, itask, 0, MPI_COMM_WORLD, &status);
-	      fwrite(Pos, sizeof(AuxStruct), npart, file);
-	      free(Pos);
-	    }
-	}
-      else if (ThisTask==itask)
-	{
-	  MPI_Send(&MyGrids[0].total_local_size, 1, MPI_INT, collector, 0, MPI_COMM_WORLD);
-	  if (MyGrids[0].total_local_size)
-	    {
-	      MPI_Send(Pos, sizeof(AuxStruct)*MyGrids[0].total_local_size, MPI_BYTE, collector, 0, MPI_COMM_WORLD);
-	      free(Pos);
-	    }
-	}
-    }
-
-  /* collector task closes the block */
-  if (ThisTask==collector)
-    fwrite(&dummy, sizeof(dummy), 1, file);
-
-  /* each task builds its catalogue: Vel */
-  if (MyGrids[0].total_local_size)
-    {
-      Vel = (AuxStruct *)malloc(MyGrids[0].total_local_size * sizeof(AuxStruct));
-
-      for (z=0; z<MyGrids[0].GSlocal[2]; z++)
-	for (y=0; y<MyGrids[0].GSlocal[1]; y++)
-	  for (x=0; x<MyGrids[0].GSlocal[0]; x++)
-	    {
-	      index = x + MyGrids[0].GSlocal[0] *(y + z* MyGrids[0].GSlocal[1]);
-
-	      for (i=0; i<3; i++)
-		{
- 		  Vel[index].axis[i] = (float)(vf*VEL_for_displ[rot[i]][index])
-#ifdef TWO_LPT
-		    + (float)(vf2*VEL2_for_displ[rot[i]][index])
-#ifdef THREE_LPT
-
-#endif
-#endif
-		  ;
-		}
-	    }
-    }
-
-  /* writing of Vel */
-  if (ThisTask==collector)
-    {
-      if (MyGrids[0].total_local_size)
-	{
-	  dummy=NInFile*sizeof(AuxStruct);
-	  WriteBlockName(file,dummy,"VEL ");
-	  fwrite(&dummy, sizeof(dummy), 1, file);
-	  fwrite(Vel, sizeof(AuxStruct), MyGrids[0].total_local_size, file);
-	  free(Vel);
-	}
-    }
-
-  for (next=1; next<NTasksPerFile; next++)
-    {
-      itask=collector+next;
-      if (ThisTask==collector)
-	{
-	  npart=0;
-	  MPI_Recv(&npart, 1, MPI_INT, itask, 0, MPI_COMM_WORLD, &status);
-	  if (npart)
-	    {
-	      Vel = (AuxStruct *)malloc(npart * sizeof(AuxStruct));
-	      MPI_Recv(Vel, npart*sizeof(AuxStruct), MPI_BYTE, itask, 0, MPI_COMM_WORLD, &status);
-	      fwrite(Vel, sizeof(AuxStruct), npart, file);
-	      free(Vel);
-	    }
-	}
-      else if (ThisTask==itask)
-	{
-	  MPI_Send(&MyGrids[0].total_local_size, 1, MPI_INT, collector, 0, MPI_COMM_WORLD);
-	  if (MyGrids[0].total_local_size)
-	    {
-	      MPI_Send(Vel, sizeof(AuxStruct)*MyGrids[0].total_local_size, MPI_BYTE, collector, 0, MPI_COMM_WORLD);
-	      free(Vel);
-	    }
-	}
-    }
-
-  /* collector task closes the block and the file */
-  if (ThisTask==collector)
-    {
-      fwrite(&dummy, sizeof(dummy), 1, file);
-    }
-
-
-  /* each task builds its catalogue: IDs */
-  if (MyGrids[0].total_local_size)
-    {
-      ID = (MYIDTYPE*)malloc(MyGrids[0].total_local_size * sizeof(MYIDTYPE));
-
-      for (z=0; z<MyGrids[0].GSlocal[2]; z++)
-	for (y=0; y<MyGrids[0].GSlocal[1]; y++)
-	  for (x=0; x<MyGrids[0].GSlocal[0]; x++)
-	    {
-	      index = x + MyGrids[0].GSlocal[0] *(y + z* MyGrids[0].GSlocal[1]);
-
-#ifdef ROTATE_BOX
-	  ID[index]=1+(MYIDTYPE)(x+MyGrids[0].GSstart[0]) + 
-	    ( (MYIDTYPE)(z+MyGrids[0].GSstart[2]) + 
-	      (MYIDTYPE)(y+MyGrids[0].GSstart[1]) * (MYIDTYPE)MyGrids[0].GSglobal[2] ) * 
-	    (MYIDTYPE)MyGrids[0].GSglobal[0];
-#else
-	  ID[index]=1+(MYIDTYPE)(x+MyGrids[0].GSstart[0]) + 
-	    ( (MYIDTYPE)(y+MyGrids[0].GSstart[1]) + 
-	      (MYIDTYPE)(z+MyGrids[0].GSstart[2]) * (MYIDTYPE)MyGrids[0].GSglobal[1] ) * 
-	    (MYIDTYPE)MyGrids[0].GSglobal[0];
-#endif
-	  /*
-#ifdef ROTATE_BOX
-	      ID[index] =  1 + (MYIDTYPE)(x+MyGrids[0].GSstart[0]) + MyGrids[0].GSglobal[0] * 
-		( (MYIDTYPE)(z+MyGrids[0].GSstart[2]) +
-		  (MYIDTYPE)(y+MyGrids[0].GSstart[1]) * MyGrids[0].GSglobal[2]);
-#else
-	      ID[index] =  1 + (MYIDTYPE)(z+MyGrids[0].GSstart[2]) + MyGrids[0].GSglobal[2] *
-		( (MYIDTYPE)(y+MyGrids[0].GSstart[1]) +
-		  (MYIDTYPE)(x+MyGrids[0].GSstart[0]) * MyGrids[0].GSglobal[1] );
-#endif
-	  */
-	    }
-    }
-
-  /* writing of IDs */
-  if (ThisTask==collector)
-    {
-      if (MyGrids[0].total_local_size)
-	{
-	  dummy=NInFile*sizeof(MYIDTYPE);
-	  WriteBlockName(file,dummy,"ID  ");
-	  fwrite(&dummy, sizeof(dummy), 1, file);
-	  fwrite(ID, sizeof(MYIDTYPE), MyGrids[0].total_local_size, file); 
-	  free(ID);
-	}
-    }
-
-
-  for (next=1; next<NTasksPerFile; next++)
-    {
-      itask=collector+next;
-      if (ThisTask==collector)
-	{
-	  npart=0;
-	  MPI_Recv(&npart, 1, MPI_INT, itask, 0, MPI_COMM_WORLD, &status);
-	  if (npart)
-	    {
-	      ID=(MYIDTYPE*)malloc(npart * sizeof(MYIDTYPE));
-	      MPI_Recv(ID, npart*sizeof(MYIDTYPE), MPI_BYTE, itask, 0, MPI_COMM_WORLD, &status);
-	      fwrite(ID, sizeof(MYIDTYPE), npart, file);
-	      free(ID);
-	    }
-	}
-      else if (ThisTask==itask)
-	{
-	  MPI_Send(&MyGrids[0].total_local_size, 1, MPI_INT, collector, 0, MPI_COMM_WORLD);
-	  if (MyGrids[0].total_local_size)
-	    {
-	      MPI_Send(ID, MyGrids[0].total_local_size*sizeof(MYIDTYPE), MPI_BYTE, collector, 0, MPI_COMM_WORLD);
-	      free(ID);
-	    }
-	}
-    }
-
-  /* collector task closes the block */
-  if (ThisTask==collector)
-    {
-      fwrite(&dummy, sizeof(dummy), 1, file);
-      fclose(file);
-    }
-
-  return 0;
-}
-
-
-
 
 
 void WriteBlockName(FILE *fd,int dummy, char* LABEL)

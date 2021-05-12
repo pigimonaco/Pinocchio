@@ -237,12 +237,12 @@ int write_catalog(int iout)
       return 0;
     }
 
-  GGrid[0]=(double)MyGrids[0].GSglobal[0];
-  GGrid[1]=(double)MyGrids[0].GSglobal[1];
-  GGrid[2]=(double)MyGrids[0].GSglobal[2];
-  SGrid[0]=(double)subbox.stabl_x;
-  SGrid[1]=(double)subbox.stabl_y;
-  SGrid[2]=(double)subbox.stabl_z;
+  GGrid[0]=(double)MyGrids[0].GSglobal[_x_];
+  GGrid[1]=(double)MyGrids[0].GSglobal[_y_];
+  GGrid[2]=(double)MyGrids[0].GSglobal[_z_];
+  SGrid[0]=(double)subbox.stabl[_x_];
+  SGrid[1]=(double)subbox.stabl[_y_];
+  SGrid[2]=(double)subbox.stabl[_z_];
 
   NTasksPerFile=NTasks/params.NumFiles;
   ThisFile=ThisTask/NTasksPerFile;
@@ -502,7 +502,7 @@ int write_catalog(int iout)
 }
 
 #ifdef PLC
-int write_PLC()
+int write_PLC(int flag)
 {
   /* Writes the plc catalogues */
 
@@ -851,6 +851,48 @@ int write_PLC()
     }
 
   FirstCall=0;
+
+  /* writes the n(z) at the last call */
+  if (flag)
+    {
+      double *totnz=(double*)calloc(plc.nzbins, sizeof(double));
+      
+      MPI_Reduce(plc.nz, totnz, plc.nzbins, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+
+      /* Task 0 writes the file */
+      if (!ThisTask)
+	{
+	  double tot=0;
+	  for (int ibin=0; ibin<plc.nzbins; ibin++)
+	    tot+=totnz[ibin];
+	  printf("[%s] total number of halos in the PLC: %g\n",fdate(),tot);
+
+	  sprintf(filename,"pinocchio.%s.nz.out",params.RunFlag);
+	  printf("[%s] Opening file %s\n",fdate(),filename);
+	  file = fopen(filename,"w");
+	  fprintf(file,"# 1) lower z for bin\n");
+	  fprintf(file,"# 2) upper z for bin\n");
+	  fprintf(file,"# 3) number of objects in bin\n");
+	  fprintf(file,"# 4) number per square degree\n");
+	  fprintf(file,"# 5) prediction for number of objects in bin\n");
+	  fprintf(file,"#\n");
+
+	  double skyarea = (1-cos( (params.PLCAperture>90. ? 90. : params.PLCAperture)  /180.*PI) )*2.*PI * pow(180./PI,2.);
+	  for (int ibin=0; ibin<plc.nzbins; ibin++)
+	    {
+	      double zlow = params.LastzForPLC+ibin*plc.delta_z;
+	      double zhigh = params.LastzForPLC+(ibin+1)*plc.delta_z;
+	      if (ibin==plc.nzbins-1)
+		zhigh=params.StartingzForPLC;
+	      double prediction = compute_Nhalos_in_PLC(zlow,zhigh);
+	      fprintf(file, "%8.3f %8.3f %12g %8.3f %12g\n",
+		      zlow, zhigh, totnz[ibin], totnz[ibin]/skyarea, prediction);
+	    }
+
+	  fclose(file);
+	}
+      free(totnz);
+    }
 
   return 0;
 }

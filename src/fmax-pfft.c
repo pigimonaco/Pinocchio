@@ -81,7 +81,7 @@ int set_one_grid(int ThisGrid)
   unsigned int pfft_flags;
 
   GRID.norm = (double)1.0 /
-    ((double)GRID.GSglobal[_x_] * GRID.GSglobal[_y_] * GRID.GSglobal[_z_]);
+    ((double)GRID.Ntotal);
   
   GRID.CellSize = (double)GRID.BoxSize / GRID.GSglobal[_x_];
 
@@ -89,13 +89,13 @@ int set_one_grid(int ThisGrid)
   pfft_flags  = 0;
   if(params.use_transposed_fft)
     pfft_flags  |= PFFT_TRANSPOSED_OUT;
-  
+
   alloc_local = pfft_local_size_dft_r2c_3d(GRID.GSglobal, FFT_Comm, pfft_flags,
 					   GRID.GSlocal, GRID.GSstart,
 					   GRID.GSlocal_k, GRID.GSstart_k);
 
   
-  dprintf(VDIAG, ThisTask, "[set grid %02d] task %d %ld "
+  dprintf(VDBG, ThisTask, "[set grid %02d] task %d %ld "
 	  "i: %ld %ld %ld - i start: %ld %ld %ld - "
 	  "o: %ld %ld %ld - o start: %ld %ld %ld\n",
 	  ThisGrid, ThisTask, alloc_local,
@@ -183,8 +183,6 @@ int compute_fft_plans()
 }
 
 
-
-
 double forward_transform(int ThisGrid)
 {
   double time;
@@ -195,9 +193,6 @@ double forward_transform(int ThisGrid)
 
   return MPI_Wtime()-time;
 }
-
-
-
 
 
 double reverse_transform(int ThisGrid)
@@ -226,8 +221,6 @@ double reverse_transform(int ThisGrid)
 
   return MPI_Wtime() - time;
 }
-
-
 
 
 int finalize_fft()
@@ -404,6 +397,16 @@ int compute_derivative(int ThisGrid, int first_derivative, int second_derivative
 	}
     }
 
+  /* int idy, idz, index; */
+  /* for (idx = 0; idx < local[_x_]; idx++) */
+  /*   for (idy = 0; idy < local[_y_]; idy++) */
+  /*     for (idz = 0; idz < local[_z_]; idz++) */
+  /* 	{ */
+  /* 	  index = 2*(( idx * local[_y_] + idy ) * local[_z_] + idz); */
+  /* 	  printf(" %3d %3d %3d  %6d  %8f %8f\n", */
+  /* 		 idx,idy,idz,index,cvector_fft[ThisGrid][index/2][0],cvector_fft[ThisGrid][index/2][1]); */
+  /* 	}   */
+
   /* char name[60]; */
   /* char coord[4] = {' ', 'x', 'y', 'z'}; */
   /* sprintf(name, "c_before_derivative.1.%c", coord[first_derivative]); */
@@ -412,7 +415,7 @@ int compute_derivative(int ThisGrid, int first_derivative, int second_derivative
   /* 	       MyGrids[ThisGrid].GSlocal_k, */
   /* 	       MyGrids[ThisGrid].GSstart_k, name, 0); */
   
-  
+
   if (!ThisTask)
     dprintf(VMSG, 0, "[%s] compute_derivative: starting fft\n",fdate());
 
@@ -425,18 +428,26 @@ int compute_derivative(int ThisGrid, int first_derivative, int second_derivative
     cputime.fft+=time;
   }
 
+  /* for (int local_x = 0; local_x < MyGrids[ThisGrid].GSlocal[_x_]; local_x++) */
+  /*   for (int local_y = 0; local_y < MyGrids[ThisGrid].GSlocal[_y_]; local_y++) */
+  /*     for (int local_z = 0; local_z < MyGrids[ThisGrid].GSlocal[_z_]; local_z++) */
+  /* 	{ */
+  /* 	  index=local_x + MyGrids[ThisGrid].GSlocal[_x_] * (local_y + local_z * MyGrids[ThisGrid].GSlocal[_y_]); */
+  /* 	  printf(" %3d %3d %3d  %6d  %8f\n",local_x,local_y,local_z,index,rvector_fft[ThisGrid][index]); */
+  /* 	} */
+
+  fflush(stdout);
+
   return 0;
 }
-
-
 
 
 double greens_function(double *diff_comp, double k_squared, int first_derivative, int second_derivative)
 {
 
   if (first_derivative == -1 && second_derivative == -1)
-    // in this case the greens_function is simply 1
-  return 1.0;
+    /* in this case the greens_function is simply 1 */
+    return 1.0;
 
   if (first_derivative==0 && second_derivative==0)
     return -diff_comp[first_derivative]*diff_comp[second_derivative]/k_squared;
@@ -444,8 +455,6 @@ double greens_function(double *diff_comp, double k_squared, int first_derivative
     return diff_comp[first_derivative]*diff_comp[second_derivative]/k_squared;
 
 }
-
-
 
 
 void write_in_cvector(int ThisGrid, double * restrict vector)
@@ -501,7 +510,7 @@ void write_from_cvector(int ThisGrid, double * restrict vector)
 void write_in_rvector(int ThisGrid, double * restrict vector)
 {
   dvec * restrict target = (dvec*)rvector_fft[ThisGrid];
-  dvec * restrict source = (dvec*) vector;
+  dvec * restrict source = (dvec*)vector;
   int mysize = GRID.total_local_size / DVEC_SIZE;
 
 #if !defined(_OPENMP)
@@ -544,6 +553,17 @@ void write_from_rvector(int ThisGrid, double * restrict vector)
 }
 
 
+int store_velocities()
+{
+  /* LUCA: vettorializziamo e ompizziamo? */
+
+  /* loop on all particles */
+  for (int index = 0; index < MyGrids[0].total_local_size; index++)
+    for (int i = 0; i < 3; i++)
+      products[index].Vel[i]=first_derivatives[0][i][index];
+
+  return 0;
+}
 
 
 void dump_cvector(double * restrict vector, int T, int Nmesh, ptrdiff_t * restrict local_n, ptrdiff_t * restrict local_start,  char *filename, int ThisGrid)
@@ -579,7 +599,7 @@ void dump_cvector(double * restrict vector, int T, int Nmesh, ptrdiff_t * restri
 	    {
 	      for(j = 0; j < local_n[_y_]; j++)
 	  	for(i = 0; i < local_n[_x_]; i++)
-	  	  for(k = 0; k < (local_n[_z_]) && (k + local_start[_z_] < Nmesh_2); k++)
+	  	  for(k = 0; k < (local_n[_z_]) && (k + local_start[_z_] <= Nmesh_2); k++)
 	  	    {
 		      if(internal.dump_kdensity == 1)
 			// write in x,y order of the non-transposed case
@@ -597,7 +617,7 @@ void dump_cvector(double * restrict vector, int T, int Nmesh, ptrdiff_t * restri
 	    // transposed order, 2D or 3D decomposition
 	    {
 	      for(j = 0; j < local_n[_y_]; j++)
-	  	for(k = 0; k < (local_n[_z_]) && (k + local_start[_z_] < Nmesh_2); k++)
+	  	for(k = 0; k < (local_n[_z_]) && (k + local_start[_z_] <= Nmesh_2); k++)
 	  	  for(i = 0; i < local_n[_x_]; i++)
 	  	    {
 		      if(internal.dump_kdensity == 1)
@@ -617,7 +637,7 @@ void dump_cvector(double * restrict vector, int T, int Nmesh, ptrdiff_t * restri
 	    {
 	      for(i = 0; i < local_n[_x_]; i++)
 	  	for(j = 0; j < local_n[_y_]; j++)
-	  	  for(k = 0; k < (local_n[_z_]) && (k + local_start[_z_] < Nmesh_2); k++)
+	  	  for(k = 0; k < (local_n[_z_]) && (k + local_start[_z_] <= Nmesh_2); k++)
 	  	    {
 		      if(internal.dump_kdensity == 2)
 			// write in x,y order of the transposed case (1-D decomposition)
@@ -682,12 +702,22 @@ void dump_rvector(double * restrict vector, int Nmesh, ptrdiff_t * restrict loca
 	    for(j = 0; j < local_n[_y_]; j++)
 	      for(k = 0; k < local_n[_z_]; k++)
 		{
-		  addr_   = ((i+local_start[_x_])*Nmesh + j+local_start[_y_])*Nmesh + k+local_start[_z_];
-		  addr    = ( (i*local_n[_y_] + j)*local_n[_z_] + k);
+		  /* if (params.use_transposed_fft) */
+		  /*   { */
+		  /*     addr_   = ((j+local_start[_y_])*Nmesh + k+local_start[_z_])*Nmesh + i+local_start[_x_]; */
+		  /*     addr    = ( (k*local_n[_y_] + j)*local_n[_x_] + i); */
+		  /*   } */
+		  /* else */
+		    { // OK, AGGIUDICATO
+		      addr_   = ((i+local_start[_x_])*Nmesh + j+local_start[_y_])*Nmesh + k+local_start[_z_];
+		      addr    = ( (i*local_n[_y_] + j)*local_n[_z_] + k);
+		    }
 
-		  fprintf(file, "%d %g\n", addr_, vector[addr]);
-		}	      
-	  
+		  fprintf(file, "%d  %d %d %d  %g\n", addr_, 
+			  (int)(i + local_start[_x_]), (int)(j + local_start[_y_]), (int)(k + local_start[_z_]),
+			  vector[addr]);
+		}
+
 	  fflush(file);
 	  fclose(file);
 	}

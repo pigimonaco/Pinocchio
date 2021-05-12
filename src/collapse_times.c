@@ -24,18 +24,25 @@
  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 */
 
+// LUCA: qui bisogna rimettere a posto la vettorializzazione, che pero` va spenta
+//       se si usano le tabelle
+// LUCA: inoltre, va ompizzato (e vettorializzato?) il calcolo delle tabelle di collapse times
+
+
 #include "pinocchio.h"
 #include <gsl/gsl_interp2d.h>
 #include <gsl/gsl_spline2d.h>
 
 // LUCA: per il momento ho tolto l'inline, non mi compilava
+#ifdef VETTORIALIZZA
 #ifndef TABULATED_CT
-int     v_inverse_collapse_time ( dvec dtensor[6], dvec_u , dvec , dvec_u *, dvec_u *, dvec_u *, dvec_u *); //__attribute__((always_inline));
+int     v_inverse_collapse_time ( int, dvec dtensor[6], dvec_u , dvec , dvec_u *, dvec_u *, dvec_u *, dvec_u *); //__attribute__((always_inline));
 #endif
-double  inverse_collapse_time   ( double *, double *, double *, double *, int *); //__attribute__((always_inline));
-double  ell                     ( double, double, double); //__attribute__((always_inline));
-double  ell_classic             ( double, double, double); //__attribute__((always_inline));
-double  ell_sng                 ( double, double, double); //__attribute__((always_inline));
+#endif
+double  inverse_collapse_time   ( int, double *, double *, double *, double *, int *); //__attribute__((always_inline));
+double  ell                     ( int, double, double, double); //__attribute__((always_inline));
+double  ell_classic             ( int, double, double, double); //__attribute__((always_inline));
+double  ell_sng                 ( int, double, double, double); //__attribute__((always_inline));
 
 void ord(double *,double *,double *);
 
@@ -98,15 +105,13 @@ FILE *JUNK;
 #endif /* TABULATED_CT */
 
 
-int compute_collapse_times(int IS)
+int compute_collapse_times(int ismooth)
 {
 
   double local_average,local_variance;
   dvec_u  vlocal_average, vlocal_variance;
   dvec    vzero = {0, 0, 0, 0};
 
-  ismooth = IS;
-  
   /* initialize the variance */
   local_variance = 0.0;
   local_average  = 0.0;
@@ -170,124 +175,131 @@ int compute_collapse_times(int IS)
 #define cputime_invcoll   cputime.invcoll
 
 #endif
-    
+
+    /* NOTE: the first index to change is the x-index in the fragmentation part;
+       but this is not relevant in this part of the code */
+    /* for (int local_x = 0; local_x < MyGrids[0].GSlocal[_x_]; local_x++) */
+    /*   { */
+    /* 	int idx_x = local_x * MyGrids[0].GSlocal[_y_]; */
+    /* 	for (int local_y = 0; local_y < MyGrids[0].GSlocal[_y_]; local_y++) */
+    /* 	  { */
+    /* 	    int idx_y = (idx_x + local_y) * MyGrids[0].GSlocal[_z_]; */
+    /* 	    int mysize = DVEC_SIZE * MyGrids[0].GSlocal[_z_] / DVEC_SIZE; */
+    /* 	    int local_z = 0; */
+
+
+// LOOP NON VETTORIALIZZATO
 #pragma omp for nowait
-    for (int local_x = 0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)
+    for (int index=0; index<MyGrids[0].total_local_size; index++)
       {
-	int idx_x = local_x * MyGrids[0].GSlocal[_y_];
-	for (int local_y = 0; local_y < MyGrids[0].GSlocal[_y_]; local_y++)
+
+	double diff_ten[6];
+	for (int i = 0; i < 6; i++)
+	  diff_ten[i] = second_derivatives[0][i][index];
+
+	/* Computation of the variance of the linear density field */
+	double delta = diff_ten[0]+diff_ten[1]+diff_ten[2];
+	mylocal_average  += delta;
+	mylocal_variance += delta*delta;
+
+	/* Computation of ellipsoidal collapse */
+	double lambda1,lambda2,lambda3;
+	int    fail;
+	double tmp = MPI_Wtime();
+	double Fnew = inverse_collapse_time(ismooth, diff_ten, &lambda1, &lambda2, &lambda3, &fail);
+	cputime_invcoll += MPI_Wtime() - tmp;
+
+	if (fail)
 	  {
-	    int idx_y = (idx_x + local_y) * MyGrids[0].GSlocal[_z_];
-	    int mysize = DVEC_SIZE * MyGrids[0].GSlocal[_z_] / DVEC_SIZE;
-	    int local_z = 0;
+	    printf("ERROR on task %d: failure in inverse_collapse_time\n",ThisTask);
+	    fflush(stdout);
+#if !defined( _OPENMP )		    		    
+	    return 1;
+#else
+	    fails = 1;
+#endif
+	  }
 
-#ifndef TABULATED_CT
-	    for ( ; local_z < mysize; local_z += DVEC_SIZE)
-	      {
-		int index = idx_y + local_z;
-		/* NB: THIS IS THE POINT WHERE DIFFERENT BOXES SHOULD BE CONSIDERED */
+	if (products[index].Fmax < Fnew)
+	  {
+	    products[index].Fmax = Fnew;
+	    products[index].Rmax = ismooth;
+	  }	      
 
-		/* sum all contributions */
-		dvec elements[6] __attribute__((aligned(32)));
+      }
+    
 
-// LUCA: quella funzione non mi compila	      
-//#if !(defined(__aarch64__) || defined(__arm__))
+
+//#ifdef VETTORIALIZZA
+//#ifndef TABULATED_CT
+//	    for ( ; local_z < mysize; local_z += DVEC_SIZE)
+//	      {
+//		int index = idx_y + local_z;
+//		/* NB: THIS IS THE POINT WHERE DIFFERENT BOXES SHOULD BE CONSIDERED */
+//
+//		/* sum all contributions */
+//		dvec elements[6] __attribute__((aligned(32)));
+//
+//// LUCA: quella funzione non mi compila	      
+////#if !(defined(__aarch64__) || defined(__arm__))
+////		for (int i = 0; i < 6; i++)
+////		  elements[i] = _mm256_load_pd(&second_derivatives[0][i][index]);
+////#else
+//		dvec_u ld_elements[6] __attribute__((aligned(32)));
 //		for (int i = 0; i < 6; i++)
-//		  elements[i] = _mm256_load_pd(&second_derivatives[0][i][index]);
+//		  {
+//		    ld_elements[i].v[0] = second_derivatives[0][i][index ];
+//		    ld_elements[i].v[1] = second_derivatives[0][i][index + 1];
+//		    ld_elements[i].v[2] = second_derivatives[0][i][index + 2];
+//		    ld_elements[i].v[3] = second_derivatives[0][i][index + 3];
+//		    elements[i] = ld_elements[i].V;
+//		  }
+////#endif
+//
+//		/* Computation of the variance of the linear density field */
+//		dvec_u delta __attribute__((aligned(32)));
+//		delta.V = elements[0] + elements[1] + elements[2];
+//		dvec delta_2 __attribute__((aligned(32)));
+//		delta_2 = delta.V*delta.V;
+//	      
+//		vmylocal_average.V  += delta.V;
+//		vmylocal_variance.V += delta_2;
+//
+//		/* Computation of ellipsoidal collapse */
+//		dvec_u lambda1,lambda2,lambda3 __attribute__((aligned(32)));
+//		dvec_u Fnew __attribute__((aligned(32)));
+//		double tmp = MPI_Wtime();
+//		if(v_inverse_collapse_time(ismooth, elements, delta, delta_2, &lambda1, &lambda2, &lambda3, &Fnew))
+//		  {
+//		    printf("ERROR on task %d: failure in inverse_collapse_time\n",ThisTask);
+//		    fflush(stdout);
+//#if !defined( _OPENMP )		    
+//		    return 1;
 //#else
-		dvec_u ld_elements[6] __attribute__((aligned(32)));
-		for (int i = 0; i < 6; i++)
-		  {
-		    ld_elements[i].v[0] = second_derivatives[0][i][index ];
-		    ld_elements[i].v[1] = second_derivatives[0][i][index + 1];
-		    ld_elements[i].v[2] = second_derivatives[0][i][index + 2];
-		    ld_elements[i].v[3] = second_derivatives[0][i][index + 3];
-		    elements[i] = ld_elements[i].V;
-		  }
+//		    fails = 1;
+//#endif
+//		  }
+//		cputime_invcoll += MPI_Wtime() - tmp;
+//
+//		for(int ii = 0; ii < DVEC_SIZE; ii++)
+//		  {
+//
+//		    if (products[index + ii].Fmax < Fnew.v[ii])
+//		      {
+//			products[index].Fmax = Fnew.v[ii];
+//			products[index].Rmax = ismooth;
+//		      }
+//		  }
+//	      }
+//#endif
 //#endif
 
-		/* Computation of the variance of the linear density field */
-		dvec_u delta __attribute__((aligned(32)));
-		delta.V = elements[0] + elements[1] + elements[2];
-		dvec delta_2 __attribute__((aligned(32)));
-		delta_2 = delta.V*delta.V;
-	      
-		vmylocal_average.V  += delta.V;
-		vmylocal_variance.V += delta_2;
-
-		/* Computation of ellipsoidal collapse */
-		dvec_u lambda1,lambda2,lambda3 __attribute__((aligned(32)));
-		dvec_u Fnew __attribute__((aligned(32)));
-		double tmp = MPI_Wtime();
-		if(v_inverse_collapse_time(elements, delta, delta_2, &lambda1, &lambda2, &lambda3, &Fnew))
-		  {
-		    printf("ERROR on task %d: failure in inverse_collapse_time\n",ThisTask);
-		    fflush(stdout);
-#if !defined( _OPENMP )		    
-		    return 1;
-#else
-		    fails = 1;
-#endif
-		  }
-		cputime_invcoll += MPI_Wtime() - tmp;
-
-		for(int ii = 0; ii < DVEC_SIZE; ii++)
-		  {
-
-		    if (products[index + ii].Fmax < Fnew.v[ii])
-		      {
-			products[index].Fmax = Fnew.v[ii];
-			products[index].Rmax = ismooth;
-		      }
-		  }
-	      }
-#endif
-
-	    /* this is for all particles if vectorialization is switched off 
-	       or for remaining particles otherwise */
-	    for ( ; local_z < MyGrids[0].GSlocal[_z_]; local_z++)
-	      {
-		int index = idx_y + local_z;
-		/* sum all contributions */
-		double diff_ten[6];
-		for (int i = 0; i < 6; i++)
-		  diff_ten[i] = second_derivatives[0][i][index];
-
-		/* Computation of the variance of the linear density field */
-		double delta = diff_ten[0]+diff_ten[1]+diff_ten[2];
-		mylocal_average  += delta;
-		mylocal_variance += delta*delta;
-
-		/* Computation of ellipsoidal collapse */
-		double lambda1,lambda2,lambda3;
-		int    fail;
-		double tmp = MPI_Wtime();
-		double Fnew = inverse_collapse_time(diff_ten, &lambda1, &lambda2, &lambda3, &fail);
-		cputime_invcoll += MPI_Wtime() - tmp;
-
-		if (fail)
-		  {
-
-		    printf("ERROR on task %d: failure in inverse_collapse_time\n",ThisTask);
-		    fflush(stdout);
-#if !defined( _OPENMP )		    		    
-		    return 1;
-#else
-		    fails = 1;
-#endif
-		  }
-
-		if (products[index].Fmax < Fnew)
-		  {
-		    products[index].Fmax = Fnew;
-		    products[index].Rmax = ismooth;
-		  }	      
-
-	      }
-	  }
-      }
-
-    
+	    /* /\* this is for all particles if vectorialization is switched off  */
+	    /*    or for remaining particles otherwise *\/ */
+	    /* for ( ; local_z < MyGrids[0].GSlocal[_z_]; local_z++) */
+	    /*   { */
+		/* int index = idx_y + local_z; */
+   
     
 #if defined( _OPENMP )
 
@@ -317,20 +329,19 @@ int compute_collapse_times(int IS)
 
 #if defined (_OPENMP)
 #pragma omp atomic
-    cputime.invcoll += invcoll_update/internal_data.nthreads_omp;
+  cputime.invcoll += invcoll_update/internal_data.nthreads_omp;
 #pragma omp atomic	
-    cputime.ell     += ell_update/internal_data.nthreads_omp;
+  cputime.ell     += ell_update/internal_data.nthreads_omp;
 #pragma omp atomic
-    all_fails       += fails;
+  all_fails       += fails;
 #endif
 
-if (all_fails)
-  {
-
-    printf("ERROR on task %d: failure in inverse_collapse_time\n",ThisTask);
-    fflush(stdout);
-    return 1;
-  }
+  if (all_fails)
+    {
+      printf("ERROR on task %d: failure in inverse_collapse_time\n",ThisTask);
+      fflush(stdout);
+      return 1;
+    }
 
     
   for(int ii = 0; ii < DVEC_SIZE; ii++)
@@ -350,9 +361,8 @@ if (all_fails)
 
   if (!ThisTask)
     {
-      double Np = (double)MyGrids[0].GSglobal[_x_] * (double)MyGrids[0].GSglobal[_y_] *(double)MyGrids[0].GSglobal[_z_];
-      global_variance /= Np;
-      global_average  /= Np;
+      global_variance /= (double)MyGrids[0].Ntotal;
+      global_average  /= (double)MyGrids[0].Ntotal;
     }
 
   MPI_Bcast(&global_variance, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
@@ -363,9 +373,10 @@ if (all_fails)
 }
 
 
+#ifdef VETTORIALIZZA
 #ifndef TABULATED_CT
 /* vectorialization is not used for the interpolation */
-int v_inverse_collapse_time(dvec dtensor[6], dvec_u delta, dvec delta_2, dvec_u * restrict x1, dvec_u * restrict x2, dvec_u * restrict x3, dvec_u * restrict res) // inline
+int v_inverse_collapse_time(int ismooth, dvec dtensor[6], dvec_u delta, dvec delta_2, dvec_u * restrict x1, dvec_u * restrict x2, dvec_u * restrict x3, dvec_u * restrict res) // inline
 {
 
   dvec   mu2;
@@ -458,7 +469,7 @@ int v_inverse_collapse_time(dvec dtensor[6], dvec_u delta, dvec delta_2, dvec_u 
 #ifdef TABULATED_CT
       double t=interpolate_collapse_time(*x1,*x2,*x3);
 #else
-      double t = ell(_x1, _x2, _x3);
+      double t = ell(ismooth, _x1, _x2, _x3);
 #endif
       if(t > 0)
 	(*res).v[ii] = 1.0 / t;
@@ -471,8 +482,9 @@ int v_inverse_collapse_time(dvec dtensor[6], dvec_u delta, dvec delta_2, dvec_u 
 }
 
 #endif
+#endif
 
-double inverse_collapse_time(double * restrict deformation_tensor, double * restrict x1, double * restrict x2, double * restrict x3, int * restrict fail) // inline
+double inverse_collapse_time(int ismooth, double * restrict deformation_tensor, double * restrict x1, double * restrict x2, double * restrict x3, int * restrict fail) // inline
 {
 
   double mu1, mu2, mu3;
@@ -546,7 +558,7 @@ double inverse_collapse_time(double * restrict deformation_tensor, double * rest
   double t = interpolate_collapse_time(*x1,*x2,*x3);
 
 #ifdef DEBUG
-  double t2=ell(*x1,*x2,*x3);
+  double t2=ell(ismooth,*x1,*x2,*x3);
   if (t2>0.9)
     {
       ave_diff+=t-t2;
@@ -560,16 +572,12 @@ double inverse_collapse_time(double * restrict deformation_tensor, double * rest
 #endif
 
 #else
-  double t = ell(*x1,*x2,*x3);
+  double t = ell(ismooth,*x1,*x2,*x3);
 #endif
 
   cputime_ell += MPI_Wtime() - tmp;
   
-  /* return value */
-  if (t > 0.)
-    return 1. / t;
-  else
-    return -10.;
+  return t;
 }
 
 
@@ -582,13 +590,11 @@ int check_CTtable_header();
 void write_CTtable_header();
 
 
-int initialize_collapse_times(int IS, int onlycompute)
+int initialize_collapse_times(int ismooth, int onlycompute)
 {
   double l1, l2, l3, del, ampl, x, y, interval, ref_interval, deltaf;
   int id,ix,iy,i,j, dummy, fail;
   char fname[LBLENGTH];
-
-  ismooth = IS;
 
   /* the bin size for delta varies like (delta - CT_DELTA0)^CT_EXPO, 
      so it is smallest around CT_DELTA0 if CT_EXPO>1. The bin size 
@@ -786,11 +792,9 @@ int initialize_collapse_times(int IS, int onlycompute)
 }
 
 
-int reset_collapse_times(int IS)
+int reset_collapse_times(int ismooth)
 {
   
-  ismooth = IS;
-
 
 #ifdef DEBUG
   if (counter)
@@ -1094,10 +1098,10 @@ void write_CTtable_header()
 
 #define SMALL ((double)1.e-20)
 
-double ell(double l1, double l2, double l3) //inline
+double ell(int ismooth, double l1, double l2, double l3) //inline
 {
 #ifdef ELL_CLASSIC
-  double bc=ell_classic(l1, l2, l3);
+  double bc=ell_classic(ismooth, l1, l2, l3);
   if (bc>0.0)
     return 1.+InverseGrowingMode(bc,ismooth);
   else
@@ -1105,7 +1109,7 @@ double ell(double l1, double l2, double l3) //inline
 #endif
 
 #ifdef ELL_SNG
-  double bc=ell_sng(l1, l2, l3);
+  double bc=ell_sng(ismooth, l1, l2, l3);
   if (bc>0.0)
     return 1./bc;
   else
@@ -1178,7 +1182,7 @@ int sng_system(double t, const double y[], double f[], void *sng_par)
 }
 
 
-double  ell_sng(double l1, double l2, double l3) //inline
+double  ell_sng(int ismooth, double l1, double l2, double l3) //inline
 {
   /* call of ODE solution for SNG ellipsoidal collapse */
   double ode_param, hh=1.e-6;
@@ -1230,7 +1234,7 @@ double  ell_sng(double l1, double l2, double l3) //inline
 }
 
 
-double  ell_classic(double l1, double l2, double l3) //inline
+double  ell_classic(int ismooth, double l1, double l2, double l3) //inline
 {
 
   /*
@@ -1327,6 +1331,7 @@ double  ell_classic(double l1, double l2, double l3) //inline
       double inv_del = 1.0/del;
       ell+=-.364 * inv_del * exp(-6.5*(l1-l2)*inv_del-2.8*(l2-l3)*inv_del);
     }
+
   return ell;
 }
 
@@ -1345,29 +1350,4 @@ void ord(double * restrict a, double * restrict b, double * restrict c)
   *b = *a + *b+ *c - lo - hi;
   *a = hi;
   *c = lo;
-}
-
-
-int compute_velocities()
-{
-
-  /* loop on all particles */
-  for (int local_x = 0; local_x < MyGrids[0].GSlocal[_x_]; local_x++)
-    {
-      int idx_x = local_x * MyGrids[0].GSlocal[_y_];
-      for (int local_y=0; local_y < MyGrids[0].GSlocal[_y_]; local_y++)
-	{
-	  int idx_y = (idx_x + local_y)*MyGrids[0].GSlocal[_z_];
-	  for (int local_z=0; local_z < MyGrids[0].GSlocal[_x_]; local_z++)	    
-	    {
-	      int index = local_z + idx_y;
-
-		/* NB: THIS IS THE POINT WHERE DIFFERENT BOXES SHOULD BE CONSIDERED */
-		
-		  for (int i = 0; i < 3; i++)
-		    products[index].Vel[i]=first_derivatives[0][i][index];
-	    }
-	}
-    }
-  return 0;
 }

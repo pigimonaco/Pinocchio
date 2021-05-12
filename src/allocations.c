@@ -71,7 +71,7 @@ int organize_main_memory()
 
      // QUESTO E` STATO SPOSTATO IN GENIC
      //This is needed by GenIC:
-     //seedtable           1 int = 4                 MyGrids[*].GSglobal[0] * MyGrids[*].GSglobal[1]
+     //seedtable           1 int = 4                 MyGrids[*].GSglobal[_x_] * MyGrids[*].GSglobal[_y_]
 
      These will be allocated by pfft routines:
 
@@ -150,7 +150,7 @@ int organize_main_memory()
       }
 
   /* for (igrid=0; igrid<Ngrids; igrid++) */
-  /*   memory.fields += MyGrids[igrid].GSglobal[0] * MyGrids[igrid].GSglobal[1] * sizeof(unsigned int);  /\* seedtable *\/ */
+  /*   memory.fields += MyGrids[igrid].GSglobal[_x_] * MyGrids[igrid].GSglobal[_y_] * sizeof(unsigned int);  /\* seedtable *\/ */
 
   /* memory allocated by PFFT */
   for (igrid=0, memory.fft=0; igrid<Ngrids; igrid++)
@@ -189,7 +189,7 @@ int organize_main_memory()
     myNalloc=0;
   else
     myNalloc = (MyGrids[0].ParticlesPerTask*params.MaxMemPerParticle 
-		- memory.prods - memory.groups) / (sizeof(product_data) + FRAGFIELDS * sizeof(int)) -1;
+		- memory.prods - memory.groups) / (sizeof(product_data) + FRAGFIELDS * sizeof(int)) -10;
 
   /* Nalloc will be the smallest among all tasks */
   MPI_Reduce(&myNalloc, &Nalloc, 1, MPI_UNSIGNED_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
@@ -210,7 +210,6 @@ int organize_main_memory()
   else
     myNalloc = (MyGrids[0].ParticlesPerTask*params.MaxMemPerParticle - memory.fields_to_keep - memory.fft
 	      - memory.prods - memory.groups) / (sizeof(product_data) + FRAGFIELDS * sizeof(int)) -10;
-
   /* Nalloc will be the smallest among all tasks */
   MPI_Reduce(&myNalloc, &Nalloc, 1, MPI_UNSIGNED_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
   MPI_Bcast(&Nalloc, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
@@ -221,6 +220,16 @@ int organize_main_memory()
   memory.frag_allocated = memory.prods + memory.fields_to_keep + memory.frag_prods + memory.groups + memory.frag_arrays;
   memory.frag_total = memory.frag_allocated + memory.fft;
 
+#endif
+
+#ifdef CLASSIC_FRAGMENTATION
+  if (myNalloc<subbox.Npart)
+    {
+      printf("ERROR: Task %d can allocate only %d subbox particles, while %d are needed;\n",
+	     ThisTask,myNalloc,subbox.Npart);
+      printf("       a large overhead is probably needed, please increase MaxMemPerParticle\n");
+      return (size_t)0;
+    }
 #endif
 
   /* this is the largest amount of memory needed by the code */
@@ -243,15 +252,6 @@ int organize_main_memory()
 	}
     }
 
-  // QUESTO DOVREBBE ESSERE INUTILE!!!
-  /* it tests that the required memory for ThisTask is lower than the specified limit */
-  if ((double)memory.all/MBYTE > params.MaxMem+1)
-    {
-      printf("ERROR on task %d: the run requires %f Mb, more than the MaxMem value\n",ThisTask,(double)memory.all/MBYTE);
-      fflush(stdout);
-      return (size_t)0;
-    }
-
   return Nalloc;
 }
 
@@ -267,7 +267,7 @@ int allocate_main_memory()
   int igrid,i;
   size_t count_memory;
   struct map{
-    int lz;
+    int lx,ly,lz;
     double oh,am,m1,m2,m3,m4,m5,m6,m7,m8;
   } mymap;
   MPI_Status status;
@@ -278,7 +278,9 @@ int allocate_main_memory()
 #endif
 
   /* map of memory usage for all tasks */
-  mymap.lz=MyGrids[0].GSlocal[2];
+  mymap.lx=MyGrids[0].GSlocal[_x_];
+  mymap.ly=MyGrids[0].GSlocal[_y_];
+  mymap.lz=MyGrids[0].GSlocal[_z_];
   mymap.am=(double)memory.all/MBYTE;
   mymap.oh=(double)subbox.Nalloc/(double)MyGrids[0].ParticlesPerTask;
   mymap.m1=(double)memory.prods/(double)MyGrids[0].ParticlesPerTask;
@@ -294,7 +296,7 @@ int allocate_main_memory()
     {
       printf("\n");
       printf("Map of memory usage for all MPI tasks\n");
-      printf("Task N. planes    mem(MB) overhead   products   fields     ffts     fmax  frag pr.  groups fragment  total bytes per particle\n");
+      printf("Task N.   FFT domain      mem(MB) overhead   products   fields     ffts     fmax  frag pr.  groups fragment  total bytes per particle\n");
     }
   for (i=0; i<NTasks; i++)
     {
@@ -302,8 +304,8 @@ int allocate_main_memory()
 	{
 	  if (i)
 	    MPI_Recv((void*)&mymap, sizeof(struct map), MPI_BYTE, i, 0, MPI_COMM_WORLD, &status);
-	  printf("%6d  %6d  %8.0f  %6.1f       %6.1f   %6.1f   %6.1f   %6.1f   %6.1f   %6.1f   %6.1f   %6.1f\n",
-		 i, mymap.lz, mymap.am, mymap.oh, mymap.m1, mymap.m2, mymap.m3, mymap.m4, mymap.m5, mymap.m6, mymap.m7, mymap.m8);
+	  printf("%6d  %4d-%4d-%4d  %8.0f  %6.1f       %6.1f   %6.1f   %6.1f   %6.1f   %6.1f   %6.1f   %6.1f   %6.1f\n",
+		 i, mymap.lx,mymap.ly,mymap.lz, mymap.am, mymap.oh, mymap.m1, mymap.m2, mymap.m3, mymap.m4, mymap.m5, mymap.m6, mymap.m7, mymap.m8);
 	}
       else if (ThisTask==i)
 	MPI_Send((void*)&mymap, sizeof(struct map), MPI_BYTE, 0, 0, MPI_COMM_WORLD);
@@ -374,7 +376,7 @@ int allocate_main_memory()
 //  for (igrid=0; igrid<Ngrids; igrid++)
 //    {
 //      seedtable[igrid] = (unsigned int*)(main_memory + count_memory);
-//      count_memory += MyGrids[igrid].GSglobal[0] * MyGrids[igrid].GSglobal[1] * sizeof(unsigned int);
+//      count_memory += MyGrids[igrid].GSglobal[_x_] * MyGrids[igrid].GSglobal[_y_] * sizeof(unsigned int);
 //    }
 //
   /* allocates fft vectors */
@@ -437,7 +439,7 @@ int allocate_main_memory()
 #endif
 #endif
   for (igrid=0; igrid<Ngrids; igrid++)
-    bcast[n++]=MyGrids[igrid].GSglobal[0] * MyGrids[igrid].GSglobal[1] * sizeof(unsigned int);
+    bcast[n++]=MyGrids[igrid].GSglobal[_x_] * MyGrids[igrid].GSglobal[_y_] * sizeof(unsigned int);
   bcast[n++]=count_memory;
   bcast[n++]=memory.all;
 
@@ -505,7 +507,7 @@ int deallocate_fft_vectors(int ThisGrid)
 int reallocate_memory_for_fragmentation()
 {
 
-  size_t count_memory;
+  size_t count_memory, start_memory;
   void *tmp;
 #ifdef VERBOSE
   size_t *bcast;
@@ -569,14 +571,14 @@ int reallocate_memory_for_fragmentation()
 
   /* the frag structure is located just after memory products */
   frag = (product_data *)(main_memory + memory.prods);
-  count_memory = memory.prods + memory.frag_prods;
+  count_memory =  start_memory = memory.prods + memory.frag_prods;
   ALIGN_MEMORY_BLOCK( count_memory );
 
 #else
 
   /* including fields_to_keep in this case */
   frag = (product_data *)(main_memory + memory.prods + memory.fields_to_keep);
-  count_memory = memory.prods + memory.fields_to_keep + memory.frag_prods;
+  count_memory = start_memory = memory.prods + memory.fields_to_keep + memory.frag_prods;
   ALIGN_MEMORY_BLOCK( count_memory );
 
 #endif
@@ -618,6 +620,7 @@ int reallocate_memory_for_fragmentation()
   count_memory+=subbox.maplength*sizeof(unsigned int);
   ALIGN_MEMORY_BLOCK( count_memory );
 
+  memset((char*)frag, 0, count_memory-start_memory);
+
   return 0;
 }
-
