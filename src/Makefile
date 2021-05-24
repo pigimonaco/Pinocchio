@@ -29,6 +29,8 @@ RUNDIR = ./
 
 EXEC = pinocchio.x
 
+DEBUG=NO
+
 #OPTIONS += -DCLASSIC_FRAGMENTATION
 #OPTIONS += -DDOUBLE_PRECISION_PRODUCTS
 OPTIONS += -DLIGHT_OUTPUT
@@ -77,9 +79,13 @@ INC =  $(PFFT_INCL) $(FFTW_INCL) $(MPI_INCL) $(GSL_INCL)
 LIB =  -lm $(PFFT_LIBR) $(FFTW_LIBR) $(MPI_LIBR) $(GSL_LIBR)
 
 
-# compiler options : choose from CDEBUG or COPTIMIZED
+# compiler options
+ifeq ($(DEBUG), YES)
 COPTS = $(CDEBUG)
-#COPTS = $(COPTIMIZED)
+else
+COPTS = $(COPTIMIZED)
+endif
+
 
 # source files:
 OBJECTS = fmax.o variables.o initialization.o collapse_times.o fmax-pfft.o GenIC.o \
