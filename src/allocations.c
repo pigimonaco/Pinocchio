@@ -192,8 +192,8 @@ int organize_main_memory()
 		- memory.prods - memory.groups) / (sizeof(product_data) + FRAGFIELDS * sizeof(int)) -10;
 
   /* Nalloc will be the smallest among all tasks */
-  MPI_Reduce(&myNalloc, &Nalloc, 1, MPI_UNSIGNED_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&Nalloc, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&myNalloc, &Nalloc, 1, MPI_UNSIGNED, MPI_MIN, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&Nalloc, 1, MPI_UNSIGNED, 0, MPI_COMM_WORLD);
 
   memory.frag_prods  = Nalloc * sizeof(product_data);
   memory.frag_arrays = Nalloc * FRAGFIELDS * sizeof(int);
@@ -211,8 +211,8 @@ int organize_main_memory()
     myNalloc = (MyGrids[0].ParticlesPerTask*params.MaxMemPerParticle - memory.fields_to_keep - memory.fft
 	      - memory.prods - memory.groups) / (sizeof(product_data) + FRAGFIELDS * sizeof(int)) -10;
   /* Nalloc will be the smallest among all tasks */
-  MPI_Reduce(&myNalloc, &Nalloc, 1, MPI_UNSIGNED_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&Nalloc, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&myNalloc, &Nalloc, 1, MPI_UNSIGNED, MPI_MIN, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&Nalloc, 1, MPI_UNSIGNED, 0, MPI_COMM_WORLD);
 
   memory.frag_prods  = Nalloc * sizeof(product_data);
   memory.frag_arrays = Nalloc * FRAGFIELDS * sizeof(int);

@@ -498,7 +498,7 @@ int set_grids()
   if (!ThisTask)
     PPT=MyGrids[0].total_local_size;
 
-  MPI_Bcast(&PPT, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&PPT, 1, MPI_UNSIGNED, 0, MPI_COMM_WORLD);
   MyGrids[0].ParticlesPerTask=PPT;
 
   if ((int)(PPT * params.MaxMemPerParticle / MBYTE + 1.0) > params.MaxMem)
