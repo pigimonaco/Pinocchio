@@ -120,7 +120,9 @@ int compute_collapse_times(int ismooth)
 
   /* initialize Fmax if it is the first smoothing */
   if (!ismooth)
+#if defined( _OPENMP )
 #pragma omp parallel for
+#endif
     for (int i = 0; i < MyGrids[0].total_local_size; i++)
       {
 	products[i].Fmax   = -10.0;
@@ -147,10 +149,8 @@ int compute_collapse_times(int ismooth)
 
 #if defined( _OPENMP )
   double invcoll_update = 0, ell_update = 0;
-#endif
 #pragma omp parallel
   {
-#if defined( _OPENMP )
     double  mylocal_average, mylocal_variance;
     double  cputime_invcoll;
     dvec_u  vmylocal_average, vmylocal_variance;
@@ -189,7 +189,10 @@ int compute_collapse_times(int ismooth)
 
 
 // LOOP NON VETTORIALIZZATO
+    double tmp = MPI_Wtime();
+#ifdef _OPENMP
 #pragma omp for nowait
+#endif
     for (int index=0; index<MyGrids[0].total_local_size; index++)
       {
 
@@ -205,9 +208,7 @@ int compute_collapse_times(int ismooth)
 	/* Computation of ellipsoidal collapse */
 	double lambda1,lambda2,lambda3;
 	int    fail;
-	double tmp = MPI_Wtime();
 	double Fnew = inverse_collapse_time(ismooth, diff_ten, &lambda1, &lambda2, &lambda3, &fail);
-	cputime_invcoll += MPI_Wtime() - tmp;
 
 	if (fail)
 	  {
@@ -228,6 +229,7 @@ int compute_collapse_times(int ismooth)
 
       }
     
+    cputime_invcoll += MPI_Wtime() - tmp;
 
 
 //#ifdef VETTORIALIZZA
@@ -321,7 +323,9 @@ int compute_collapse_times(int ismooth)
     ell_update     += cputime_ell;
 #endif
         
+#if defined( _OPENMP )
   }
+#endif
 
   int all_fails = 0;
   
@@ -329,9 +333,9 @@ int compute_collapse_times(int ismooth)
 
 #if defined (_OPENMP)
 #pragma omp atomic
-  cputime.invcoll += invcoll_update/internal_data.nthreads_omp;
+  cputime.invcoll += invcoll_update/internal.nthreads_omp;
 #pragma omp atomic	
-  cputime.ell     += ell_update/internal_data.nthreads_omp;
+  cputime.ell     += ell_update/internal.nthreads_omp;
 #pragma omp atomic
   all_fails       += fails;
 #endif
@@ -459,7 +463,7 @@ int v_inverse_collapse_time(int ismooth, dvec dtensor[6], dvec_u delta, dvec del
       }
 
   /* ordering and inverse collapse time */
-  double tmp = MPI_Wtime();
+  //  double tmp = MPI_Wtime();
   for(int ii = 0; ii < DVEC_SIZE; ii++)
     {
       double _x1 = (*x1).v[ii];
@@ -476,7 +480,7 @@ int v_inverse_collapse_time(int ismooth, dvec dtensor[6], dvec_u delta, dvec del
       else
 	(*res).v[ii] = -10.0;
     }
-  cputime_ell += MPI_Wtime() - tmp;
+  // cputime_ell += MPI_Wtime() - tmp;
 
   return 0;
 }
@@ -539,7 +543,7 @@ double inverse_collapse_time(int ismooth, double * restrict deformation_tensor, 
 
       if (q*q*q < r*r || q<0.0)
 	{
-	  *fail=1;
+	  //*fail=1;
 	  return -10.0;
 	}
 
@@ -553,7 +557,7 @@ double inverse_collapse_time(int ismooth, double * restrict deformation_tensor, 
 
   /* ordering and inverse collapse time */
   ord(x1, x2, x3);
-  double tmp = MPI_Wtime();
+  //double tmp = MPI_Wtime();
 #ifdef TABULATED_CT
   double t = interpolate_collapse_time(*x1,*x2,*x3);
 
@@ -575,7 +579,7 @@ double inverse_collapse_time(int ismooth, double * restrict deformation_tensor, 
   double t = ell(ismooth,*x1,*x2,*x3);
 #endif
 
-  cputime_ell += MPI_Wtime() - tmp;
+  //cputime_ell += MPI_Wtime() - tmp;
   
   return t;
 }

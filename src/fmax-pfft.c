@@ -140,6 +140,8 @@ int compute_fft_plans()
   int       pfft_flags;
   int       ThisGrid;
   
+  dprintf(VMSG, 0, "[%s] Computing fft plans\n",fdate());
+
   for (ThisGrid = 0; ThisGrid < Ngrids; ThisGrid++)
     {
 
@@ -178,6 +180,9 @@ int compute_fft_plans()
       GRID.reverse_plan = pfft_plan_dft_c2r_3d(DIM, cvector_fft[ThisGrid], rvector_fft[ThisGrid], 
 					       FFT_Comm, PFFT_BACKWARD, pfft_flags);
     }
+
+
+  dprintf(VMSG, 0, "[%s] fft plans done\n",fdate());
 
   return 0;
 }
@@ -466,7 +471,9 @@ void write_in_cvector(int ThisGrid, double * restrict vector)
 #if !defined(_OPENMP)  
 #pragma GCC ivdep
 #endif
+#ifdef _OPENMP
 #pragma omp for schedule(simd:static)
+#endif
   for ( int i = 0; i < mysize; i++ )
     *(target + i) = *(source + i);
 
@@ -492,7 +499,9 @@ void write_from_cvector(int ThisGrid, double * restrict vector)
 #if !defined(_OPENMP)
 #pragma GCC ivdep
 #endif
+#ifdef _OPENMP
 #pragma omp for schedule(simd:static)  
+#endif
   for ( int i = 0; i < mysize; i++ )
     *(target + i) = *(source + i);
 
@@ -516,7 +525,9 @@ void write_in_rvector(int ThisGrid, double * restrict vector)
 #if !defined(_OPENMP)
 #pragma GCC ivdep
 #endif  
+#ifdef _OPENMP
 #pragma omp for schedule(simd:static)  
+#endif
   for( int i = 0; i < mysize; i++ )
     *(target + i) = *(source + i);
   
@@ -539,7 +550,9 @@ void write_from_rvector(int ThisGrid, double * restrict vector)
 #if !defined(_OPENMP)
 #pragma GCC ivdep
 #endif
+#ifdef _OPENMP
 #pragma omp for schedule(simd:static)  
+#endif
   for( int i = 0; i < mysize; i++ )
     *(target + i) = *(source + i);
 

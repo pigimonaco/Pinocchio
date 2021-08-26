@@ -187,10 +187,6 @@ int read_parameter_file()
       addr[nt] = &params.DoNotWriteHistories;
       id[nt++] = LOGICAL;
 
-      strcpy(tag[nt], "WriteSnapshot");
-      addr[nt] = &params.WriteSnapshot;
-      id[nt++] = LOGICAL;
-
       strcpy(tag[nt], "WriteTimelessSnapshot");
       addr[nt] = &params.WriteTimelessSnapshot;
       id[nt++] = LOGICAL;
@@ -222,6 +218,10 @@ int read_parameter_file()
       strcpy(tag[nt], "PredPeakFactor");
       addr[nt] = &(params.PredPeakFactor);
       id[nt++] = DOUBLE;
+
+      strcpy(tag[nt], "ExitIfExtraParticles");
+      addr[nt] = &params.ExitIfExtraParticles;
+      id[nt++] = LOGICAL;
 
 #ifdef READ_PK_TABLE
       strcpy(tag[nt], "CAMBMatterFileTag");
@@ -293,9 +293,10 @@ int read_parameter_file()
       
 
 #ifdef USE_FFT_THREADS
-      strcpy(tag[nt], "NThreads");
-      addr[nt] = &(internal.nthreads_fft);
-      id[nt++] = INT;
+// Using the same threads for FFTs
+//      strcpy(tag[nt], "NThreads");
+//      addr[nt] = &(internal.nthreads_fft);
+//      id[nt++] = INT;
 #endif      
       
       for (j=0; j<nt; j++)     /* All logical tags are FALSE by default */

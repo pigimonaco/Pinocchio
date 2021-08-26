@@ -28,6 +28,7 @@
 
 int compute_second_derivatives(double, int);
 int compute_first_derivatives(double, int);
+int Fmax_PDF(void);
 
 
 /* Computation of collapse times and displacements */
@@ -159,7 +160,7 @@ int compute_fmax(void)
   cputmp=MPI_Wtime();
 
   if (!ThisTask)
-    printf("[%s] Computing LPT displacements\n",fdate());
+    printf("\n[%s] Computing LPT displacements\n",fdate());
 
   if (compute_LPT_displacements())
     return 1;
@@ -215,6 +216,9 @@ int compute_fmax(void)
   cputime.io+=MPI_Wtime()-cputmp;
 
   if (finalize_fft())
+    return 1;
+
+  if (Fmax_PDF())
     return 1;
 
   cputime.fmax = MPI_Wtime() - cputime.fmax;
@@ -497,3 +501,46 @@ int read_dumps()
   return 0;
 }
 
+
+int Fmax_PDF(void)
+{
+
+  unsigned long long my_counter[NBINS], counter[NBINS], coll;
+
+  for (int i=0; i<NBINS; i++)
+    my_counter[i]=0;
+
+  for (int i=0; i<MyGrids[0].total_local_size; i++)
+    {
+      int xF = (int)(products[i].Fmax*10.);
+      if (xF<0)
+	xF=0;
+      if (xF>=NBINS)
+	xF=NBINS-1;
+      my_counter[xF]++;
+    }
+
+  MPI_Reduce(my_counter, counter, NBINS, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+
+  if (!ThisTask)
+    {
+      coll=0;
+      for (int i=10; i<NBINS; i++)
+	coll+=counter[i];
+      printf("[%s] Number of collapsed particles to z=0: %Lu\n",fdate(),coll);
+
+      char filename[LBLENGTH];
+      sprintf(filename,"pinocchio.%s.FmaxPDF.out",params.RunFlag);
+      FILE *file=fopen(filename,"w");
+      fprintf(file, "# Fmax PDF over %Lu particles\n",MyGrids[0].Ntotal);
+      fprintf(file, "# 1-2: F interval\n");
+      fprintf(file, "# 3: number of particles in that interval\n");
+      fprintf(file, "#\n");
+      for (int i=0; i<NBINS; i++)
+	fprintf(file, " %6.1f   %6.1f  %Lu\n",(double)i/10., 
+		(i==NBINS-1? 999.0 : (double)(i+1)/10.), counter[i]);
+      fclose(file);
+    }
+
+  return 0;
+}

@@ -1,42 +1,20 @@
-/*****************************************************************
- *                        PINOCCHIO  V4.1                        *
- *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
- *****************************************************************
- 
- This code was written by
- Pierluigi Monaco
- Copyright (C) 2016
- 
- web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
- 
- This program is free software; you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
- the Free Software Foundation; either version 2 of the License, or
- (at your option) any later version.
- 
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
- 
- You should have received a copy of the GNU General Public License
- along with this program; if not, write to the Free Software
- Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
+/* ######HEADER###### */
+
 
 #include "pinocchio.h"
-#include "fragment.h"
+
+//#define POS_IN_KPC   /* with this directive on, positions will be in kpc/h */
 
 
-//#define LONGIDS
-//#define POS_IN_KPC
-#define FORCE_PARTICLE_NUMBER      /* DO NOT ACTIVATE THESE */
-//#define ONLY_LPT_DISPLACEMENTS     /* TWO OPTIONS TOGETHER */
-#define WRITE_FMAX_TO_SNAPSHOT
+// Possibili snapshot:
+//   - timeless snapshot
+//   - LPT snapshot
+//   - density
+//
 
-#if defined(FORCE_PARTICLE_NUMBER) && defined(ONLY_LPT_DISPLACEMENTS)
-#error Trying to compile with FORCE_PARTICLE_NUMBER and ONLY_LPT_DISPLACEMENTS together
-#endif
+
+#ifdef SNAPSHOT
+
 
 #ifdef LONGIDS
 #define MYIDTYPE unsigned long long int
@@ -88,57 +66,43 @@ MPI_Status status;
 
 void WriteBlockName(FILE *,int, char*);
 void my_strcpy(char *,char *, int);
-int write_header(int);
+int write_header();
 int write_block(Block_data);
 void free_block(Block_data);
 int add_to_info(Block_data);
 int write_info_block(void);
-int count_particles_for_final_snapshot(void);
-int initialize_ID_subvolumes(Block_data*);
-int initialize_POS_withNFW(Block_data*);
-int initialize_VEL_withNFW(Block_data*);
-int initialize_ID_fftspace(Block_data*);
-int initialize_FMAX_fftspace(Block_data*);
-int initialize_RMAX_fftspace(Block_data*);
-int initialize_VEL_fftspace(Block_data*);
+int initialize_ID(Block_data*);
+int initialize_FMAX(Block_data*);
+int initialize_RMAX(Block_data*);
+int initialize_ZEL(Block_data*);
 #ifdef TWO_LPT
-int initialize_VEL_2LPT_fftspace(Block_data*);
+int initialize_2LPT(Block_data*);
 #ifdef THREE_LPT
-int initialize_VEL_3LPT_1_fftspace(Block_data*);
-int initialize_VEL_3LPT_2_fftspace(Block_data*);
+int initialize_3LPT_1(Block_data*);
+int initialize_3LPT_2(Block_data*);
 #endif
 #endif
+int initialize_ZACC(Block_data*);
+int initialize_POS(Block_data*);
+int initialize_VEL(Block_data*);
 int initialize_density(int, Block_data*);
-
-#ifdef ROTATE_BOX
-static int rot[3]={1,2,0};
-#else
-static int rot[3]={0,1,2};
-#endif
-
-/* In this routine each task outputs all the particles belonging to good groups.
-   If FORCE_PARTICLE_NUMBER is not active, some particles will be duplicated 
-   but if FORCE_PARTICLE_NUMBER is active, some groups will have 
-   fewer particles that their putative mass */
+void set_point_fftspace(int, int, int, int, PRODFLOAT, pos_data *);
 
 char filename[LBLENGTH];
 FILE *file;
 int NTasksPerFile,collector,ThisFile,NPartInFile,myNpart,myiout;
 int *Npart_array;
 
-int write_snapshot(int iout)
+int write_LPT_snapshot(void)
 {
-  /* writes displacements of all particles in a GADGET format 
-     particles in halos are distributed around the center of mass
-     as NFW spheres with virial velocity distribution */
+  /* writes positions of all particles obtained with LPT */
 
   Block_data block;
 
   /* Snapshot filename */
-  sprintf(filename,"pinocchio.%s.snapshot_%03d",params.RunFlag,iout);
+  sprintf(filename,"pinocchio.%s.LPT_snapshot.out",params.RunFlag);
 
-  int my_snap_type=0;
-  myiout=iout;
+  myiout=outputs.n-1;
 
   /* allocates structure to handle the INFO block */
   NBlocks=3;
@@ -149,11 +113,11 @@ int write_snapshot(int iout)
     printf("[%s] Writing snapshot file %s\n",fdate(),filename);
 
   /* this routine opens the file */
-  if (write_header(my_snap_type))
+  if (write_header())
     return 1;
 
   /* writing of IDs */
-  if (initialize_ID_subvolumes(&block))
+  if (initialize_ID(&block))
     return 1;
   if (add_to_info(block))
     return 1;
@@ -162,7 +126,7 @@ int write_snapshot(int iout)
   free_block(block);
 
   /* writing of POS */
-  if (initialize_POS_withNFW(&block))
+  if (initialize_POS(&block))
     return 1;
   if (add_to_info(block))
     return 1;
@@ -170,8 +134,8 @@ int write_snapshot(int iout)
     return 1;
   free_block(block);
 
-  /* writing of VEL */
-  if (initialize_VEL_withNFW(&block))
+  /* writing of ZEL */
+  if (initialize_VEL(&block))
     return 1;
   if (add_to_info(block))
     return 1;
@@ -197,16 +161,16 @@ int write_snapshot(int iout)
 }
 
 
-int write_products()
+int write_timeless_snapshot()
 {
   /* writes the fmax products as in a snapshot format */
 
   Block_data block;
 
-  /* Snapshot filename */
-  sprintf(filename,"pinocchio.%s.products.out",params.RunFlag);
+  myiout=outputs.n-1;
 
-  int my_snap_type=1;
+  /* Snapshot filename */
+  sprintf(filename,"pinocchio.%s.t_snapshot.out",params.RunFlag);
 
   /* allocates structure to handle the INFO block */
 #ifdef TWO_LPT
@@ -218,6 +182,10 @@ int write_products()
 #else
   NBlocks=4;
 #endif
+#ifdef ADD_RMAX_TO_SNAPSHOT
+  ++NBlocks;
+#endif
+
   NextBlock=0;
   InfoBlock=(Block_data *)calloc(NBlocks, sizeof(Block_data));
 
@@ -225,11 +193,11 @@ int write_products()
     printf("[%s] Writing products in snapshot file %s\n",fdate(),filename);
 
   /* this routine opens the file */
-  if (write_header(my_snap_type))
+  if (write_header())
     return 1;
 
   /* writing of IDs */
-  if (initialize_ID_fftspace(&block))
+  if (initialize_ID(&block))
     return 1;
   if (add_to_info(block))
     return 1;
@@ -237,17 +205,19 @@ int write_products()
     return 1;
   free_block(block);
 
+#ifdef ADD_RMAX_TO_SNAPSHOT
   /* writing of RMAX */
-  if (initialize_RMAX_fftspace(&block))
+  if (initialize_RMAX(&block))
     return 1;
   if (add_to_info(block))
     return 1;
   if (write_block(block))
     return 1;
   free_block(block);
+#endif
 
   /* writing of FMAX */
-  if (initialize_FMAX_fftspace(&block))
+  if (initialize_FMAX(&block))
     return 1;
   if (add_to_info(block))
     return 1;
@@ -256,7 +226,7 @@ int write_products()
   free_block(block);
 
   /* writing of VEL */
-  if (initialize_VEL_fftspace(&block))
+  if (initialize_ZEL(&block))
     return 1;
   if (add_to_info(block))
     return 1;
@@ -266,7 +236,7 @@ int write_products()
 
 #ifdef TWO_LPT
   /* writing of VEL2 */
-  if (initialize_VEL_2LPT_fftspace(&block))
+  if (initialize_2LPT(&block))
     return 1;
   if (add_to_info(block))
     return 1;
@@ -276,7 +246,7 @@ int write_products()
 
 #ifdef THREE_LPT
   /* writing of VL31 */
-  if (initialize_VEL_3LPT_1_fftspace(&block))
+  if (initialize_3LPT_1(&block))
     return 1;
   if (add_to_info(block))
     return 1;
@@ -285,7 +255,7 @@ int write_products()
   free_block(block);
 
   /* writing of VL32 */
-  if (initialize_VEL_3LPT_2_fftspace(&block))
+  if (initialize_3LPT_2(&block))
     return 1;
   if (add_to_info(block))
     return 1;
@@ -294,6 +264,15 @@ int write_products()
   free_block(block);
 #endif
 #endif
+
+  /* writing of ZACC */
+  if (initialize_ZACC(&block))
+    return 1;
+  if (add_to_info(block))
+    return 1;
+  if (write_block(block))
+    return 1;
+  free_block(block);
 
   /* writing of INFO block */
   if (write_info_block())
@@ -317,9 +296,7 @@ int write_density(int ThisGrid)
   Block_data block;
 
   /* Snapshot filename */
-  sprintf(filename,"pinocchio.%s.density.out",params.RunFlag);
-
-  int my_snap_type=1;
+  sprintf(filename,"pinocchio.%s.density%d.out",params.RunFlag,ThisGrid);
 
   /* allocates structure to handle the INFO block */
   NBlocks=2;
@@ -330,11 +307,11 @@ int write_density(int ThisGrid)
     printf("[%s] Writing density in snapshot file %s\n",fdate(),filename);
 
   /* this routine opens the file */
-  if (write_header(my_snap_type))
+  if (write_header())
     return 1;
 
   /* writing of IDs */
-  if (initialize_ID_fftspace(&block))
+  if (initialize_ID(&block))
     return 1;
   if (add_to_info(block))
     return 1;
@@ -368,7 +345,7 @@ int write_density(int ThisGrid)
 }
 
 
-int write_header(int snap_type)
+int write_header()
 {
 
   /* This function counts the number of particles that the task will write in the snapshot
@@ -386,18 +363,7 @@ int write_header(int snap_type)
   ThisFile=ThisTask/NTasksPerFile;
   collector=ThisFile*NTasksPerFile;
 
-  switch (snap_type)
-    {
-    case 0: /* particles live in the subvolume domain */
-      myNpart = count_particles_for_final_snapshot(); // SEPARARE FORCE_PARTICLE_NUMBER QUI
-      break;
-    case 1: /* particles live in the fft domain */
-      myNpart = MyGrids[0].total_local_size; // NON E` VERO!!!
-      break;
-    default:
-      myNpart = 0;
-      break;
-    }
+  myNpart = MyGrids[0].total_local_size;
 
   /* Number of particles in each file */
   Npart_array = (int*)calloc(params.NumFiles, sizeof(int));
@@ -423,9 +389,9 @@ int write_header(int snap_type)
   MPI_Bcast(Npart_array, params.NumFiles, MPI_INT, 0, MPI_COMM_WORLD);
   free(tmp_array);
 
-  if (!ThisTask)
-    printf("[%s] The snapshot will contain a total of %Ld particles (true total number: %Ld, duplication factor: %f percent)\n",
-	   fdate(), myNtotal, MyGrids[0].Ntotal, 100.*(double)(myNtotal-MyGrids[0].Ntotal)/(double)MyGrids[0].Ntotal);
+  /* if (!ThisTask) */
+  /*   printf("[%s] The snapshot will contain a total of %Ld particles (true total number: %Ld, duplication factor: %f percent)\n", */
+  /* 	   fdate(), myNtotal, MyGrids[0].Ntotal, 100.*(double)(myNtotal-MyGrids[0].Ntotal)/(double)MyGrids[0].Ntotal); */
 
   /* The collector task opens the file and writes the header */
   if (ThisTask==collector)
@@ -438,7 +404,7 @@ int write_header(int snap_type)
 	}
 
       if (!ThisTask)
-	printf("[%s] Task 0 will write %d particles in snapshot file %s\n",fdate(),NPartInFile,my_filename);
+	printf("[%s] Task 0 will write %d particles out of %Ld in snapshot file %s\n",fdate(), NPartInFile, MyGrids[0].Ntotal, my_filename);
 
       if ( (file=fopen(my_filename,"w"))==0x0)
 	{
@@ -596,53 +562,9 @@ int write_info_block(void)
 }
 
 
-int count_particles_for_final_snapshot(void)
+int initialize_ID(Block_data *block)
 {
-  /* This function counts the number of particles that will be written by ThisTask.
-     These live in the subbox space, each task outputs all particles that are assigned
-     to its halos, even if they live in different sub-volumes. Note that this 
-     does not guarantee particle conservation.
-   */
-
-  int Lgridxy, myN, i, ibox,jbox,kbox,kk, good_particle;
-
-  /* this is relevant when the particles live in the sub-volume domain */
-  Lgridxy = subbox.Lgwbl[_x_] * subbox.Lgwbl[_y_];
-
-  /* Each task counts the number of particles that will be output */
-  /* first loop is on good particles that are not in groups */
-  for (i=0, myN=0; i<subbox.Npart; i++)
-    {
-      /* grid coordinates from the indices (sub-box coordinates) */
-      kbox=i/Lgridxy;
-      kk=i-kbox*Lgridxy;
-      jbox=kk/subbox.Lgwbl[_x_];
-      ibox=kk-jbox*subbox.Lgwbl[_x_];
-      good_particle = ( ibox>=subbox.safe[_x_] && ibox<subbox.Lgwbl[_x_]-subbox.safe[_x_] && 
-			jbox>=subbox.safe[_y_] && jbox<subbox.Lgwbl[_y_]-subbox.safe[_y_] && 
-			kbox>=subbox.safe[_z_] && kbox<subbox.Lgwbl[_z_]-subbox.safe[_z_] );
-      if (good_particle
-#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER) // PROBABILMENTE SI PUO` TOGLIERE
-	  && group_ID[i]<=FILAMENT
-#endif
-	  )
-	myN++;
-    }
-
-#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
-  /* second loop is on good groups */
-  for (i=FILAMENT+1; i<=ngroups; i++)
-    if (groups[i].point >= 0 && groups[i].good)
-      myN+=groups[i].Mass;
-#endif
-
-  return myN;
-}
-
-
-int initialize_ID_fftspace(Block_data *block)
-{
-  /* this routine initializes the ID block when particles live in sub-volume domain */
+  /* this routine initializes the ID block */
 
   my_strcpy(block->name,"ID  ",4);
 #ifdef LONGIDS
@@ -706,15 +628,15 @@ int initialize_density(int ThisGrid, Block_data *block)
     }
 
   /* loop on all particles */
-  for (int i=0; i < MyGrids[0].total_local_size; i++)
+  for (int i=0; i < MyGrids[ThisGrid].total_local_size; i++)
     ((float*)block->data)[i] = density[ThisGrid][i];
 
   return 0;
 }
 
-int initialize_FMAX_fftspace(Block_data *block)
+int initialize_FMAX(Block_data *block)
 {
-  /* this routine initializes the ID block when particles live in sub-volume domain */
+  /* this routine initializes the FMAX block */
 
   my_strcpy(block->name,"FMAX",4);
   my_strcpy(block->type,"FLOATN  ",8);
@@ -736,9 +658,9 @@ int initialize_FMAX_fftspace(Block_data *block)
   return 0;
 }
 
-int initialize_RMAX_fftspace(Block_data *block)
+int initialize_RMAX(Block_data *block)
 {
-  /* this routine initializes the ID block when particles live in sub-volume domain */
+  /* this routine initializes the RMAX block */
 
   my_strcpy(block->name,"RMAX",4);
   my_strcpy(block->type,"LONG    ",8);
@@ -760,11 +682,11 @@ int initialize_RMAX_fftspace(Block_data *block)
   return 0;
 }
 
-int initialize_VEL_fftspace(Block_data *block)
+int initialize_ZEL(Block_data *block)
 {
-  /* this routine initializes the ID block when particles live in sub-volume domain */
+  /* this routine initializes the ZEL block */
 
-  my_strcpy(block->name,"VEL ",4);
+  my_strcpy(block->name,"ZEL ",4);
   my_strcpy(block->type,"FLOATN  ",8);
   block->sizeof_type = sizeof(AuxStruct);
   block->ndim=3;
@@ -789,11 +711,11 @@ int initialize_VEL_fftspace(Block_data *block)
 }
 
 #ifdef TWO_LPT
-int initialize_VEL_2LPT_fftspace(Block_data *block)
+int initialize_2LPT(Block_data *block)
 {
   /* this routine initializes the ID block when particles live in sub-volume domain */
 
-  my_strcpy(block->name,"VEL2",4);
+  my_strcpy(block->name,"2LPT",4);
   my_strcpy(block->type,"FLOATN  ",8);
   block->sizeof_type = sizeof(AuxStruct);
   block->ndim=3;
@@ -818,11 +740,11 @@ int initialize_VEL_2LPT_fftspace(Block_data *block)
 }
 
 #ifdef THREE_LPT
-int initialize_VEL_3LPT_1_fftspace(Block_data *block)
+int initialize_3LPT_1(Block_data *block)
 {
   /* this routine initializes the ID block when particles live in sub-volume domain */
 
-  my_strcpy(block->name,"VL31",4);
+  my_strcpy(block->name,"31PT",4);
   my_strcpy(block->type,"FLOATN  ",8);
   block->sizeof_type = sizeof(AuxStruct);
   block->ndim=3;
@@ -845,11 +767,12 @@ int initialize_VEL_3LPT_1_fftspace(Block_data *block)
 
   return 0;
 }
-int initialize_VEL_3LPT_2_fftspace(Block_data *block)
+
+int initialize_3LPT_2(Block_data *block)
 {
   /* this routine initializes the ID block when particles live in sub-volume domain */
 
-  my_strcpy(block->name,"VL32",4);
+  my_strcpy(block->name,"32PT",4);
   my_strcpy(block->type,"FLOATN  ",8);
   block->sizeof_type = sizeof(AuxStruct);
   block->ndim=3;
@@ -875,115 +798,34 @@ int initialize_VEL_3LPT_2_fftspace(Block_data *block)
 #endif
 #endif
 
-// DA QUI IN POI E` TUTTO DA CAPIRE COME FARE
-
-int initialize_ID_subvolumes(Block_data *block)
+int initialize_ZACC(Block_data *block)
 {
-  /* this routine initializes the ID block when particles live in sub-volume domain */
-  int index, i, ibox, jbox, kbox, kk, good_particle, global[3], Lgridxy;
+  /* this routine initializes the ZACC block */
 
-  Lgridxy = subbox.Lgwbl[_x_] * subbox.Lgwbl[_y_];
-
-  my_strcpy(block->name,"ID  ",4);
-#ifdef LONGIDS
-  my_strcpy(block->type,"LLONG   ",8);
-  block->sizeof_type = sizeof(unsigned long long);
-#else
-  my_strcpy(block->type,"LONG    ",8);
-  block->sizeof_type = sizeof(unsigned int);
-#endif
+  my_strcpy(block->name,"ZACC",4);
+  my_strcpy(block->type,"FLOATN  ",8);
+  block->sizeof_type = sizeof(float);
   block->ndim=1;
 
   /* each task builds its catalogue: IDs */
-  block->data = (void *)malloc(Npart_array[collector] * sizeof(MYIDTYPE));
+  block->data = (void *)malloc(Npart_array[collector] * sizeof(float));
   if (block->data==0x0)
     {
       printf("ERROR on Task %d: could not allocate block to be written in snapshot\n",ThisTask);
       return 1;
     }
 
-  /* first loop is on good particles that are not in groups */
-  for (i=0, index=0; i<subbox.Npart; i++)
-    {
-      /* grid coordinates from the indices (sub-box coordinates) */
-#ifdef CLASSIC_FRAGMENTATION
-      INDEX_TO_COORD(i,ibox,jbox,kbox,subbox.Lgwbl);
-#else
-      INDEX_TO_COORD(frag_pos[i],ibox,jbox,kbox,subbox.Lgwbl);
-#endif
-
-      good_particle = ( ibox>=subbox.safe[_x_] && ibox<subbox.Lgwbl[_x_]-subbox.safe[_x_] && 
-			jbox>=subbox.safe[_y_] && jbox<subbox.Lgwbl[_y_]-subbox.safe[_y_] && 
-			kbox>=subbox.safe[_z_] && kbox<subbox.Lgwbl[_z_]-subbox.safe[_z_] );
-
-      if (good_particle
-#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
-	  && group_ID[i]<=FILAMENT
-#endif
-	  )
-	{
-	  /* particle coordinates in the box, imposing PBCs */
-	  ((MYIDTYPE*)block->data)[index]=1+
-	    COORD_TO_INDEX((long long)((ibox + subbox.stabl[_x_] + MyGrids[0].GSglobal[_x_])%MyGrids[0].GSglobal[_x_]),
-			   (long long)((jbox + subbox.stabl[_y_] + MyGrids[0].GSglobal[_y_])%MyGrids[0].GSglobal[_y_]),
-			   (long long)((kbox + subbox.stabl[_z_] + MyGrids[0].GSglobal[_z_])%MyGrids[0].GSglobal[_z_]),
-			   MyGrids[0].GSglobal);
-	  ++index;
-	}
-    }
-
-#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
-  /* second loop is on good groups */
-  int next;
-  for (i=FILAMENT+1; i<=ngroups; i++)
-    if (groups[i].point >= 0 && groups[i].good)
-      {
-	next=groups[i].point;
-	for (int npart=0; npart<groups[i].Mass; npart++)
-	  {
-	    kbox=next/Lgridxy;
-	    kk=next-kbox*Lgridxy;
-	    jbox=kk/subbox.Lgwbl[_x_];
-	    ibox=kk-jbox*subbox.Lgwbl[_x_];
-	    /* particle coordinates in the box, imposing PBCs */
-	    global[_x_] = ibox + subbox.stabl[_x_];
-	    if (global[_x_]<0) global[_x_]+=MyGrids[0].GSglobal[_x_];
-	    if (global[_x_]>=MyGrids[0].GSglobal[_x_]) global[_x_]-=MyGrids[0].GSglobal[_x_];
-	    global[_y_] = jbox + subbox.stabl[_y_];
-	    if (global[_y_]<0) global[_y_]+=MyGrids[0].GSglobal[_y_];
-	    if (global[_y_]>=MyGrids[0].GSglobal[_y_]) global[_y_]-=MyGrids[0].GSglobal[_y_];
-	    global[_z_] = kbox + subbox.stabl[_z_];
-	    if (global[_z_]<0) global[_z_]+=MyGrids[0].GSglobal[_z_];
-	    if (global[_z_]>=MyGrids[0].GSglobal[_z_]) global[_z_]-=MyGrids[0].GSglobal[_z_];
-#ifdef ROTATE_BOX
-	    ((MYIDTYPE*)block->data)[index]=1+(MYIDTYPE)global[_x_] + 
-	      ( (MYIDTYPE)global[_z_] + 
-		(MYIDTYPE)global[_y_] * (MYIDTYPE)MyGrids[0].GSglobal[_z_] ) * 
-	      (MYIDTYPE)MyGrids[0].GSglobal[_x_];
-#else
-	    ((MYIDTYPE*)block->data)[index]=1+(MYIDTYPE)global[_x_] + 
-	      ( (MYIDTYPE)global[_y_] + 
-		(MYIDTYPE)global[_z_] * (MYIDTYPE)MyGrids[0].GSglobal[_y_] ) * 
-	      (MYIDTYPE)MyGrids[0].GSglobal[_x_];
-#endif
-	    ++index;
-	    next=linking_list[next];
-	  }
-      }
-
-#endif
+  /* loop on all particles */
+  for (int i=0; i < MyGrids[0].total_local_size; i++)
+    ((float*)block->data)[i] = products[i].zacc;
 
   return 0;
 }
 
-
-int initialize_POS_withNFW(Block_data *block)
+int initialize_POS(Block_data *block)
 {
-  /* */
-  int index, i, ibox, jbox, kbox, kk, good_particle, global[3], j, part;
-  double MyPos[3], conc, rvir, rnd, nfwfac, area, xrnd, yrnd, probfunc, u, theta;
-
-  int Lgridxy = subbox.Lgwbl[_x_] * subbox.Lgwbl[_y_];
+  /* initializes the POS block by moving all particles with LPT */
+  int ibox, jbox, kbox;
 
   my_strcpy(block->name,"POS ",4);
   my_strcpy(block->type,"FLOATN  ",8);
@@ -998,184 +840,32 @@ int initialize_POS_withNFW(Block_data *block)
       return 1;
     }
 
-  double Dz = GrowingMode(outputs.z[myiout],params.k_for_GM);
-
-  /* the first loop is on particles outside groups */
-  for (i=0, index=0; i<subbox.Npart; i++)
+  /* loop on all particles */
+  for (int i=0; i < MyGrids[0].total_local_size; i++)
     {
-      /* grid coordinates from the indices (sub-box coordinates) */
-      kbox=i/Lgridxy;
-      kk=i-kbox*Lgridxy;
-      jbox=kk/subbox.Lgwbl[_x_];
-      ibox=kk-jbox*subbox.Lgwbl[_x_];
-      good_particle = ( ibox>=subbox.safe[_x_] && ibox<subbox.Lgwbl[_x_]-subbox.safe[_x_] && 
-			jbox>=subbox.safe[_y_] && jbox<subbox.Lgwbl[_y_]-subbox.safe[_y_] && 
-			kbox>=subbox.safe[_z_] && kbox<subbox.Lgwbl[_z_]-subbox.safe[_z_] );
-      if (good_particle
-#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
-	  && group_ID[i]<=FILAMENT
-#endif
-	  )
+      INDEX_TO_COORD(i, ibox, jbox, kbox, MyGrids[0].GSlocal);
+      set_point_fftspace(ibox, jbox, kbox, i, outputs.F[myiout],&obj);
+      for (int j=0; j<3; j++)
 	{
-	  /* particle coordinates in the box, imposing PBCs */
-	  global[_x_] = ibox + subbox.stabl[_x_];
-	  if (global[_x_]<0) global[_x_]+=MyGrids[0].GSglobal[_x_];
-	  if (global[_x_]>=MyGrids[0].GSglobal[_x_]) global[_x_]-=MyGrids[0].GSglobal[_x_];
-	  global[_y_] = jbox + subbox.stabl[_y_];
-	  if (global[_y_]<0) global[_y_]+=MyGrids[0].GSglobal[_y_];
-	  if (global[_y_]>=MyGrids[0].GSglobal[_y_]) global[_y_]-=MyGrids[0].GSglobal[_y_];
-	  global[_z_] = kbox + subbox.stabl[_z_];
-	  if (global[_z_]<0) global[_z_]+=MyGrids[0].GSglobal[_z_];
-	  if (global[_z_]>=MyGrids[0].GSglobal[_z_]) global[_z_]-=MyGrids[0].GSglobal[_z_];
-
-	  /* particles outside groups (uncollapsed and filament particles)
-	     are displaced with LPT */
-#ifdef FORCE_PARTICLE_NUMBER
-	  if (group_ID[i]<=FILAMENT)
-	    {
-#endif
-	      set_point(global[_x_],global[_y_],global[_z_],i,outputs.F[myiout],&obj);
-	      for (j=0; j<3; j++)
-		{
-		  ((AuxStruct*)block->data)[index].axis[j]=
-		    (float)(q2x(rot[j], &obj, ORDER_FOR_CATALOG) * 
-			    params.InterPartDist * params.Hubble100);
-		  if (((AuxStruct*)block->data)[index].axis[j] >= params.BoxSize_h100)
-		    ((AuxStruct*)block->data)[index].axis[j] -= (float)params.BoxSize_h100;
-		  if (((AuxStruct*)block->data)[index].axis[j] < 0.0) 
-		    ((AuxStruct*)block->data)[index].axis[j] += (float)params.BoxSize_h100;
+	  ((AuxStruct*)block->data)[i].axis[j]=
+	    (float)(q2x(j, &obj, 1, MyGrids[0].BoxSize, ORDER_FOR_CATALOG) * 
+		    params.InterPartDist * params.Hubble100);
 #ifdef POS_IN_KPC
-		  ((AuxStruct*)block->data)[index].axis[j] *= 1000.;
+	  ((AuxStruct*)block->data)[i].axis[j] *= 1000.;
 #endif
-		}
-#ifdef FORCE_PARTICLE_NUMBER
-	    }
-	  else
-	    {
-	      set_obj(group_ID[i], outputs.F[myiout], &obj);
-	      for (j=0; j<3; j++)
-		MyPos[j]=(float)((q2x(rot[j], &obj, ORDER_FOR_CATALOG) + subbox.stabl[rot[j]]) *
-				 params.InterPartDist * params.Hubble100);
-	      /* particles in the group are distributed as NFW */
-	      /* Concentration taken from Bhattacharya, et al. 2013 */
-	      conc = pow(Dz,0.54) * 5.9
-		* pow( (1.12*pow(groups[group_ID[i]].Mass*params.ParticleMass*params.Hubble100 
-				 /5.e13,0.3) + 0.53)/Dz , -0.35);
-	      rvir = pow(0.01 * GRAVITY * groups[group_ID[i]].Mass*params.ParticleMass /
-		   pow(Hubble(outputs.z[myiout]),2.0), 1./3.) * (1. + outputs.z[myiout]) * params.Hubble100;
-
-	      part=0;
-	      do
-		{
-		  rnd = gsl_rng_uniform(random_generator);
-		  nfwfac = log(1.+conc)-conc/(1.+conc);
-		  area = 1.1*conc/(4.*nfwfac);
-		  xrnd = rnd*area/(1.1*conc/(4.*nfwfac));
-		  rnd = gsl_rng_uniform(random_generator);
-		  yrnd = rnd*1.1*conc*xrnd/(4.*nfwfac);
-		  probfunc = conc*conc*xrnd/pow(1.+conc*xrnd,2)/nfwfac;
-		  if (yrnd <= probfunc)
-		    {
-		      /* From: http://mathworld.wolfram.com/SpherePointPicking.html  */
-		      u = -1.+2.*gsl_rng_uniform(random_generator);
-		      theta = 2.*PI*gsl_rng_uniform(random_generator);
-
-		      ((AuxStruct*)block->data)[index].axis[_x_] = MyPos[_x_] + (float)(xrnd * rvir * sqrt(1.-u*u)*cos(theta));
-		      ((AuxStruct*)block->data)[index].axis[_y_] = MyPos[_y_] + (float)(xrnd * rvir * sqrt(1.-u*u)*sin(theta));
-		      ((AuxStruct*)block->data)[index].axis[_z_] = MyPos[_z_] + (float)(xrnd * rvir * u);
-
-		      for (j=0; j<3; j++)
-			{
-			  if (((AuxStruct*)block->data)[index].axis[j] >= params.BoxSize_h100) 
-			    ((AuxStruct*)block->data)[index].axis[j] -= (float)params.BoxSize_h100;
-			  if (((AuxStruct*)block->data)[index].axis[j] < 0.0) 
-			    ((AuxStruct*)block->data)[index].axis[j] += (float)params.BoxSize_h100;
-#ifdef POS_IN_KPC
-			  ((AuxStruct*)block->data)[index].axis[j] *= 1000.;
-#endif
-			}
-		      part=1;
-		    }
-		}
-	      while (part==0);
-
-	    }
-#endif
-	  ++index;
-
 	}
     }
-
-#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
-  /* second loop is on good groups */
-  for (i=FILAMENT+1; i<=ngroups; i++)
-    if (groups[i].point >= 0 && groups[i].good)
-      {
-	/* the center of mass of groups is displaced with LPT */
-	set_obj(i, outputs.F[myiout], &obj);
-	for (j=0; j<3; j++)
-	  MyPos[j]=(float)((q2x(rot[j], &obj, ORDER_FOR_CATALOG) + subbox.stabl[rot[j]]) *
-			   params.InterPartDist * params.Hubble100);
-
-	/* virial radius and concentration of the group */
-	/* Concentration taken from Bhattacharya, et al. 2013 */
-	conc = pow(Dz,0.54) * 5.9
-	  * pow( (1.12*pow(groups[i].Mass*params.ParticleMass*params.Hubble100 /5.e13,0.3)+ 0.53)/Dz ,
-		 -0.35);
-	rvir = pow(0.01 * GRAVITY * groups[i].Mass*params.ParticleMass /
-		   pow(Hubble(outputs.z[myiout]),2.0), 1./3.) * (1. + outputs.z[myiout]) * params.Hubble100;
-
-	/* particles in the group are distributed as NFW */
-	part=0;
-	do
-	  {
-	    rnd = gsl_rng_uniform(random_generator);
-	    nfwfac = log(1.+conc)-conc/(1.+conc);
-	    area = 1.1*conc/(4.*nfwfac);
-	    xrnd = rnd*area/(1.1*conc/(4.*nfwfac));
-	    rnd = gsl_rng_uniform(random_generator);
-	    yrnd = rnd*1.1*conc*xrnd/(4.*nfwfac);
-	    probfunc = conc*conc*xrnd/pow(1.+conc*xrnd,2)/nfwfac;
-	    if (yrnd <= probfunc)
-	      {
-		/* From: http://mathworld.wolfram.com/SpherePointPicking.html  */
-		u = -1.+2.*gsl_rng_uniform(random_generator);
-		theta = 2.*PI*gsl_rng_uniform(random_generator);
-
-		((AuxStruct*)block->data)[index].axis[_x_] = MyPos[_x_] + (float)(xrnd * rvir * sqrt(1.-u*u)*cos(theta));
-		((AuxStruct*)block->data)[index].axis[_y_] = MyPos[_y_] + (float)(xrnd * rvir * sqrt(1.-u*u)*sin(theta));
-		((AuxStruct*)block->data)[index].axis[_z_] = MyPos[_z_] + (float)(xrnd * rvir * u);
-
-		for (j=0; j<3; j++)
-		  {
-		    if (((AuxStruct*)block->data)[index].axis[j] >= params.BoxSize_h100) 
-		      ((AuxStruct*)block->data)[index].axis[j] -= (float)params.BoxSize_h100;
-		    if (((AuxStruct*)block->data)[index].axis[j] < 0.0) 
-		      ((AuxStruct*)block->data)[index].axis[j] += (float)params.BoxSize_h100;
-#ifdef POS_IN_KPC
-		    ((AuxStruct*)block->data)[index].axis[j] *= 1000.;
-#endif
-		  }
-		index++;
-		part++;
-	      }
-	  }
-	while (part<groups[i].Mass);
-      }
-#endif
 
   return 0;
 
 }
 
 
-int initialize_VEL_withNFW(Block_data *block)
+int initialize_VEL(Block_data *block)
 {
 
-  int index, i, ibox, jbox, kbox, kk, good_particle, global[3], j;
-  double MyVel[3], vfact, sigma, rvir;
-
-  int Lgridxy = subbox.Lgwbl[_x_] * subbox.Lgwbl[_y_];
+  /* initializes the VEL block by moving all particles with LPT */
+  int ibox, jbox, kbox;
 
   my_strcpy(block->name,"VEL ",4);
   my_strcpy(block->type,"FLOATN  ",8);
@@ -1190,94 +880,19 @@ int initialize_VEL_withNFW(Block_data *block)
       return 1;
     }
 
-  vfact=sqrt(1.+outputs.z[myiout]);
-  /* the first loop is on particles outside groups */
-  for (i=0, index=0; i<subbox.Npart; i++)
+  double vfact=sqrt(1.+outputs.z[myiout]);
+
+  /* loop on all particles */
+  for (int i=0; i < MyGrids[0].total_local_size; i++)
     {
-      /* grid coordinates from the indices (sub-box coordinates) */
-      kbox=i/Lgridxy;
-      kk=i-kbox*Lgridxy;
-      jbox=kk/subbox.Lgwbl[_x_];
-      ibox=kk-jbox*subbox.Lgwbl[_x_];
-      good_particle = ( ibox>=subbox.safe[_x_] && ibox<subbox.Lgwbl[_x_]-subbox.safe[_x_] && 
-			jbox>=subbox.safe[_y_] && jbox<subbox.Lgwbl[_y_]-subbox.safe[_y_] && 
-			kbox>=subbox.safe[_z_] && kbox<subbox.Lgwbl[_z_]-subbox.safe[_z_] );
-      if (good_particle
-#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
-	  && group_ID[i]<=FILAMENT
-#endif
-	  )
+      INDEX_TO_COORD(i, ibox, jbox, kbox, MyGrids[0].GSlocal);
+      set_point_fftspace(ibox, jbox, kbox, i, outputs.F[myiout],&obj);
+      for (int j=0; j<3; j++)
 	{
-	  /* particle coordinates in the box, imposing PBCs */
-	  global[_x_] = ibox + subbox.stabl[_x_];
-	  if (global[_x_]<0) global[_x_]+=MyGrids[0].GSglobal[_x_];
-	  if (global[_x_]>=MyGrids[0].GSglobal[_x_]) global[_x_]-=MyGrids[0].GSglobal[_x_];
-	  global[_y_] = jbox + subbox.stabl[_y_];
-	  if (global[_y_]<0) global[_y_]+=MyGrids[0].GSglobal[_y_];
-	  if (global[_y_]>=MyGrids[0].GSglobal[_y_]) global[_y_]-=MyGrids[0].GSglobal[_y_];
-	  global[_z_] = kbox + subbox.stabl[_z_];
-	  if (global[_z_]<0) global[_z_]+=MyGrids[0].GSglobal[_z_];
-	  if (global[_z_]>=MyGrids[0].GSglobal[_z_]) global[_z_]-=MyGrids[0].GSglobal[_z_];
-	  
-	  /* particles outside groups (uncollapsed and filament particles)
-	     are displaced with LPT */
-#ifdef FORCE_PARTICLE_NUMBER
-	  if (group_ID[i]<=FILAMENT)
-	    {
-#endif
-	      set_point(global[_x_],global[_y_],global[_z_],i,outputs.F[myiout],&obj);
-	      for (j=0; j<3; j++)
-		/* GADGET format requires velocities to be divided by sqrt(a) */
-		((AuxStruct*)block->data)[index].axis[j]=(float)(vel(rot[j], &obj)*vfact);
-#ifdef FORCE_PARTICLE_NUMBER
-	    }
-	  else
-	    {
-	      /* the center of mass of groups is displaced with LPT */
-	      set_obj(group_ID[i], outputs.F[myiout], &obj);
-	      set_obj_vel(group_ID[i], outputs.F[myiout], &obj);
-	      for (j=0; j<3; j++)
-		MyVel[j]=(float)(vel(rot[j], &obj)*vfact);
-
-	      rvir = pow(0.01 * GRAVITY * groups[group_ID[i]].Mass*params.ParticleMass /
-		   pow(Hubble(outputs.z[myiout]),2.0), 1./3.) * (1. + outputs.z[myiout]) * params.Hubble100;
-	      sigma = sqrt(GRAVITY * groups[group_ID[i]].Mass * params.ParticleMass / 3./ rvir);
-
-	      for (j=0; j<3; j++)
-		((AuxStruct*)block->data)[index].axis[j]=MyVel[j] + gsl_ran_gaussian(random_generator, sigma) * vfact;
-	    }
-#endif
-	  ++index;
-
+	  ((AuxStruct*)block->data)[i].axis[j]=
+	    (float)(vel(j, &obj) * vfact);
 	}
     }
-
-#if !defined(ONLY_LPT_DISPLACEMENTS) && !defined(FORCE_PARTICLE_NUMBER)
-  /* second loop is on good groups */
-  for (i=FILAMENT+1; i<=ngroups; i++)
-    if (groups[i].point >= 0 && groups[i].good)
-      {
-	/* the center of mass of groups is displaced with LPT */
-	set_obj(i, outputs.F[myiout], &obj);
-	set_obj_vel(i, outputs.F[myiout], &obj);
-	for (j=0; j<3; j++)
-	  MyVel[j]=(float)(vel(rot[j], &obj)*vfact);
-
-	/* /\* virial radius and concentration of the group *\/ */
-	/* Dz = GrowingMode(outputs.z[myiout],params.k_for_GM); */
-	/* /\* this is the virial radius in physical true kpc *\/ */
-	/* rvir = pow(0.01 * GRAVITY * groups[i].Mass*params.ParticleMass / */
-	/* 	   pow(Hubble(outputs.z[myiout]),2.0), 1./3.);   */
-	sigma = sqrt(GRAVITY * groups[i].Mass * params.ParticleMass / 3./ rvir);
-
-	for (npart=0; npart<groups[i].Mass; npart++)
-	  {
-	    for (j=0; j<3; j++)
-	      ((AuxStruct*)block->data)[index].axis[j]=MyVel[j] + gsl_ran_gaussian(random_generator, sigma) * vfact;
-	    ++index;
-	  }
-      }
-#endif
 
   return 0;
 }
@@ -1303,3 +918,61 @@ void my_strcpy(char *to, char *from, int n)
   for (i=0; i<n; i++)
     *(to+i)=*(from+i);
 }
+
+
+void set_point_fftspace(int i,int j,int k,int ind, PRODFLOAT F, pos_data *myobj)
+{
+
+  myobj->z=F-1.0;
+
+#ifdef SCALE_DEPENDENT
+
+  int S=Smoothing.Nsmooth-1;
+  double myk=Smoothing.k_GM_displ[S];
+  myobj->D=GrowingMode(myobj->z,myk) / GrowingMode(0.0,myk);
+#ifdef TWO_LPT
+  myobj->D2=GrowingMode_2LPT(myobj->z,myk) * GrowingMode_2LPT(0.0,0.0) / GrowingMode_2LPT(0.0,myk);
+#ifdef THREE_LPT
+  myobj->D31=GrowingMode_3LPT_1(myobj->z,myk) * GrowingMode_3LPT_1(0.0,0.0) / GrowingMode_3LPT_1(0.0,myk);
+  myobj->D32=GrowingMode_3LPT_2(myobj->z,myk) * GrowingMode_3LPT_2(0.0,0.0) / GrowingMode_3LPT_2(0.0,myk);
+#endif
+#endif
+
+#else
+
+  double myk=params.k_for_GM;
+  myobj->D=GrowingMode(myobj->z,myk);
+#ifdef TWO_LPT
+  myobj->D2=GrowingMode_2LPT(myobj->z,myk);
+#ifdef THREE_LPT
+  myobj->D31=GrowingMode_3LPT_1(myobj->z,myk);
+  myobj->D32=GrowingMode_3LPT_2(myobj->z,myk);
+#endif
+#endif
+
+#endif
+
+  myobj->M=1;
+  myobj->q[0]=i+SHIFT;
+  myobj->q[1]=j+SHIFT;
+  myobj->q[2]=k+SHIFT;
+  myobj->v[0]=products[ind].Vel[0];
+  myobj->v[1]=products[ind].Vel[1];
+  myobj->v[2]=products[ind].Vel[2];
+#ifdef TWO_LPT
+  myobj->v2[0]=products[ind].Vel_2LPT[0];
+  myobj->v2[1]=products[ind].Vel_2LPT[1];
+  myobj->v2[2]=products[ind].Vel_2LPT[2];
+#ifdef THREE_LPT
+  myobj->v31[0]=products[ind].Vel_3LPT_1[0];
+  myobj->v31[1]=products[ind].Vel_3LPT_1[1];
+  myobj->v31[2]=products[ind].Vel_3LPT_1[2];
+  myobj->v32[0]=products[ind].Vel_3LPT_2[0];
+  myobj->v32[1]=products[ind].Vel_3LPT_2[1];
+  myobj->v32[2]=products[ind].Vel_3LPT_2[2];
+#endif
+#endif
+
+}
+
+#endif

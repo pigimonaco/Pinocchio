@@ -48,11 +48,13 @@ int compute_LPT_displacements()
 
   /* Computes the source for 2 LPT, 3LPT_1 and 3LPT_2 term */
   /* loop on all local particles */
+#ifdef _OPENMP
 #pragma omp parallel
   {
     //unsigned int fact = MyGrids[0].GSlocal[_x_] * MyGrids[0].GSlocal[_y_];
 
 #pragma omp for nowait
+#endif
     /* for (int local_z = 0; local_z < MyGrids[0].GSlocal[_z_]; local_z++) */
     /*   { */
     /* 	int idx_z = local_z * fact; */
@@ -94,7 +96,9 @@ int compute_LPT_displacements()
 	      }
 	  //}
       //}
+#ifdef _OPENMP
   }
+#endif
 
   /* forward FFT for 2LPT source */
   write_in_rvector(0, source_2LPT);
@@ -148,14 +152,19 @@ int compute_LPT_displacements()
 /* 		    } */
 /* 		} */
 /* 	    } */
+
+#ifdef _OPENMP
 #pragma omp parallel
 	{
 #pragma omp nowait
+#endif
 	  for (int index=0; index<MyGrids[0].total_local_size; index++)
 	    /* the first 2 factor is needed because nabla2phi is half the theoretical one */
 	    source_3LPT_2[index] -= 2.0 * (ider<=3? 1.0 : 2.0) *
 	      rvector_fft[0][index] * second_derivatives[0][ider-1][index];
+#ifdef _OPENMP
 	}
+#endif
       }
 #endif
 
@@ -164,7 +173,7 @@ int compute_LPT_displacements()
 
   /* displacements for the three terms */
   if (!ThisTask)
-    printf("\n[%s] Computing LPT displacements\n",fdate());
+    printf("[%s] Computing displacements\n",fdate());
 
   Rsmooth=0.0;
 
@@ -181,6 +190,7 @@ int compute_LPT_displacements()
       write_from_rvector(0, first_derivatives[0][ia-1]);
     }
 
+#ifdef _OPENMP
 #pragma omp parallel
   {
     //unsigned int fact = MyGrids[0].GSlocal[_x_] * MyGrids[0].GSlocal[_y_];
@@ -188,6 +198,7 @@ int compute_LPT_displacements()
     /* assigns displacement to particles */
     
 #pragma omp for nowait
+#endif
     /* for (int local_z = 0; local_z < MyGrids[0].GSlocal[_z_]; local_z++) */
     /*   { */
     /* 	int idx_z = local_z * fact; */
@@ -207,7 +218,10 @@ int compute_LPT_displacements()
       for ( int ia = 0; ia < 3; ia++ )
 	products[index].Vel_2LPT[ia] = first_derivatives[0][ia][index];
 
+#ifdef _OPENMP
   }
+#endif
+
 #endif
 
 #ifdef THREE_LPT
@@ -246,12 +260,14 @@ int compute_LPT_displacements()
       write_from_rvector(0, first_derivatives[0][ia-1]);
     }
 
+#ifdef _OPENMP
 #pragma omp parallel
   {
     //unsigned int fact = MyGrids[0].GSlocal[_x_] * MyGrids[0].GSlocal[_y_];
     
 // CHECK: verificare che i pencil sono in x e y
 #pragma omp for nowait
+#endif
 /*     for (int local_z = 0; local_z < MyGrids[0].GSlocal[_z_]; local_z++) */
 /*       { */
 /* 	int idx_z = local_z * fact; */
@@ -270,7 +286,10 @@ int compute_LPT_displacements()
       for ( int ia = 0; ia < 3; ia++ )
 	products[index].Vel_3LPT_1[ia] = first_derivatives[0][ia][index];
 
+#ifdef _OPENMP
   }
+#endif
+
 #endif
 
   /* forward FFT for 3LPT_2 source */
@@ -307,6 +326,7 @@ int compute_LPT_displacements()
       write_from_rvector(0, first_derivatives[0][ia-1]);
     }
 
+#ifdef _OPENMP
 #pragma omp parallel
   {
     //unsigned int fact = MyGrids[0].GSlocal[_x_] * MyGrids[0].GSlocal[_y_];
@@ -314,6 +334,7 @@ int compute_LPT_displacements()
     /* assigns displacement to particles whose collapse time has just been updated */
     
 #pragma omp for nowait
+#endif
     for (int index=0; index<MyGrids[0].total_local_size; index++)
       for ( int ia = 0; ia < 3; ia++ )
 	products[index].Vel_3LPT_2[ia] = first_derivatives[0][ia][index];
@@ -332,7 +353,10 @@ int compute_LPT_displacements()
     /* 	      } */
     /* 	  } */
     /*   } */
+#ifdef _OPENMP
   }
+#endif
+
 #endif
 #endif
 

@@ -29,11 +29,13 @@ RUNDIR = ./
 
 EXEC = pinocchio.x
 
-DEBUG=NO
+DEBUG = YES
+OMP   = NO
 
-#OPTIONS += -DCLASSIC_FRAGMENTATION
-#OPTIONS += -DDOUBLE_PRECISION_PRODUCTS
-OPTIONS += -DLIGHT_OUTPUT
+OPTIONS += -DCLASSIC_FRAGMENTATION
+#OPTIONS += -DLIGHT_OUTPUT
+
+OPTIONS += -DSNAPSHOT
 
 OPTIONS += -DTWO_LPT
 OPTIONS += -DTHREE_LPT
@@ -48,22 +50,61 @@ OPTIONS += -DELL_CLASSIC
 #OPTIONS += -DRECOMPUTE_DISPLACEMENTS
 
 # output
-#OPTIONS += -DROTATE_BOX
-#OPTIONS += -DTIMELESS_SNAPSHOT
+#OPTIONS += -DADD_RMAX_TO_SNAPSHOT
+#OPTIONS += -DLONGIDS
+#OPTIONS += -DLIGHT_OUTPUT
 
 # other options
 #OPTIONS += -DWHITENOISE
 #OPTIONS += -DNO_RANDOM_MODULES
 #OPTIONS += -DDOUBLE_PRECISION_PRODUCTS
 
+ifeq ($(OMP), YES)
+#OPTIONS += -D_OPENMP
+OPTIONS += -DUSE_FFT_THREADS
+OMP_FLAG = -fopenmp
+OMP_FFTW = -lfftw3_omp
+else
+OMP_FLAG =
+OMP_FFTW =
+endif
 
 SYSTYPE="my_machine"
 
+ifeq ($(SYSTYPE),"Marconi100")
+CC          =  mpicc
+CDEBUG      = -ggdb3 -Wall $(OMP_FLAG)
+COPTIMIZED  = -O2 -Wno-unused-result $(OMP_FLAG)
+FFTW_LIBR   = -L$(HOME)/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
+FFTW_INCL   = -I$(HOME)/include
+PFFT_LIBR   = -lpfft
+PFFT_INCL   = 
+MPI_LIBR    = -L$(SMPI_ROOT)/lib -lmpi_ibm
+MPI_INCL    = -I$(SMPI_ROOT)/include
+GSL_LIBR    = -L$(GSL_LIB) -lgsl -lgslcblas -lm
+GSL_INCL    = -I$(GSL_INC)
+endif
+
+ifeq ($(SYSTYPE),"amonra")
+CC          =  mpicc
+CDEBUG      = -ggdb3 -Wall $(OMP_FLAG)
+COPTIMIZED  = -O3 -Wno-unused-result $(OMP_FLAG)
+FFTW_LIBR   = -L$(FFTW_LIB) -lfftw3_mpi -lfftw3 $(OMP_FFTW)
+FFTW_INCL   = -I$(FFTW_INC)
+PFFT_LIBR   = -L$(HOME)/lib -lpfft
+PFFT_INCL   = -I$(HOME)/include
+MPI_LIBR    =
+MPI_INCL    =
+GSL_LIBR    = -L$(GSL_LIB) -lgsl -lgslcblas -lm
+GSL_INCL    = -I$(GSL_INC)
+endif
+
+
 ifeq ($(SYSTYPE),"my_machine")
 CC          =  mpicc
-CDEBUG      = -ggdb3 -Wall -Wno-unknown-pragmas
-COPTIMIZED  = -O3 -Wno-unused-result -Wno-unknown-pragmas
-FFTW_LIBR   = -L$(HOME)/lib -lfftw3_mpi -lfftw3
+CDEBUG      = -ggdb3 -Wall $(OMP_FLAG)
+COPTIMIZED  = -O3 -Wno-unused-result $(OMP_FLAG)
+FFTW_LIBR   = -L$(HOME)/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
 FFTW_INCL   = -I/usr/local/include -I$(HOME)/include
 PFFT_LIBR   = -lpfft
 PFFT_INCL   = 
@@ -79,13 +120,13 @@ INC =  $(PFFT_INCL) $(FFTW_INCL) $(MPI_INCL) $(GSL_INCL)
 LIB =  -lm $(PFFT_LIBR) $(FFTW_LIBR) $(MPI_LIBR) $(GSL_LIBR)
 
 
+# compiler options : choose from CDEBUG or COPTIMIZED
 # compiler options
 ifeq ($(DEBUG), YES)
 COPTS = $(CDEBUG)
 else
 COPTS = $(COPTIMIZED)
 endif
-
 
 # source files:
 OBJECTS = fmax.o variables.o initialization.o collapse_times.o fmax-pfft.o GenIC.o \
@@ -94,14 +135,14 @@ OBJECTS = fmax.o variables.o initialization.o collapse_times.o fmax-pfft.o GenIC
 #ReadWhiteNoise.o
 
 # rules
-%.o: %.c Makefile pinocchio.h fragment.h def_splines.h
+%.o: %.c Makefile pinocchio.h def_splines.h
 	$(CC) $(INC) $(COPTS) $(OPTIONS) -c $<
 
 pinocchio: $(OBJECTS) pinocchio.o Makefile
 	$(CC) $(INC) $(COPTS) -o $(RUNDIR)$(EXEC) pinocchio.o $(OBJECTS) $(LIB)
 
-run_planner: allocations.o initialization.o ReadParamfile.o cosmo.o variables.o run_planner.o Makefile
-	$(CC) $(INC) $(COPTS) -o run_planner run_planner.o allocations.o initialization.o ReadParamfile.o cosmo.o variables.o $(LIB)
+run_planner: $(OBJECTS) run_planner.o Makefile
+	$(CC) $(INC) $(COPTS) -o run_planner run_planner.o $(OBJECTS) $(LIB)
 
 clean:
 	\rm -f *.o *~ $(EXEC) run_planner

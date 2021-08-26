@@ -1215,3 +1215,41 @@ void dump_seed_plane(int ThisGrid, map_point bottom_left, map_point top_right, i
   return;
 }
 
+
+//double VarianceOnGrid(int ThisGrid, double Redshift) //, double ThisRadius)
+//{
+//
+//  int i,j,k,ii,jj,kk;
+//  double fundamental = 2. * PI / MyGrids[ThisGrid].BoxSize;
+//  double nyquist = NYQUIST * MyGrids[ThisGrid].GSglobal[_x_]/2 * fundamental;
+//  double d3k=pow(fundamental,3.);
+//  double D, kmag;
+//  double Variance=0.0;
+//
+//  for (i=0; i<=MyGrids[ThisGrid].GSglobal[_x_]; i++)
+//    {
+//      ii = i-MyGrids[ThisGrid].GSglobal[_x_]/2;
+//      for (j=0; j<=MyGrids[ThisGrid].GSglobal[_y_]; j++)
+//	{
+//	  jj = j-MyGrids[ThisGrid].GSglobal[_y_]/2;
+//	  for (k=0; k<=MyGrids[ThisGrid].GSglobal[_z_]; k++)
+//	    {
+//	      kk = k-MyGrids[ThisGrid].GSglobal[_z_]/2;
+//	     
+//	      
+//	      kmag=sqrt((double)(ii*ii+jj*jj+kk*kk))*fundamental;
+//	      if (kmag>0.0 && kmag <= nyquist)
+//		{
+//		  //w = WindowFunction(kmag * ThisRadius);
+//		  D = GrowingMode(Redshift,kmag);
+//		  Variance += PowerSpectrum(kmag) * D*D * d3k;  // * w*w
+//		}
+//	    }
+//	}
+//    }
+//
+//  Variance /= pow(2.*PI,3.);
+//
+//  return Variance;
+//}
+//

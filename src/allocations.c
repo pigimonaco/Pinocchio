@@ -29,7 +29,6 @@
 //#define VERBOSE
 
 #define ALIGN_MEMORY_BLOCK(M) while( (M) % ALIGN ) M++
-#define FRAGFIELDS 6
 
 int organize_main_memory()
 {
@@ -52,14 +51,17 @@ int organize_main_memory()
      cvector_fft         1 double = 8              MyGrids[*].total_local_size_fft
      rvector_fft         1 double = 8              MyGrids[*].total_local_size_fft
 
-     Total for ZEL: 76 + 16 = 92 + overhead for fragmentation + smaller things // (seedtable etc)
+     This is needed by GenIC:
+     seedtable           1 int = 4                 MyGrids[*].GSglobal[_x_] * MyGrids[*].GSglobal[_y_]
+
+     Total for ZEL: 76 + 16 = 92 + overhead for fragmentation + smaller things (seedtable etc)
 
      2LPT/3LPT DISPLACEMENTS
 
      name                sizeof                    N            
 
      products (2LPT):    7 float + 1 int = 32      MyGrids[0].total_local_size
-     products            13 float + 1 int = 56     MyGrids[0].total_local_size
+     products (3LPT)    13 float + 1 int = 56     MyGrids[0].total_local_size
      kdensity            1 double = 8              MyGrids[*].total_local_size_fft
      second_derivatives  6 double = 48             MyGrids[*].total_local_size
      kvector_2LPT        1 double = 8              MyGrids[0].total_local_size_fft
@@ -69,17 +71,16 @@ int organize_main_memory()
      first_derivatives and density will share the same memory as second_derivatives
      source_?LPT* will share the same memory as kvector_?LPT*
 
-     // QUESTO E` STATO SPOSTATO IN GENIC
-     //This is needed by GenIC:
-     //seedtable           1 int = 4                 MyGrids[*].GSglobal[_x_] * MyGrids[*].GSglobal[_y_]
+     This is needed by GenIC:
+     seedtable           1 int = 4                 MyGrids[*].GSglobal[_x_] * MyGrids[*].GSglobal[_y_]
 
      These will be allocated by pfft routines:
 
      cvector_fft         1 double = 8              MyGrids[*].total_local_size_fft
      rvector_fft         1 double = 8              MyGrids[*].total_local_size_fft
 
-     Total for 2LPT: 32 + 80 + 16 = 128 + overhead for fragmentation
-     Total for 3LPT: 56 + 80 + 16 = 152 + overhead for fragmentation
+     Total for 2LPT: 32 + 80 + 16 = 128 + overhead for fragmentation + smaller things
+     Total for 3LPT: 56 + 80 + 16 = 152 + overhead for fragmentation + smaller things
 
      Timeless snapshot adds 4 bytes to the count.
 
@@ -182,45 +183,37 @@ int organize_main_memory()
   ALIGN_MEMORY_BLOCK( memory.groups );
 
   /* Here it computes the number of particles it can allocate for the subbox */
-#ifndef RECOMPUTE_DISPLACEMENTS
-
-   /* -1 is to compensate for remainder in integer division */
-  if (memory.prods + memory.groups > MyGrids[0].ParticlesPerTask * params.MaxMemPerParticle)
-    myNalloc=0;
-  else
-    myNalloc = (MyGrids[0].ParticlesPerTask*params.MaxMemPerParticle 
-		- memory.prods - memory.groups) / (sizeof(product_data) + FRAGFIELDS * sizeof(int)) -10;
-
-  /* Nalloc will be the smallest among all tasks */
-  MPI_Reduce(&myNalloc, &Nalloc, 1, MPI_UNSIGNED, MPI_MIN, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&Nalloc, 1, MPI_UNSIGNED, 0, MPI_COMM_WORLD);
-
-  memory.frag_prods  = Nalloc * sizeof(product_data);
-  memory.frag_arrays = Nalloc * FRAGFIELDS * sizeof(int);
-  /* this is the memory occupied by fragmentation */
-  memory.frag_allocated = memory.prods + memory.frag_prods + memory.groups + memory.frag_arrays;
-  memory.frag_total = memory.frag_allocated;
-
-#else
-
-   /* -10 is to compensate for memory alignments */
-  if (memory.prods + memory.groups + memory.fields_to_keep + memory.fft > 
-      MyGrids[0].ParticlesPerTask * params.MaxMemPerParticle)
-    myNalloc=0;
-  else
-    myNalloc = (MyGrids[0].ParticlesPerTask*params.MaxMemPerParticle - memory.fields_to_keep - memory.fft
-	      - memory.prods - memory.groups) / (sizeof(product_data) + FRAGFIELDS * sizeof(int)) -10;
-  /* Nalloc will be the smallest among all tasks */
-  MPI_Reduce(&myNalloc, &Nalloc, 1, MPI_UNSIGNED, MPI_MIN, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&Nalloc, 1, MPI_UNSIGNED, 0, MPI_COMM_WORLD);
-
-  memory.frag_prods  = Nalloc * sizeof(product_data);
-  memory.frag_arrays = Nalloc * FRAGFIELDS * sizeof(int);
-  /* this is the memory occupied by fragmentation */
-  memory.frag_allocated = memory.prods + memory.fields_to_keep + memory.frag_prods + memory.groups + memory.frag_arrays;
-  memory.frag_total = memory.frag_allocated + memory.fft;
-
+  size_t other_mem = memory.prods + memory.groups 
+#ifdef RECOMPUTE_DISPLACEMENTS
+    + memory.fields_to_keep + memory.fft
 #endif
+    ;
+
+  if (other_mem > MyGrids[0].ParticlesPerTask * params.MaxMemPerParticle)
+    myNalloc=0;
+  else
+   /* -10 is to compensate for remainder in integer division */
+    myNalloc = (MyGrids[0].ParticlesPerTask*params.MaxMemPerParticle - other_mem) 
+      / (sizeof(product_data) + FRAGFIELDS * sizeof(int)) -10;
+
+  /* Nalloc will be the smallest among all tasks */
+  MPI_Reduce(&myNalloc, &Nalloc, 1, MPI_UNSIGNED, MPI_MIN, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&Nalloc, 1, MPI_UNSIGNED, 0, MPI_COMM_WORLD);
+
+  memory.frag_prods  = Nalloc * sizeof(product_data);
+  memory.frag_arrays = Nalloc * FRAGFIELDS * sizeof(int);
+  /* this is the memory occupied by fragmentation */
+  memory.frag_allocated = memory.prods + memory.frag_prods + memory.groups + memory.frag_arrays
+#ifdef RECOMPUTE_DISPLACEMENTS
+    + memory.fields_to_keep
+#endif
+    ;
+  memory.frag_total = memory.frag_allocated
+#ifdef RECOMPUTE_DISPLACEMENTS
+    + memory.fft
+#endif
+    ;
+
 
 #ifdef CLASSIC_FRAGMENTATION
   if (myNalloc<subbox.Npart)
@@ -242,10 +235,10 @@ int organize_main_memory()
 
   if (!ThisTask)
     {
-      if (minfraction<0.8)
+      if (minfraction<0.5)
 	{
 	  printf("ERROR: for some tasks the number of allocatable particles is only a factor %8f\n",minfraction);
-	  printf("       times the number of good particles in the subbox; this is too small!\n");
+	  printf("       times the number of good particles in the subbox; this is far too small!\n");
 	  printf("       Please increase MaxMemPerParticle\n");
 	  fflush(stdout);
 	  return (size_t)0;
@@ -315,6 +308,9 @@ int allocate_main_memory()
       printf("\n");  
       fflush(stdout);
     }
+
+  // ???
+  memory.all+=10;
 
   /* it tests than there is enough space to allocate all needed memory */
   main_memory=(char*)calloc(memory.all,sizeof(char));
@@ -516,6 +512,12 @@ int reallocate_memory_for_fragmentation()
   void *last;
 #endif
 
+#ifdef SNAPSHOT
+  /* sets zacc to -1 before redistributing it */
+  for (int i=0; i<MyGrids[0].total_local_size; i++)
+    products[i].zacc=-1;
+#endif
+
 #ifndef RECOMPUTE_DISPLACEMENTS
 
   /* in this case pointers to kdensity and kvector_* are set to zero
@@ -556,7 +558,7 @@ int reallocate_memory_for_fragmentation()
 	  main_memory=tmp;
 	  products = (product_data *)main_memory;
 	  if (!ThisTask)
-	    printf("\nTask 0 reallocated memory for %f Gb\n",(double)memory.frag_allocated/GBYTE);
+	    printf("[%s] Task 0 reallocated memory for %f Gb\n",fdate(),(double)memory.frag_allocated/GBYTE);
 	}
       else
 	{

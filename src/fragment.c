@@ -1,31 +1,6 @@
-/*****************************************************************
- *                        PINOCCHIO  V4.1                        *
- *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
- *****************************************************************
- 
- This code was written by
- Pierluigi Monaco
- Copyright (C) 2016
- 
- web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
- 
- This program is free software; you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
- the Free Software Foundation; either version 2 of the License, or
- (at your option) any later version.
- 
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
- 
- You should have received a copy of the GNU General Public License
- along with this program; if not, write to the Free Software
- Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
+/* ######HEADER###### */
 
 #include "pinocchio.h"
-#include "fragment.h"
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -176,6 +151,7 @@ int fragment()
 #ifndef CLASSIC_FRAGMENTATION
   unsigned int nadd[2];
 #endif
+  double BestPredPeakFactor;
   unsigned long long mynadd[2], nadd_all[2];
   double tmp;
   int mysegment;
@@ -247,7 +223,8 @@ int fragment()
     {
       printf("ERROR on task %d: the number of peaks %d exceeds the predicted one (%d)\n",
 	     ThisTask,Npeaks,subbox.PredNpeaks);
-      printf("      Please increase PredPeakFactor and restart\n");
+      printf("      Please increase PredPeakFactor to at least %4.2f and restart\n",
+	     (double)Npeaks / (double)MyGrids[0].ParticlesPerTask * 6.0 + 0.01);
       fflush(stdout);
       return 1;
     }
@@ -255,11 +232,7 @@ int fragment()
   /* Gives the minimal PredPeakFactor */
   mynadd[0]=Npeaks;
   MPI_Reduce(mynadd, nadd_all, 1, MPI_UNSIGNED_LONG_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
-
-  if (!ThisTask)
-    printf("[%s] The PredPeakFactor parameter could have been %5.2f in place of %5.2f\n",
-	   fdate(),(double)nadd_all[0]/(double)MyGrids[0].ParticlesPerTask*6.0,
-	   params.PredPeakFactor);
+  BestPredPeakFactor=(double)nadd_all[0]/(double)MyGrids[0].ParticlesPerTask*6.0;
 
   /* sets arrays to zero */
   memset(group_ID,0,subbox.Nalloc*sizeof(int));
@@ -293,8 +266,6 @@ int fragment()
 #endif
 
       tmp=MPI_Wtime();
-      
-      //scrivi(); //LEVARE
 
       if (build_groups(Npeaks,Segment.z[mysegment],(mysegment==0)))
 	return 1;
@@ -366,6 +337,31 @@ int fragment()
       if (distribute())
 	return 1;
 
+      if (subbox.Nneeded>subbox.Nalloc)
+	{
+	  if (turn)
+	    {
+	      printf("CRITICAL WARNING in Task %d: it allocated %d but received %d particles\n",
+		     ThisTask, subbox.Nalloc, subbox.Nneeded);
+	      printf("The required overhead is %f\n",(float)subbox.Nneeded/(float)MyGrids[0].ParticlesPerTask);
+	      printf("Please increase MaxMemPerParticle by at least %d and start again\n",
+		     (int)((float)(subbox.Nneeded-subbox.Nalloc)/(float)MyGrids[0].ParticlesPerTask * 
+			   (sizeof(product_data) + FRAGFIELDS * sizeof(int)))+1+(int)params.MaxMemPerParticle);
+	      if (params.ExitIfExtraParticles)
+		return 1;
+	    }
+	  else
+	    {
+	      printf("ERROR in Task %d: the number of allocated particles (%d) is WAY too small! I need at least %d\n",
+		     ThisTask, subbox.Nalloc, subbox.Nneeded);
+	      printf("The required overhead is %f\n",(float)subbox.Nneeded/(float)MyGrids[0].ParticlesPerTask);
+	      printf("Please increase MaxMemPerParticle to at least %d and start again\n",
+		     (int)((float)(subbox.Nneeded-subbox.Nalloc)/(float)MyGrids[0].ParticlesPerTask * 
+			   (sizeof(product_data) + FRAGFIELDS * sizeof(int)))+1+(int)params.MaxMemPerParticle);
+	      return 1;
+	    }
+	}
+
       tmp=MPI_Wtime()-tmp;
       cputime.distr += tmp;
 
@@ -378,10 +374,14 @@ int fragment()
 	       (float)nadd_all[0]/(float)MyGrids[0].Ntotal, tmp);
 
       mynadd[0]=subbox.Nstored;
-      MPI_Reduce(mynadd, nadd_all, 1, MPI_UNSIGNED_LONG_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+      MPI_Reduce(mynadd, nadd_all  , 1, MPI_UNSIGNED_LONG_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+      MPI_Reduce(mynadd, nadd_all+1, 1, MPI_UNSIGNED_LONG_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
 
       if (!ThisTask)
-	printf("[%s] Largest overhead: %f\n",fdate(),(float)nadd_all[0]/(float)MyGrids[0].ParticlesPerTask);
+	printf("[%s] Smallest and largest overhead: %f, %f\n",fdate(),
+	       (float)nadd_all[0]/(float)MyGrids[0].ParticlesPerTask,
+	       (float)nadd_all[1]/(float)MyGrids[0].ParticlesPerTask);
+
 
       /* sets or updates the map of potentially loaded particles */
       if (!turn)
@@ -427,10 +427,7 @@ int fragment()
 	  mynadd[0]=Npeaks;
 	  MPI_Reduce(mynadd, nadd_all, 1, MPI_UNSIGNED_LONG_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
 
-	  if (!ThisTask)
-	    printf("[%s] The PredPeakFactor parameter could have been %5.2f in place of %5.2f\n",
-		   fdate(),(double)nadd_all[0]/(double)MyGrids[0].ParticlesPerTask*6.0,
-		   params.PredPeakFactor);
+	  BestPredPeakFactor=(double)nadd_all[0]/(double)MyGrids[0].ParticlesPerTask*6.0;
 	}
 
 
@@ -461,7 +458,6 @@ int fragment()
 	}
       else
 	{
-
 	  /* full fragmentation is done segmenting the redshift interval */
 	  for (mysegment=0; mysegment<Segment.n; mysegment++)
 	    {
@@ -525,6 +521,36 @@ int fragment()
 
   if (!ThisTask)
     printf("[%s] Finishing fragment, total cputime = %14.6f\n",fdate(),cputime.frag);
+
+#ifdef SNAPSHOT
+  if (params.WriteTimelessSnapshot)
+    {
+      /* redistribution of products */
+      if (!ThisTask)
+	printf("[%s] Starting to distribute back accretion redshifts\n",fdate());
+      tmp=MPI_Wtime();
+
+      if (distribute_back())
+	return 1;
+
+      tmp=MPI_Wtime()-tmp;
+      cputime.distr += tmp;
+
+      if (!ThisTask)
+	printf("[%s] back-distribution of zacc done, cputime = %14.6f\n", fdate(), tmp);
+
+      if (write_timeless_snapshot())
+	return 1;
+    }
+#endif
+
+  if (!ThisTask)
+    {
+      printf("\n");
+      printf("[%s] Minimal memory requirements:",fdate());
+      printf("[%s] The PredPeakFactor parameter could have been %5.2f in place of %5.2f\n",
+	     fdate(),BestPredPeakFactor,params.PredPeakFactor);
+    }
 
   return 0;
 }
@@ -1228,15 +1254,24 @@ int estimate_file_size(void)
   double IDsize = (double)MyGrids[0].Ntotal * 4.;
 #endif
 
+  int nblo=3;
 #ifndef TWO_LPT
   int nvel=3;
+  nblo+=1;
 #else
 #ifndef THREE_LPT
   int nvel=6;
+  nblo+=2;
 #else
   int nvel=12;
+  nblo+=4;
 #endif
 #endif
+
+#ifdef ADD_RMAX_TO_SNAPSHOT
+  nblo+=1;
+#endif
+
 
 #ifdef RECOMPUTE_DENSITY
   implementare...;
@@ -1244,7 +1279,7 @@ int estimate_file_size(void)
 
   if (params.WriteDensity)
     {
-      size=268. + IDsize + 6. + (double)MyGrids[0].Ntotal * sizeof(float) + 6.;
+      size=268. + IDsize + 6. + (double)MyGrids[0].Ntotal * sizeof(float) + 6. + 2*40 + 6.;
       total+=size;
       gb=size2Mb(&size);
       printf("density snapshot size: %f %s", size, (gb?"Gbyte":"Mbyte"));
@@ -1253,32 +1288,12 @@ int estimate_file_size(void)
       printf("\n");
     }
 
-  if (params.WriteProducts)
-    {
-      size=268. + IDsize + 6. + (nvel+2) * ((double)MyGrids[0].Ntotal * sizeof(float) + 6.);
-      total+=size;
-      gb=size2Mb(&size);
-      printf("products snapshot size: %f %s", size, (gb?"Gbyte":"Mbyte"));
-      if (params.NumFiles>1)
-	printf(" - each file will have a size of %f %s",size/(double)params.NumFiles,(gb?"Gbyte":"Mbyte"));
-      printf("\n");
-    }
-
-  if (params.WriteSnapshot)
-    {
-      size=268. + IDsize + 6. + 6 * ((double)MyGrids[0].Ntotal * sizeof(float) + 6.);
-      total+=size;
-      gb=size2Mb(&size);
-      printf("size of each snapshot: %f %s", size, (gb?"Gbyte":"Mbyte"));
-      if (params.NumFiles>1)
-	printf(" - each file will have a size of %f %s",size/(double)params.NumFiles,(gb?"Gbyte":"Mbyte"));
-      printf("\n");
-    }
-
-  // CONTROLLARE
   if (params.WriteTimelessSnapshot)
     {
-      size=268. + IDsize + 6. + (nvel+2) * ((double)MyGrids[0].Ntotal * sizeof(float) + 6.);
+      size=268. + IDsize + 6. + (nvel+2) * ((double)MyGrids[0].Ntotal * sizeof(float) + 6.) + nblo*40 + 6.;
+#ifdef ADD_RMAX_TO_SNAPSHOT
+      size+=((double)MyGrids[0].Ntotal * sizeof(float) + 6.);
+#endif
       total+=size;
       gb=size2Mb(&size);
       printf("timeless snapshot size: %f %s", size, (gb?"Gbyte":"Mbyte"));

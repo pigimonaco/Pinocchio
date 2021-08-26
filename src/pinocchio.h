@@ -1,28 +1,4 @@
-/*****************************************************************
- *                        PINOCCHIO  V4.1                        *
- *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
- *****************************************************************
- 
- This code was written by
- Pierluigi Monaco
- Copyright (C) 2016
- 
- web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
- 
- This program is free software; you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
- the Free Software Foundation; either version 2 of the License, or
- (at your option) any later version.
- 
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
- 
- You should have received a copy of the GNU General Public License
- along with this program; if not, write to the Free Software
- Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
+/* ######HEADER###### */
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -52,8 +28,7 @@
 /* #include <immintrin.h> */
 /* #endif */
 
-#define ALIGN 32
-
+/* Defines */
 #define NYQUIST 1.
 #define PI      3.14159265358979323846 
 #define LBLENGTH 400
@@ -64,16 +39,27 @@
 #define MAXOUTPUTS 100
 #define SPEEDOFLIGHT ((double)299792.458) /* km/s */
 #define GRAVITY ((double)4.30200e-9)      /*  (M_sun^-1 (km/s)^2 Mpc)  */
-#define NBINS 210   /* number of time bins in cosmological quantities */
+#define NBINS 210     /* number of time bins in cosmological quantities */
+#define FRAGFIELDS 6
 
-#if defined(THREE_LPT) && !defined(TWO_LPT)
-#define TWO_LPT
-#endif
+#define NSIGMA ((double)6.0)
+#define STEP_VAR ((double)0.4)  //0.2)   /* this sets the spacing for smoothing radii */
+
+#define NV 6
+#define FILAMENT 1
+#define SHIFT 0.5
+
+#define ORDER_FOR_GROUPS 2
+#define ORDER_FOR_CATALOG 3
+
+#define ALIGN 32     /* for memory alignment */
+#define UINTLEN 32   /* 8*sizeof(unsigned int) */
 
 /* these templates define how to pass from coordinates to indices */
 #define INDEX_TO_COORD(I,X,Y,Z,L) ({Z=(I)%L[_z_]; int _KK_=(I)/L[_z_]; Y=_KK_%L[_y_]; X=_KK_/L[_y_];})
 #define COORD_TO_INDEX(X,Y,Z,L) ((Z) + L[_z_]*((Y) + L[_y_]*(X)))
 
+/* coordinates */
 #define _x_ 0
 #define _y_ 1
 #define _z_ 2
@@ -81,7 +67,7 @@
 #define DECOMPOSITION_LIMIT_FACTOR_2D 1    /* smallest allowed side lenght of rectangular pencils in */
                                            /* 2D decomposition of FFT */
 
-// dprintf veramente serve?
+/* debug levels */
 #define dprintf(LEVEL, TASK, ...) do{if( ((LEVEL) <= internal.verbose_level) && (ThisTask == (TASK))) fprintf(stdout, __VA_ARGS__);} while(1 == 0)
 #define VDBG  4   // verbose level for debug
 #define VDIAG 2   // verbose level for diagnostics
@@ -92,10 +78,9 @@
 
 #define SWAP_INT( A, B ) (A) ^= (B), (B) ^= (A), (A) ^= (B);
 
-#define UINTLEN 32   /* 8*sizeof(unsigned int) */
-
-#if defined(RECOMPUTE_DISPLACEMENTS) && defined(THREE_LPT)
-#error RECOMPUTE_DISPLACEMENTS and THREE_LPT should not be used together
+/* checks of compiler flags */
+#if defined(THREE_LPT) && !defined(TWO_LPT)
+#define TWO_LPT
 #endif
 
 #if !defined(ELL_SNG) && !defined(ELL_CLASSIC)
@@ -114,18 +99,13 @@
 #error Please set a value to FR0 when you choose MOD_GRAV_FR
 #endif
 
-extern int ThisTask,NTasks;
 
-/* pfft-related variables */
-/* extern int pfft_flags_c2r, pfft_flags_r2c; */
-extern MPI_Comm FFT_Comm;
-
-//#ifdef VETTORIALIZZA
 /* vectorialization */
 #define DVEC_SIZE 4
 
 typedef double dvec __attribute__ ((vector_size (DVEC_SIZE*sizeof(double))));
 typedef long int ivec __attribute__ ((vector_size (DVEC_SIZE*sizeof(long int))));
+
 typedef union
 {
   dvec   V;
@@ -137,7 +117,14 @@ typedef union
   ivec V;
   int  v[DVEC_SIZE];
 } ivec_u;
-//#endif
+
+
+/* variables and type definitions */
+extern int ThisTask,NTasks;
+/* pfft-related variables */
+/* extern int pfft_flags_c2r, pfft_flags_r2c; */
+extern MPI_Comm FFT_Comm;
+
 
 typedef struct
 {
@@ -146,18 +133,17 @@ typedef struct
   int constrain_task_decomposition[3];  /* constraints on the number of subdivisions for each dimension */
   int verbose_level;                    /* for dprintf */
   int mimic_original_seedtable;         /* logical, set to 1 to reproduce exactly GenIC */
-  int dump_vectors;                          // logical
-  int dump_seedplane;                        // logical
-  int dump_kdensity;                         // logical
+  int dump_vectors;                     /* logical, dump vectors to files */
+  int dump_seedplane;                   /* logical, dump seedplane to files */
+  int dump_kdensity;                    /* logical, dump Fourier-space density to files */
   int large_plane;                      /* select the new generation of ICs */
   int nthreads_omp;                     /* number of OMP threads */
   int nthreads_fft;                     /* number of FFT threads */
-  
 } internal_data;
 extern internal_data internal;
 
 typedef unsigned int uint;
-typedef unsigned long long int UL;
+//typedef unsigned long long int UL;  // mi pare non ci sia
 
 
 #ifdef DOUBLE_PRECISION_PRODUCTS
@@ -179,6 +165,10 @@ typedef struct  // RIALLINEARE?
 #endif
 #endif
 
+#ifdef SNAPSHOT
+  PRODFLOAT zacc;
+#endif
+
 #ifdef RECOMPUTE_DISPLACEMENTS
   PRODFLOAT Vel_after[3];
 #ifdef TWO_LPT
@@ -187,10 +177,6 @@ typedef struct  // RIALLINEARE?
   PRODFLOAT Vel_3LPT_1_after[3],Vel_3LPT_2_after[3];
 #endif
 #endif
-#endif
-
-#ifdef TIMELESS_SNAPSHOT
-  PRODFLOAT zacc;
 #endif
 
 } product_data __attribute__((aligned (ALIGN)));  // VERIFICARE
@@ -278,9 +264,9 @@ typedef struct
   char RunFlag[SBLENGTH],DumpDir[SBLENGTH],TabulatedEoSfile[LBLENGTH],ParameterFile[LBLENGTH],
     OutputList[LBLENGTH],FileWithInputSpectrum[LBLENGTH],CTtableFile[LBLENGTH];
   int GridSize[3],WriteProducts,WriteDensity,DumpProducts,ReadProductsFromDumps,
-    CatalogInAscii, DoNotWriteCatalogs, DoNotWriteHistories, WriteSnapshot, WriteTimelessSnapshot,
+    CatalogInAscii, DoNotWriteCatalogs, DoNotWriteHistories, WriteTimelessSnapshot,
     OutputInH100, RandomSeed, MaxMem, NumFiles, 
-    BoxInH100, simpleLambda, AnalyticMassFunction, MinHaloMass, PLCProvideConeData,
+    BoxInH100, simpleLambda, AnalyticMassFunction, MinHaloMass, PLCProvideConeData, ExitIfExtraParticles,
     use_transposed_fft, use_inplace_fft;
 #ifdef READ_PK_TABLE
   camb_data camb;
@@ -299,7 +285,7 @@ extern output_data outputs;
 typedef struct
 {
   unsigned int Npart, Ngood, Nstored, PredNpeaks, maplength;
-  unsigned int Nalloc;
+  unsigned int Nalloc, Nneeded;
   int nbox[3];
   int mybox[3];
   int Lgrid[3]; 
@@ -385,6 +371,7 @@ extern plcgroup_data *plcgroups;
 extern char date_string[25];
 
 extern int *frag_pos,*indices,*indicesY,*sorted_pos,*group_ID,*linking_list;
+
 extern unsigned int *frag_map, *frag_map_update;
 
 /* fragmentation parameters */
@@ -399,11 +386,7 @@ typedef struct
 {
   unsigned long long int name;
   int nick, ll, mw, mass, mam;
-#ifdef LIGHT_OUTPUT
   PRODFLOAT zme, zpe, zap;
-#else
-  double zme, zpe, zap;
-#endif
 }  histories_data;
 
 #define DELTAM 0.05
@@ -436,7 +419,49 @@ typedef struct
 } memory_data;
 extern memory_data memory;
 
-int factor(int , int ); //QUESTO DOVE STA?
+extern int ngroups;
+
+typedef struct
+{
+  int M,i;
+  PRODFLOAT R,q[3],v[3],D,Dv;
+  double z;
+#ifdef TWO_LPT
+  PRODFLOAT D2,D2v,v2[3];
+#ifdef THREE_LPT
+  PRODFLOAT D31,D31v,v31[3],D32,D32v,v32[3];
+#endif
+#endif
+#ifdef RECOMPUTE_DISPLACEMENTS
+  PRODFLOAT w;
+  PRODFLOAT v_aft[3];
+#ifdef TWO_LPT
+  PRODFLOAT v2_aft[3];
+#ifdef THREE_LPT
+  PRODFLOAT v31_aft[3],v32_aft[3];
+#endif
+#endif
+#endif
+} pos_data;
+extern pos_data obj, obj1, obj2;
+
+typedef struct
+{
+  unsigned long long int name;
+  PRODFLOAT M,x[3],v[3];
+#ifndef LIGHT_OUTPUT
+  PRODFLOAT q[3];
+  int n;
+#endif
+  int pad;
+}  catalog_data;
+
+typedef struct
+{
+  int n, mine;
+  double z[MAXOUTPUTS];
+} Segment_data;
+extern Segment_data Segment;
 
 /* prototypes for functions defined in collapse_times.c */
 int compute_collapse_times(int);
@@ -472,7 +497,7 @@ int reallocate_memory_for_fragmentation(void);
 /* prototypes for functions defined in GenIC.c */
 int GenIC(int);
 int GenIC_large(int);  // NE BASTA UNA?
-double VarianceOnGrid(int, double, double);
+//double VarianceOnGrid(int, double); //, double);
 
 /* prototypes for functions defined in initialization.c */
 int initialization();
@@ -482,14 +507,14 @@ int set_parameters(void);
 int set_grids(void);
 int set_subboxes(void);
 int set_smoothing(void);
+void greetings(void);
+int check_parameters_and_directives(void);
 
 /* prototypes in write_snapshot.c */
-int write_snapshot(int);
-int write_products();
+#ifdef SNAPSHOT
 int write_density(int);
-//int write_LPT_snapshot(double);
-#ifdef TIMELESS_SNAPSHOT
-//int write_timeless_snapshot(void);
+int write_LPT_snapshot(void);
+int write_timeless_snapshot(void);
 #endif
 
 /* prototypes for functions defined in cosmo.c */
@@ -543,6 +568,7 @@ int compute_LPT_displacements();
 
 /* prototypes for functions defined in distribute.c */
 int distribute(void);
+int distribute_back(void);
 
 /* prototypes for functions defined in fragment.c */
 int fragment_driver(void);
@@ -561,3 +587,29 @@ int update_map(unsigned int *);
 //#ifdef WHITENOISE
 //int read_white_noise(void);
 //#endif
+
+
+/* fragmentation prototypes */
+void condition_for_accretion(int, int, int, int, int, PRODFLOAT, int, double *, double *); // LEVARE primo argomento
+void condition_for_merging(PRODFLOAT, int, int, int *);
+void set_obj(int, PRODFLOAT, pos_data *);
+void set_obj_vel(int, PRODFLOAT, pos_data *);
+void set_point(int, int, int, int, PRODFLOAT, pos_data *);
+void set_group(int, pos_data *);
+PRODFLOAT q2x(int, pos_data *, int, double, int);
+PRODFLOAT vel(int, pos_data *);
+PRODFLOAT distance(int, pos_data *, pos_data *);
+void clean_list(int *);
+PRODFLOAT virial(int, PRODFLOAT, int);
+void merge_groups(int, int, PRODFLOAT);
+void update_history(int, int, PRODFLOAT);
+void accretion(int, int, int, int, int, PRODFLOAT);
+void update(pos_data *, pos_data *);
+int write_catalog(int);
+int write_histories(void);
+int compute_mf(int);
+int find_location(int, int, int);
+#ifdef PLC
+int write_PLC();
+void coord_transformation_cartesian_polar(PRODFLOAT *, double *, double *, double *);
+#endif

@@ -1,32 +1,10 @@
-/*****************************************************************
- *                        PINOCCHIO  V4.1                        *
- *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
- *****************************************************************
- 
- This code was written by
- Pierluigi Monaco
- Copyright (C) 2016
- 
- web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
- 
- This program is free software; you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
- the Free Software Foundation; either version 2 of the License, or
- (at your option) any later version.
- 
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
- 
- You should have received a copy of the GNU General Public License
- along with this program; if not, write to the Free Software
- Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
+/* ######HEADER###### */
 
 #include "pinocchio.h"
 
-#ifdef PRECISE_TIMING  // SI PUO` TOGLIERE
+//#define BL_GRANDISSIMA
+
+#ifdef PRECISE_TIMING  // SI PUO` TOGLIERE?
 
 #define SET_WTIME cputime.partial = MPI_Wtime();
 #define ASSIGN_WTIME(INIT, ACC) do { double ttt= MPI_Wtime(); cputime.ACC = ttt - cputime.INIT; } while(0)
@@ -101,6 +79,10 @@ int initialization()
     return 1;
 #endif
   
+  /* checks that parameters and directives are coherent */
+  if (check_parameters_and_directives())
+    return 1;
+
   /* estimates the size of output file */
   if (estimate_file_size())
     return 1;
@@ -148,8 +130,8 @@ int initialize_fft(void)
 {
 
 #ifdef USE_FFT_THREADS
-  if ( internal.nthreads_fft < 0 )
-    internal.nthreads_fft = internal.nthreads_omp;
+  //if ( internal.nthreads_fft < 0 )
+  internal.nthreads_fft = internal.nthreads_omp;
   if ( internal.nthreads_fft > 1 )
     dprintf(VMSG, 0, "Using %d threads for FFTs\n", internal.nthreads_fft );
 #endif
@@ -207,10 +189,13 @@ int set_parameters()
   internal.tasks_subdivision_3D[0]         = 0;
   internal.tasks_subdivision_3D[1]         = 0;
   internal.tasks_subdivision_3D[2]         = 0;
-  //internal.nthreads_fft                    = 1;
 
   if(read_parameter_file())
     return 1;
+
+  /* the smallest legitimate value of MinHaloMass is 1 */
+  if (params.MinHaloMass<=0)
+    params.MinHaloMass=1;
 
   if (params.BoxInH100)
     {
@@ -293,7 +278,7 @@ int set_parameters()
       dprintf(VMSG, 0, "NumFiles                    %d\n",params.NumFiles);
       dprintf(VMSG, 0, "DoNotWriteCatalogs          %d\n",params.DoNotWriteCatalogs);
       dprintf(VMSG, 0, "DoNotWriteHistories         %d\n",params.DoNotWriteHistories);
-      dprintf(VMSG, 0, "WriteSnapshot               %d\n",params.WriteSnapshot);
+      dprintf(VMSG, 0, "WriteTimelessSnapshot       %d\n",params.WriteTimelessSnapshot);
       dprintf(VMSG, 0, "OutputInH100                %d\n",params.OutputInH100);
       dprintf(VMSG, 0, "WriteDensity                %d\n",params.WriteDensity);
       dprintf(VMSG, 0, "WriteProducts               %d\n",params.WriteProducts);
@@ -354,10 +339,6 @@ int set_parameters()
 
   return 0;
 }
-
-
-#define NSIGMA ((double)6.0)
-#define STEP_VAR ((double)0.15)
 
 int set_smoothing()
 {
@@ -456,7 +437,7 @@ int set_grids()
 
   Ngrids=1;
 
-  MyGrids=(grid_data*)malloc(Ngrids * sizeof(grid_data)); // VALE LA PENA DI METTERE UN MESSAGGIO DI ERRORE PER UNA ALLOCAZIONE COSI` INNOCUA?
+  MyGrids=(grid_data*)malloc(Ngrids * sizeof(grid_data));
 
   for (dim=0; dim<3; dim++)
     MyGrids[0].GSglobal[dim] = params.GridSize[dim];
@@ -712,7 +693,7 @@ int set_plc(void)
 
   if (!ThisTask)
     {
-      printf("\nThe Past Light Cone will be reconstruct from z=%f to z=%f\n",
+      printf("\nThe Past Light Cone will be reconstructed from z=%f to z=%f\n",
 	     params.StartingzForPLC,params.LastzForPLC);
       if (params.PLCProvideConeData)
 	printf("Cone data have been provided in the parameter file\n");
@@ -909,7 +890,7 @@ int set_plc()
 int set_subboxes()
 {
 
-  int i,j,k, i1,j1,k1, NN,NN1,N1,N2,N3;
+  int i,j,k, i1=0,j1=0,k1=0, NN,NN1,N1,N2,N3;
   unsigned long long int surface,this,tt;
   double size,sizeG,cc;
 
@@ -934,7 +915,7 @@ int set_subboxes()
   /* finds the optimal number of sub-boxes to use for the fragmentation */
 
 
-  surface=MyGrids[0].ParticlesPerTask;
+  surface=MyGrids[0].Ntotal;
   for (k=1; k<=NTasks; k++)
     for (j=1; j<=NTasks/k; j++)
       for (i=1; i<=NTasks/k/j; i++)
@@ -972,6 +953,14 @@ int set_subboxes()
 
   /* mybox is the box assigned to the task */
   NN=subbox.nbox[_y_]*subbox.nbox[_z_];
+  if (NN==0)
+    {
+      printf("ERROR: I could not find a valid subbox subdivision\n");
+      printf("       subbox.nbox = [%d,%d,%d]\n",i1,j1,k1);
+      printf("       please try again with a different number of tasks\n");
+      return 1;
+    }
+
   subbox.mybox[_x_]=ThisTask/NN;
   NN1=ThisTask-subbox.mybox[_x_]*NN;
   subbox.mybox[_y_]=NN1/subbox.nbox[_z_];
@@ -985,14 +974,38 @@ int set_subboxes()
   subbox.pbc[_y_] = (subbox.nbox[_y_]==1);
   subbox.pbc[_z_] = (subbox.nbox[_z_]==1);
 
-  subbox.safe[_x_] = (subbox.pbc[_x_] ? 0 : (find_length(MyGrids[0].GSglobal[_x_],subbox.nbox[_x_],0)-1)/2);
-  subbox.safe[_y_] = (subbox.pbc[_y_] ? 0 : (find_length(MyGrids[0].GSglobal[_y_],subbox.nbox[_y_],0)-1)/2);
-  subbox.safe[_z_] = (subbox.pbc[_z_] ? 0 : (find_length(MyGrids[0].GSglobal[_z_],subbox.nbox[_z_],0)-1)/2);
+/* #ifndef BL_GRANDISSIMA */
+
+/*   subbox.safe[_x_] = (subbox.pbc[_x_] ? 0 : (find_length(MyGrids[0].GSglobal[_x_],subbox.nbox[_x_],0)-1)/2); */
+/*   subbox.safe[_y_] = (subbox.pbc[_y_] ? 0 : (find_length(MyGrids[0].GSglobal[_y_],subbox.nbox[_y_],0)-1)/2); */
+/*   subbox.safe[_z_] = (subbox.pbc[_z_] ? 0 : (find_length(MyGrids[0].GSglobal[_z_],subbox.nbox[_z_],0)-1)/2); */
+
+/* #else */
+
+  /* the boundary layer can be as large as to nearly fill the whole box,
+     but the number of particles must be represented by an unsigned int */
+  int BB = (int)(params.BoundaryLayerFactor*sizeG+1);
+  subbox.safe[_x_] = (subbox.pbc[_x_] ? 0 : (BB > MyGrids[0].GSglobal[_x_]/2 - subbox.Lgrid[_x_]/2 - 1 ? MyGrids[0].GSglobal[_x_]/2 - subbox.Lgrid[_x_]/2 - 1 : BB));
+  subbox.safe[_y_] = (subbox.pbc[_y_] ? 0 : (BB > MyGrids[0].GSglobal[_y_]/2 - subbox.Lgrid[_y_]/2 - 1 ? MyGrids[0].GSglobal[_y_]/2 - subbox.Lgrid[_y_]/2 - 1 : BB));
+  subbox.safe[_z_] = (subbox.pbc[_z_] ? 0 : (BB > MyGrids[0].GSglobal[_z_]/2 - subbox.Lgrid[_z_]/2 - 1 ? MyGrids[0].GSglobal[_z_]/2 - subbox.Lgrid[_z_]/2 - 1 : BB));
+
+//#endif
 
   subbox.Lgwbl[_x_] = subbox.Lgrid[_x_] + 2*subbox.safe[_x_];
   subbox.Lgwbl[_y_] = subbox.Lgrid[_y_] + 2*subbox.safe[_y_];
   subbox.Lgwbl[_z_] = subbox.Lgrid[_z_] + 2*subbox.safe[_z_];
-
+  unsigned long long MySize = (long long)subbox.Lgwbl[_x_] * (long long)subbox.Lgwbl[_y_] * (long long)subbox.Lgwbl[_z_];
+  while (MySize > (unsigned long long)1<<31)
+    {
+      subbox.safe[_x_] -=1;
+      subbox.safe[_y_] -=1;
+      subbox.safe[_z_] -=1;
+      subbox.Lgwbl[_x_] = subbox.Lgrid[_x_] + 2*subbox.safe[_x_];
+      subbox.Lgwbl[_y_] = subbox.Lgrid[_y_] + 2*subbox.safe[_y_];
+      subbox.Lgwbl[_z_] = subbox.Lgrid[_z_] + 2*subbox.safe[_z_];
+      MySize = (unsigned long long)subbox.Lgwbl[_x_] * (unsigned long long)subbox.Lgwbl[_y_] * (unsigned long long)subbox.Lgwbl[_z_];
+    }
+  
   subbox.start[_x_] = find_start(MyGrids[0].GSglobal[_x_],subbox.nbox[_x_],subbox.mybox[_x_]);
   subbox.start[_y_] = find_start(MyGrids[0].GSglobal[_y_],subbox.nbox[_y_],subbox.mybox[_y_]);
   subbox.start[_z_] = find_start(MyGrids[0].GSglobal[_z_],subbox.nbox[_z_],subbox.mybox[_z_]);
@@ -1011,7 +1024,7 @@ int set_subboxes()
 
   subbox.Npart = subbox.Lgwbl[_x_] * subbox.Lgwbl[_y_] * subbox.Lgwbl[_z_];
   subbox.Ngood = subbox.Lgrid[_x_] * subbox.Lgrid[_y_] * subbox.Lgrid[_z_];
-  /* this is a (relatively generous) prediction of the number of peaks that will be found */
+  /* this is a prediction of the number of peaks that will be found */
   subbox.PredNpeaks = (int)(MyGrids[0].ParticlesPerTask/6 * params.PredPeakFactor);
   subbox.Nstored = 0;
   /* this is the size of frag_map*/
@@ -1040,11 +1053,13 @@ int set_subboxes()
       printf("Number of total particles for core 0:  %d\n",subbox.Npart);
       printf("Number of good particles for core 0:   %d\n",subbox.Ngood);
       printf("Particles that core 0 will allocate:   %d\n",subbox.Nalloc);
-      printf("Allowed overhead:                      %f\n",(float)subbox.Nalloc/(float)subbox.Ngood);
+      printf("Allowed overhead for boundary layer:   %f\n",(float)subbox.Nalloc/(float)MyGrids[0].ParticlesPerTask);
       printf("Largest halo expected in this box at z=%f: %e Msun\n",
   	     outputs.zlast, params.Largest);
       printf("   its Lagrangian size: %f Mpc (%6.2f grid points)\n",size,sizeG);
       printf("   this requires a boundary layer of %6.2f grid points \n",sizeG*params.BoundaryLayerFactor);
+
+#ifndef BL_GRANDISSIMA 
       if ((!subbox.pbc[_x_] && params.BoundaryLayerFactor*sizeG>subbox.safe[_x_]) || 
 	  (!subbox.pbc[_y_] && params.BoundaryLayerFactor*sizeG>subbox.safe[_y_]) || 
 	  (!subbox.pbc[_z_] && params.BoundaryLayerFactor*sizeG>subbox.safe[_z_]))
@@ -1052,6 +1067,7 @@ int set_subboxes()
 	  printf("WARNING: the boundary layer on some dimension is smaller than the predicted size of the largest halos\n");
 	  printf("         times the BoundaryLayerFactor, the most massive halos may be inaccurate\n");
 	}
+#endif
     }
 
   /* initialization of quantities required by compute_mf */
@@ -1321,6 +1337,55 @@ int set_fft_decomposition(void)
 
   return 0;
 }
+
+
+int check_parameters_and_directives(void)
+{
+  
+  static unsigned long long largest32 = (unsigned)1<<31;
+
+#ifndef SNAPSHOT
+  if (params.WriteTimelessSnapshot || params.WriteDensity)
+    {
+      if (!ThisTask)
+	printf("ERROR: to produce a snapshot you have to compile with SNAPSHOT directive\n");
+      return 1;
+    }
+#endif
+
+#ifdef SNAPSHOT
+
+#ifndef LONGIDS
+  if ((params.WriteTimelessSnapshot || params.WriteDensity) && MyGrids[0].Ntotal > largest32)
+    {
+      if (!ThisTask)
+	printf("ERROR: with these many particles you need to compile with LONGIDS directive\n  otherwise the snapshot IDs will be unreadable\n");
+      return 1;
+    }
+#endif
+
+  if (params.WriteTimelessSnapshot)
+    {
+      unsigned long long BlockLength = MyGrids[0].Ntotal * 12 / (unsigned long long)params.NumFiles;
+      if (BlockLength > largest32)
+	{
+	  unsigned int NumFiles = (int)(MyGrids[0].Ntotal * 12 / largest32);
+	  if ((unsigned long long)(NumFiles * 12) * largest32 < MyGrids[0].Ntotal)
+	    ++NumFiles;
+
+	  if (!ThisTask)
+	    {
+	      printf("ERROR: you need to write such a large snapshot with at least NumFiles=%d\n",NumFiles);
+	    }
+	  return 1;
+	}
+    }
+#endif
+
+
+  return 0;
+}
+
 
 #ifdef SCALE_DEPENDENT
 #include "def_splines.h"
@@ -1940,3 +2005,80 @@ int set_scaledep_GM()
 
 
 #endif
+
+
+void greetings(void)
+{
+  /* This is a list of messages to declare the most relevant precompiler directives in the stdout */
+
+  if (!ThisTask)
+    {
+      printf("[%s] This is pinocchio V5.0, running on %d MPI tasks\n\n",fdate(),NTasks);
+#ifdef _OPENMP
+      printf( "Using %d OpenMP threads\n", internal.nthreads_omp );
+#endif
+
+#ifdef USE_FFT_THREADS
+      printf( "Using threaded-FFTs\n");
+#endif
+#ifdef TWO_LPT
+#ifndef THREE_LPT
+      printf("This version uses 2LPT displacements\n");
+#else
+      printf("This version uses 3LPT displacements\n");
+#endif
+#else
+      printf("This version uses Zeldovich displacements\n");
+#endif
+#ifdef NORADIATION
+      printf("Radiation is not included in the Friedmann equations\n");
+#else
+      printf("Radiation is included in the Friedmann equations\n");
+#endif
+#ifdef LIGHT_OUTPUT
+      printf("Catalogs will be written in the light version\n");
+#endif
+
+#ifdef TABULATED_CT
+#ifdef ELL_CLASSIC
+      printf("Ellipsoidal collapse will be tabulated as Monaco (1995)\n");
+#endif
+#ifdef ELL_SNG
+      printf("Numerical integration of ellipsoidal collapse will be tabulated\n");
+#endif
+#else
+      printf("Ellipsoidal collapse will be computed as Monaco (1995)\n");
+#endif
+
+#ifdef WHITENOISE
+#error WHITENOISE is not implemented yet
+      printf("Initial conditions will be read from a white noise file\n");
+#endif
+
+#ifdef SCALE_DEPENDENT
+      printf("This version of the code works with scale-dependent growing modes;\n");
+#ifdef MOD_GRAV_FR
+      printf("Scales will range from %10g to %10g 1/Mpc, in %d steps\n",
+	     0.0, pow(10.,LOGKMIN+(NkBINS-1)*DELTALOGK), NkBINS);
+      printf("Gravity will be given by Hu-Sawicki f(R) with f_R0=%7g\n",FR0);
+#endif
+#ifdef READ_PK_TABLE
+      printf("Scales will range from %10g to %10g 1/Mpc, in %d steps\n",
+	     pow(10.,LOGKMIN), pow(10.,LOGKMIN+(NkBINS-1)*DELTALOGK), NkBINS);
+      printf("Scale-dependent growth rates will be worked out from CAMB P(k) files\n");
+#ifdef ONLY_MATTER_POWER
+      printf("The power spectrum will include only dark matter + baryon fluctuations, excluding neutrinos (if present)\n");
+#else
+      printf("The power spectrum will include TOTAL matter fluctuations, including neutrinos (if present)\n");
+#endif
+#endif
+#endif
+
+#ifdef NO_RANDOM_MODULES
+      printf("Initial conditions will be generated with non-random modules of the Fourier modes\n");
+#endif
+
+      printf("\n");
+
+    }
+}

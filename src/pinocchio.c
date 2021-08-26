@@ -1,41 +1,13 @@
-/*****************************************************************
- *                        PINOCCHIO  V4.1                        *
- *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
- *****************************************************************
- 
- This code was written by
- Pierluigi Monaco
- Copyright (C) 2016
- 
- web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
- 
- This program is free software; you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
- the Free Software Foundation; either version 2 of the License, or
- (at your option) any later version.
- 
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
- 
- You should have received a copy of the GNU General Public License
- along with this program; if not, write to the Free Software
- Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
+/* ######HEADER###### */
 
 #include "pinocchio.h"
 #include "def_splines.h"
 
 void abort_code(void);
 void write_cputimes(void);
-void greetings(void);
 
 int main(int argc, char **argv, char **envp)
 {
-  double time;
-  int ThisGrid;
-
 
 #ifdef USE_GPERFTOOLS
   ProfilerStart("pinocchio_gprofile.log");
@@ -47,18 +19,18 @@ int main(int argc, char **argv, char **envp)
   MPI_Comm_rank(MPI_COMM_WORLD, &ThisTask);
   MPI_Comm_size(MPI_COMM_WORLD, &NTasks);
 
-  /* timing of the code */
-  cputime.total=MPI_Wtime();
-  greetings();
-
 #ifdef _OPENMP
   /* initialization of OpemMP */
 #pragma omp parallel
   {
 #pragma omp master
-    internal_data.nthreads_omp = omp_get_num_threads();
+    internal.nthreads_omp = omp_get_num_threads();
   }
 #endif
+
+  /* timing of the code */
+  cputime.total=MPI_Wtime();
+  greetings();
 
   /* checks that the parameter file is given in the command line */
   if (argc<2)
@@ -82,27 +54,31 @@ int main(int argc, char **argv, char **envp)
   /*****************************************/
   /*********** Special behaviour ***********/
   /*****************************************/
-
   /* On request, it writes the density field */
   if (params.WriteDensity || (argc>=3 && atoi(argv[2])==1) )
-    for (ThisGrid=0; ThisGrid<Ngrids; ThisGrid++)
-      {
-	write_in_cvector(ThisGrid, kdensity[ThisGrid]);
-	time=reverse_transform(ThisGrid);
-	if (!ThisTask)
-	  printf("[%s] compute_derivative: done fft, cpu time = %f\n",fdate(),time);
-	write_from_rvector(ThisGrid, density[ThisGrid]);
-	if (write_density(ThisGrid))
-	  abort_code();
-      }
-    
-  /* called as "pinocchio.x parameterfile 1" it writes the density field of Grid 0
-     in configuration space and exits */
-  if (argc>=3 && atoi(argv[2])==1)
     {
+#ifdef SNAPSHOT
+      /* called as "pinocchio.x parameterfile 1" it writes the density field
+	 in configuration space and exits */
+      if (argc>=3 && atoi(argv[2])==1 && !ThisTask)
+	printf("In this configuration pinocchio only writes the linear density field\n");
+
+      for (int ThisGrid=0; ThisGrid<Ngrids; ThisGrid++)
+	{
+	  write_in_cvector(ThisGrid, kdensity[ThisGrid]);
+	  double time=reverse_transform(ThisGrid);
+	  if (!ThisTask)
+	    printf("[%s] compute_derivative: done fft, cpu time = %f\n",fdate(),time);
+	  write_from_rvector(ThisGrid, density[ThisGrid]);
+	  if (write_density(ThisGrid))
+	    abort_code();
+	}
+#else
+      if (!ThisTask)
+	printf("Please recompile the code with SNAPSHOT directive to write the density\n");
+#endif
       if (!ThisTask)
 	{
-	  printf("In this configuration pinocchio only writes the linear density field\n");
 	  write_cputimes();
 	  printf("Pinocchio done!\n");
 	}
@@ -155,6 +131,9 @@ int main(int argc, char **argv, char **envp)
 
 /*       return 0; */
 /*     } */
+
+
+
 
   /* called as "pinocchio.x parameterfile 2" it computes and writes collapse time table, then exit */
   if (argc>=3 && atoi(argv[2])==3)
@@ -223,11 +202,6 @@ int main(int argc, char **argv, char **envp)
       if (compute_fmax())
 	abort_code();
 
-      /* on request, write products on a snapshot */
-      if (params.WriteProducts)
-	if (write_products())
-	  abort_code();
-
       /* on request, dump products to files for skipping fmax */
       if (params.DumpProducts)
 	if (dump_products())
@@ -293,106 +267,3 @@ void write_cputimes()
   printf("Total I/O:        %14.6f (%5.2f%%)\n", cputime.io,   100.*cputime.io   /cputime.total);
 }
 
-void greetings(void)
-{
-  /* This is a list of messages to declare the most relevant precompiler directives in the stdout */
-
-  if (!ThisTask)
-    {
-      printf("[%s] This is pinocchio V4.XX, running on %d MPI tasks\n\n",fdate(),NTasks);
-#ifdef _OPENMP
-      printf( "Using %d OpenMP threads\n", internal_data.nthreads_omp );
-#endif
-
-#ifdef USE_FFT_THREADS
-      printf( "Using threaded-FFTs\n");
-#endif
-#ifdef TWO_LPT
-#ifndef THREE_LPT
-      printf("This version uses 2LPT displacements\n");
-#else
-      printf("This version uses 3LPT displacements\n");
-#endif
-#else
-      printf("This version uses Zeldovich displacements\n");
-#endif
-#ifdef ROTATE_BOX
-      printf("The output will be rotated to reproduce N-GenIC and 2LPTic orientation\n");
-#endif
-#ifdef NORADIATION
-      printf("Radiation is not included in the Friedmann equations\n");
-#else
-      printf("Radiation is included in the Friedmann equations\n");
-#endif
-#ifdef TIMELESS_SNAPSHOT
-      printf("Production of the timeless snapshot has been activated\n");
-#endif
-#ifdef LIGHT_OUTPUT
-      printf("Catalogs will be written in the light version\n");
-#endif
-
-#ifdef TABULATED_CT
-#ifdef ELL_CLASSIC
-      printf("Ellipsoidal collapse will be tabulated as Monaco (1995)\n");
-#endif
-#ifdef ELL_SNG
-      printf("Numerical integration of ellipsoidal collapse will be tabulated\n");
-#endif
-#else
-      printf("Ellipsoidal collapse will be computed as Monaco (1995)\n");
-#endif
-
-#ifdef WHITENOISE
-      printf("Initial conditions will be read from a white noise file\n");
-#endif
-
-#ifdef SCALE_DEPENDENT
-      printf("This version of the code works with scale-dependent growing modes;\n");
-#ifdef MOD_GRAV_FR
-      printf("Scales will range from %10g to %10g 1/Mpc, in %d steps\n",
-	     0.0, pow(10.,LOGKMIN+(NkBINS-1)*DELTALOGK), NkBINS);
-      printf("Gravity will be given by Hu-Sawicki f(R) with f_R0=%7g\n",FR0);
-#endif
-#ifdef READ_PK_TABLE
-      printf("Scales will range from %10g to %10g 1/Mpc, in %d steps\n",
-	     pow(10.,LOGKMIN), pow(10.,LOGKMIN+(NkBINS-1)*DELTALOGK), NkBINS);
-      printf("Scale-dependent growth rates will be worked out from CAMB P(k) files\n");
-#ifdef ONLY_MATTER_POWER
-      printf("The power spectrum will include only dark matter + baryon fluctuations, excluding neutrinos (if present)\n");
-#else
-      printf("The power spectrum will include TOTAL matter fluctuations, including neutrinos (if present)\n");
-#endif
-#endif
-#endif
-
-#ifdef NO_RANDOM_MODULES
-      printf("Initial conditions will be generated with non-random modules of the Fourier modes\n");
-#endif
-
-      printf("\n");
-
-    }
-}
-
-
-
-
-  /* //LEVARE */
-  /* write_in_cvector(0, kdensity[0]); */
-
-  /* dump_cvector((double*)kdensity[0], params.use_transposed_fft*internal.tasks_subdivision_dim, */
-  /* 	       MyGrids[0].GSglobal[_x_], */
-  /* 	       MyGrids[0].GSlocal_k, */
-  /* 	       MyGrids[0].GSstart_k, "kdensity.check", 0); */
-
-
-  /* time=reverse_transform(0); */
-  /* write_from_rvector(0, density[0]); */
-
-  /* dump_rvector((double*)rvector_fft[0], */
-  /* 	       MyGrids[0].GSglobal[_x_], */
-  /* 	       MyGrids[0].GSlocal, */
-  /* 	       MyGrids[0].GSstart, "density.check", 0); */
-
-  /* fflush(stdout); */
-  /* MPI_Barrier(MPI_COMM_WORLD); */

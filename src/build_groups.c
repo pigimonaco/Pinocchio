@@ -1,31 +1,6 @@
-/*****************************************************************
- *                        PINOCCHIO  V4.1                        *
- *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
- *****************************************************************
- 
- This code was written by
- Pierluigi Monaco
- Copyright (C) 2016
- 
- web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
- 
- This program is free software; you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
- the Free Software Foundation; either version 2 of the License, or
- (at your option) any later version.
- 
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
- 
- You should have received a copy of the GNU General Public License
- along with this program; if not, write to the Free Software
- Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
+/* ######HEADER###### */
 
 #include "pinocchio.h"
-#include "fragment.h"
 #include <gsl/gsl_sf.h>
 
 #define NCOUNTERS 15
@@ -74,8 +49,9 @@ int build_groups(int Npeaks, double zstop, int first_call)
       11 number of major mergers
       12 number of filament particles
       13 number of accreted filament particles
+      14 number of good halos
     */
-  static unsigned int counters[NCOUNTERS],all_counters[NCOUNTERS];
+  static unsigned long long counters[NCOUNTERS],all_counters[NCOUNTERS];
 
 #ifdef PLC
   static int plc_started=0, last_check_done=0, plc_saved=0;
@@ -136,6 +112,7 @@ int build_groups(int Npeaks, double zstop, int first_call)
       if (!ThisTask)
 	printf("[%s] Restarting the fragmentation process to redshift %7.4f\n",fdate(),zstop);
     }
+
 
   /************************************************************************
                         START OF THE CYCLE ON POINTS
@@ -427,6 +404,7 @@ int build_groups(int Npeaks, double zstop, int first_call)
 
         ngroups++;
 
+	// LEVARE
         if (ngroups > Npeaks+2)
 	  {
 	    printf("OH MY DEAR, TOO MANY GROUPS, THIS SHOULD NOT HAPPEN!\n");
@@ -489,6 +467,13 @@ int build_groups(int Npeaks, double zstop, int first_call)
 
         group_ID[iz]=ngroups;
         linking_list[iz]=iz;
+	if (params.MinHaloMass==1)
+	  {
+	    groups[ngroups].t_appear=frag[iz].Fmax;
+#ifdef SNAPSHOT
+	    frag[iz].zacc=frag[iz].Fmax-1;
+#endif
+	  }
 
        }
      else if (neigrp==1)
@@ -521,6 +506,8 @@ int build_groups(int Npeaks, double zstop, int first_call)
 		filament!
 	        *********/
 
+	       if (good_particle) 
+		 counters[12]++;
 	       groups[FILAMENT].Mass++;
 	       group_ID[iz]=FILAMENT;
 	       linking_list[iz]=iz;
@@ -555,9 +542,10 @@ int build_groups(int Npeaks, double zstop, int first_call)
 	 if (accgrp>=0)
 	   {
 	     if (good_particle) 
-	       counters[7]++;
-	     if (good_particle) 
-	       counters[8]++;
+	       {
+		 counters[7]++;
+		 counters[8]++;
+	       }
 	     accrflag=1;
 	     to_group=neigh[accgrp];
 	     accretion(neigh[accgrp],ibox,jbox,kbox,iz,frag[iz].Fmax);
@@ -642,9 +630,10 @@ int build_groups(int Npeaks, double zstop, int first_call)
 	     if (best_ratio<1)
 	       {
 		 if (good_particle) 
-		   counters[7]++;
-		 if (good_particle) 
-		   counters[9]++;
+		   {
+		     counters[7]++;
+		     counters[9]++;
+		   }
 		 accrflag=1;
 		 to_group=neigh[accgrp];
 		 accretion(neigh[accgrp],ibox,jbox,kbox,iz,frag[iz].Fmax);
@@ -670,6 +659,8 @@ int build_groups(int Npeaks, double zstop, int first_call)
 	 /**********************************************************************
                                  FOURTH CASE: FILAMENTS
 	  **********************************************************************/
+	 if (good_particle)
+	   counters[12]++;
 	 groups[FILAMENT].Mass++;
 	 group_ID[iz]=FILAMENT;
 	 linking_list[iz]=iz;
@@ -697,7 +688,20 @@ int build_groups(int Npeaks, double zstop, int first_call)
 		fil_list[ifil][3]*=-1;
 		accretion(to_group, fil_list[ifil][0], fil_list[ifil][1],
 			  fil_list[ifil][2],fil_list[ifil][3],frag[iz].Fmax);
+
 		groups[FILAMENT].Mass--;
+
+		if ( fil_list[ifil][0] >= subbox.safe[_x_] && 
+		     fil_list[ifil][0] <  subbox.Lgwbl[_x_]-subbox.safe[_x_] && 
+		     fil_list[ifil][1] >= subbox.safe[_y_] && 
+		     fil_list[ifil][1] <  subbox.Lgwbl[_y_]-subbox.safe[_y_] && 
+		     fil_list[ifil][2] >= subbox.safe[_z_] && 
+		     fil_list[ifil][2] <  subbox.Lgwbl[_z_]-subbox.safe[_z_] )
+		  {
+		    counters[7]++;
+		    counters[13]++;
+		    counters[12]--;
+		  }
 	      }
       	  }
 
@@ -797,21 +801,17 @@ int build_groups(int Npeaks, double zstop, int first_call)
 	    printf("[%s] Writing output at z=%f\n",fdate(), 
 		   outputs.z[iout]);
 
-	  if (write_catalog(iout))
-	    return 1;
+	  fflush(stdout);
+	  MPI_Barrier(MPI_COMM_WORLD);
 
-	  if (params.WriteSnapshot && write_snapshot(iout))
+	  if (write_catalog(iout))
 	    return 1;
 
 	  if (compute_mf(iout))
 	    return 1;
 
 	  if (iout==outputs.n-1)
-	    {
-#ifdef TIMELESS_SNAPSHOT
-	      if (params.WriteTimelessSnapshot && write_timeless_snapshot())
-		return 1;
-#endif
+	    {	      
 	      if (write_histories())
 		return 1;
 	    }
@@ -830,21 +830,28 @@ int build_groups(int Npeaks, double zstop, int first_call)
     if (groups[ig1].point >= 0 && groups[ig1].good) 
       counters[14]++;
 
-  MPI_Reduce(counters, all_counters, NCOUNTERS, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(counters, all_counters, NCOUNTERS, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
 
   if (!ThisTask)
     {
-      printf("Total number of peaks:                %u\n",all_counters[0]);
-      printf("Total number of good halos:           %u\n",all_counters[14]);
-      printf("Particles with N neighbouring groups: %u %u %u %u %u %u\n",
+      printf("Total number of peaks:                 %Lu\n",all_counters[0]);
+      printf("Total number of good halos:            %Lu\n",all_counters[14]);
+      printf("Particles with N neighbouring groups:  %Lu %Lu %Lu %Lu %Lu %Lu\n",
 	     all_counters[1],all_counters[2],all_counters[3],
 	     all_counters[4],all_counters[5],all_counters[6]);
-      printf("Total number of accretion events:     %u\n",all_counters[ 7]);
-      printf("Accretion before evaluating merger:   %u\n",all_counters[ 8]);
-      printf("Accretion after evaluating merger:    %u\n",all_counters[ 9]);
-      printf("Total number of merger events:        %u\n",all_counters[10]);
-      printf("Total number of major merger events:  %u\n",all_counters[11]);
-      printf("Total number of filament particles:   %u\n",all_counters[12]);
+      printf("Total number of accretion events:      %Lu\n",all_counters[ 7]);
+      printf("Accretion before evaluating merger:    %Lu\n",all_counters[ 8]);
+      printf("Accretion after evaluating merger:     %Lu\n",all_counters[ 9]);
+      printf("Accretion of filament particles:       %Lu\n",all_counters[13]);
+      printf("\n");
+      printf("Global stats at the final redshift:\n");      
+      printf("Total number of merger events:         %Lu\n",all_counters[10]);
+      printf("Total number of major merger events:   %Lu\n",all_counters[11]);
+      printf("Final number of filament particles:    %Lu\n",all_counters[12]);
+      printf("Final number of particles in halos:    %Lu\n",all_counters[0]+all_counters[ 7]);
+      printf("Total number of collapsed particles:   %Lu\n",all_counters[0] + all_counters[ 7] + all_counters[12]);
+      printf("Total number of uncollapsed particles: %Lu\n",MyGrids[0].Ntotal - all_counters[0] - all_counters[ 7] - all_counters[12]);
+      printf("\n");
     }
 
 #ifdef PLC
@@ -922,7 +929,7 @@ void merge_groups(int grp1,int grp2,PRODFLOAT time)
 
   int i1;
 
-#ifdef TIMELESS_SNAPSHOT
+#ifdef SNAPSHOT
   /* updates zacc of particles in case one of the halos (or both)
      was below the MinHaloMass threshold but the merged halo is above
      the threshold */
@@ -1057,7 +1064,8 @@ void accretion(int group,int i,int j,int k,int indx,PRODFLOAT F)
   if (groups[group].Mass >= params.MinHaloMass && groups[group].t_appear==-1)
     {
       groups[group].t_appear=F;
-#ifdef TIMELESS_SNAPSHOT
+
+#ifdef SNAPSHOT
       /* updates zacc for all group particles */
       int i1=groups[group].point;
       while (linking_list[i1]!=groups[group].point)
@@ -1077,7 +1085,7 @@ void accretion(int group,int i,int j,int k,int indx,PRODFLOAT F)
   groups[group].bottom=indx;
   linking_list[indx]=groups[group].point;
 
-#ifdef TIMELESS_SNAPSHOT
+#ifdef SNAPSHOT
   /* accretion redshift */
   if (groups[group].Mass >= params.MinHaloMass)
     frag[indx].zacc=F-1.0;
@@ -1392,7 +1400,7 @@ void set_group(int grp,pos_data *myobj)
 }
 
 
-PRODFLOAT q2x(int i,pos_data *myobj,int order)
+PRODFLOAT q2x(int i, pos_data *myobj, int pbc, double Box, int order)
 {
   /* it moves an object from the Lagrangian to the Eulerian space,
    in sub-box coordinates */
@@ -1428,10 +1436,10 @@ PRODFLOAT q2x(int i,pos_data *myobj,int order)
 
 #endif
 
-  if (subbox.pbc[i])
+  if (pbc)
     {
-      if (pos>=subbox.Lgwbl[i]) pos-=subbox.Lgwbl[i];
-      if (pos< 0.0) pos+=subbox.Lgwbl[i];
+      if (pos>=Box) pos-=Box;
+      if (pos< 0.0) pos+=Box;
     }
 
   return pos;
@@ -1479,7 +1487,7 @@ PRODFLOAT distance(int i,pos_data *obj1,pos_data *obj2)
   PRODFLOAT d;
 
   /* here displacements are computed at the ORDER_FOR_GROUPS order */
-  d=q2x(i,obj2,ORDER_FOR_GROUPS)-q2x(i,obj1,ORDER_FOR_GROUPS);
+  d=q2x(i,obj2,subbox.pbc[i],(double)subbox.Lgwbl[i],ORDER_FOR_GROUPS)-q2x(i,obj1,subbox.pbc[i],(double)subbox.Lgwbl[i],ORDER_FOR_GROUPS);
 
   if (subbox.pbc[i])
     {
@@ -1575,7 +1583,7 @@ double condition_PLC(PRODFLOAT F)
   for (i=0, condition=0.0; i<3; i++)
     {
       /* displacement is done up to ORDER_FOR_CATALOG */
-      diff1 = q2x(i,&obj1,ORDER_FOR_CATALOG) + subbox.stabl[i] - ( plc.center[i] -
+      diff1 = q2x(i,&obj1,subbox.pbc[i],(double)subbox.Lgwbl[i],ORDER_FOR_CATALOG) + subbox.stabl[i] - ( plc.center[i] -
 					  MyGrids[0].GSglobal[i]*replicate[i] );
       condition+=diff1*diff1;
     }
@@ -1607,7 +1615,7 @@ int store_PLC(PRODFLOAT F)
     {
       /* displacement is done up to ORDER_FOR_CATALOG */
       x[i] = params.InterPartDist * 
-	( q2x(i,&obj1,ORDER_FOR_CATALOG) + subbox.stabl[i] - ( plc.center[i] - MyGrids[0].GSglobal[i]*replicate[i] ) );
+	( q2x(i,&obj1,subbox.pbc[i],(double)subbox.Lgwbl[i],ORDER_FOR_CATALOG) + subbox.stabl[i] - ( plc.center[i] - MyGrids[0].GSglobal[i]*replicate[i] ) );
     }
 
   coord_transformation_cartesian_polar(x,&rhor,&theta,&phi);
@@ -2140,3 +2148,4 @@ int update_map(unsigned int *nadd)
 
   return 0;
 }
+
