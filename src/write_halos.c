@@ -257,14 +257,13 @@ int write_catalog(int iout)
 	      {
 		/* q and x are in sub-box coordinates, they are transformed
 		   to global box coordinates (forcing PBCs) */
-#ifndef LIGHT_OUTPUT
 		mycat[igood].q[j] = groups[i].Pos[j] + SGrid[j];
 		if (mycat[igood].q[j]<0)
 		  mycat[igood].q[j]+=GGrid[j];
 		if (mycat[igood].q[j]>=GGrid[j])
 		  mycat[igood].q[j]-=GGrid[j];
 		mycat[igood].q[j] *= params.InterPartDist*hfactor;
-#endif
+
 		/* displacement is done up to ORDER_FOR_CATALOG */
 		mycat[igood].x[j] = q2x(j, &obj1, subbox.pbc[j], (double)subbox.Lgwbl[j], ORDER_FOR_CATALOG) + SGrid[j];
 		if (mycat[igood].x[j]<0)
@@ -305,13 +304,10 @@ int write_catalog(int iout)
 
 	  fprintf(file,"#    1) group ID\n");
 	  fprintf(file,"#    2) group mass (Msun%s)\n",labh);
-#ifdef LIGHT_OUTPUT
-	  fprintf(file,"# 3- 5) position (Mpc%s)\n",labh);
-	  fprintf(file,"# 6- 8) velocity (km/s)\n");
-#else
 	  fprintf(file,"# 3- 5) initial position (Mpc%s)\n",labh);
 	  fprintf(file,"# 6- 8) final position (Mpc%s)\n",labh);
 	  fprintf(file,"# 9-11) velocity (km/s)\n");
+#ifndef LIGHT_OUTPUT
 	  fprintf(file,"#   12) number of particles\n");
 #endif
 	  fprintf(file,"#\n");
@@ -321,13 +317,11 @@ int write_catalog(int iout)
 #ifndef LIGHT_OUTPUT
 	      fprintf(file," %12Lu %13.6e %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %12d\n",
 #else
-	      fprintf(file," %12Lu %13.6e %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f\n",
+	      fprintf(file," %12Lu %13.6e %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f\n",
 #endif
 		      mycat[igood].name,
 		      mycat[igood].M,
-#ifndef LIGHT_OUTPUT
 		      mycat[igood].q[0],mycat[igood].q[1],mycat[igood].q[2],
-#endif
 		      mycat[igood].x[0],mycat[igood].x[1],mycat[igood].x[2],
 		      mycat[igood].v[0],mycat[igood].v[1],mycat[igood].v[2]
 #ifndef LIGHT_OUTPUT
@@ -396,13 +390,11 @@ int write_catalog(int iout)
 #ifndef LIGHT_OUTPUT
 		    fprintf(file," %12Lu %13.6e %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %12d\n",
 #else
-	            fprintf(file," %12Lu %13.6e %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f\n",
+		    fprintf(file," %12Lu %13.6e %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f\n",
 #endif
 			    mycat[igood].name,
 			    mycat[igood].M,
-#ifndef LIGHT_OUTPUT
 			    mycat[igood].q[0],mycat[igood].q[1],mycat[igood].q[2],
-#endif
 			    mycat[igood].x[0],mycat[igood].x[1],mycat[igood].x[2],
 			    mycat[igood].v[0],mycat[igood].v[1],mycat[igood].v[2]
 #ifndef LIGHT_OUTPUT
@@ -449,17 +441,13 @@ int write_PLC(int flag)
   /* Writes the plc catalogues */
 
   int i,nhalos,nstored;
-  double hfactor,rhor,theta,phi;
+  double hfactor,rhor,theta,phi,v_los;
   char filename[LBLENGTH],labh[3];
   int NTasksPerFile,collector,itask,next,ThisFile;
   FILE *file;
   MPI_Status status;
   static int FirstCall=1;
-  struct towrite
-  {
-    unsigned long long int name;
-    PRODFLOAT red,x,y,z,vx,vy,vz,Mass,theta,phi,v_los,obsz;
-  } writethis;
+  plc_write_data writethis;
   int idummy;
 
   if (params.DoNotWriteCatalogs)
@@ -513,6 +501,7 @@ int write_PLC(int flag)
 	      else
 		strcpy(labh,"");
 
+#ifndef LIGHT_OUTPUT
 	      fprintf(file,"#    1) group ID\n");
 	      fprintf(file,"#    2) true redshift\n");
 	      fprintf(file,"#  3-5) comoving position (Mpc%s)\n",labh);
@@ -522,6 +511,14 @@ int write_PLC(int flag)
 	      fprintf(file,"#   11) phi (degree)\n");
 	      fprintf(file,"#   12) peculiar velocity along the line-of-sight (km/s)\n");
 	      fprintf(file,"#   13) observed redshift\n");
+#else
+	      fprintf(file,"#    1) group ID\n");
+	      fprintf(file,"#    2) true redshift\n");
+	      fprintf(file,"#    3) group mass (Msun%s)\n",labh);
+	      fprintf(file,"#    4) theta (degree)\n");
+	      fprintf(file,"#    5) phi (degree)\n");
+	      fprintf(file,"#    6) observed redshift\n");
+#endif
 	      fprintf(file,"#\n");
 	    }
 
@@ -530,20 +527,32 @@ int write_PLC(int flag)
 	      coord_transformation_cartesian_polar(plcgroups[i].x,&rhor,&theta,&phi);
 	      writethis.name=plcgroups[i].name;
 	      writethis.red=plcgroups[i].z;
-	      writethis.vx=plcgroups[i].v[0];
-	      writethis.vy=plcgroups[i].v[1];
-	      writethis.vz=plcgroups[i].v[2];
 	      writethis.Mass=plcgroups[i].Mass*params.ParticleMass*hfactor;
 	      writethis.theta=theta;
 	      writethis.phi=phi;
+              v_los=(plcgroups[i].x[0]*plcgroups[i].v[0]+
+		     plcgroups[i].x[1]*plcgroups[i].v[1]+
+		     plcgroups[i].x[2]*plcgroups[i].v[2])/rhor;
+              writethis.obsz=plcgroups[i].z+v_los/SPEEDOFLIGHT*(1.0+plcgroups[i].z);
+#ifndef LIGHT_OUTPUT
+	      writethis.vx=plcgroups[i].v[0];
+	      writethis.vy=plcgroups[i].v[1];
+	      writethis.vz=plcgroups[i].v[2];
 	      writethis.x=plcgroups[i].x[0]*hfactor;
 	      writethis.y=plcgroups[i].x[1]*hfactor;
 	      writethis.z=plcgroups[i].x[2]*hfactor;
-              writethis.v_los=(plcgroups[i].x[0]*plcgroups[i].v[0]+
-			       plcgroups[i].x[1]*plcgroups[i].v[1]+
-			       plcgroups[i].x[2]*plcgroups[i].v[2])/rhor;
-              writethis.obsz=plcgroups[i].z+writethis.v_los/SPEEDOFLIGHT*(1.0+plcgroups[i].z);
+              writethis.v_los=v_los;
+#endif
 
+#ifdef LIGHT_OUTPUT
+	      fprintf(file," %12Lu %16.6f %16.6f %16.6f %16.6f %16.6f\n",
+		      writethis.name,
+		      writethis.red,
+		      writethis.Mass,
+		      writethis.theta,
+		      writethis.phi,
+		      writethis.obsz);
+#else
 	      fprintf(file," %12Lu %16.6f %16.6f %16.6f %16.6f %16.6f %16.6f %16.6f %15.8e %16.6f %16.6f %16.6f %16.6f\n",
 		      writethis.name,
 		      writethis.red,
@@ -554,6 +563,7 @@ int write_PLC(int flag)
 		      writethis.phi,
 		      writethis.v_los,
 		      writethis.obsz);
+#endif
 	      nhalos++;
 
 	    }
@@ -565,7 +575,7 @@ int write_PLC(int flag)
 	    {
 	      idummy=sizeof(int);
 	      fwrite(&idummy,sizeof(int),1,file);
-	      idummy=sizeof(struct towrite);
+	      idummy=sizeof(plc_write_data);
 	      fwrite(&idummy,sizeof(int),1,file);
 	      idummy=sizeof(int);
 	      fwrite(&idummy,sizeof(int),1,file);
@@ -576,7 +586,7 @@ int write_PLC(int flag)
 	  fwrite(&plc.Nstored,sizeof(int),1,file);
 	  fwrite(&idummy,sizeof(int),1,file);
 
-	  idummy=plc.Nstored*sizeof(struct towrite);
+	  idummy=plc.Nstored*sizeof(plc_write_data);
 	  fwrite(&idummy,sizeof(int),1,file);
 
 	  for (i=0; i<plc.Nstored; i++)
@@ -584,25 +594,28 @@ int write_PLC(int flag)
 	      coord_transformation_cartesian_polar(plcgroups[i].x,&rhor,&theta,&phi);
 	      writethis.name=plcgroups[i].name;
 	      writethis.red=plcgroups[i].z;
-	      writethis.vx=plcgroups[i].v[0];
-	      writethis.vy=plcgroups[i].v[1];
-	      writethis.vz=plcgroups[i].v[2];
 	      writethis.Mass=plcgroups[i].Mass*params.ParticleMass*hfactor;
 	      writethis.theta=theta;
 	      writethis.phi=phi;
+	      v_los=(plcgroups[i].x[0]*plcgroups[i].v[0]+
+		     plcgroups[i].x[1]*plcgroups[i].v[1]+
+		     plcgroups[i].x[2]*plcgroups[i].v[2])/rhor;
+              writethis.obsz=plcgroups[i].z+v_los/SPEEDOFLIGHT*(1.0+plcgroups[i].z);
+#ifndef LIGHT_OUTPUT
+	      writethis.vx=plcgroups[i].v[0];
+	      writethis.vy=plcgroups[i].v[1];
+	      writethis.vz=plcgroups[i].v[2];
 	      writethis.x=plcgroups[i].x[0]*hfactor;
 	      writethis.y=plcgroups[i].x[1]*hfactor;
 	      writethis.z=plcgroups[i].x[2]*hfactor;
-              writethis.v_los=(plcgroups[i].x[0]*plcgroups[i].v[0]+
-			       plcgroups[i].x[1]*plcgroups[i].v[1]+
-			       plcgroups[i].x[2]*plcgroups[i].v[2])/rhor;
-              writethis.obsz=plcgroups[i].z+writethis.v_los/SPEEDOFLIGHT*(1.0+plcgroups[i].z);
+              writethis.v_los=v_los;
+#endif
 
-	      idummy=sizeof(struct towrite);
-	      fwrite(&writethis,sizeof(struct towrite),1,file);
+	      idummy=sizeof(plc_write_data);
+	      fwrite(&writethis,sizeof(plc_write_data),1,file);
 	      nhalos++;
 	    }
-	  idummy=plc.Nstored*sizeof(struct towrite);
+	  idummy=plc.Nstored*sizeof(plc_write_data);
 	  fwrite(&idummy,sizeof(int),1,file);
 	}
     }
@@ -635,20 +648,32 @@ int write_PLC(int flag)
 		      coord_transformation_cartesian_polar(plcgroups[i].x,&rhor,&theta,&phi);
 		      writethis.name=plcgroups[i].name;
 		      writethis.red=plcgroups[i].z;
-		      writethis.vx=plcgroups[i].v[0];
-		      writethis.vy=plcgroups[i].v[1];
-		      writethis.vz=plcgroups[i].v[2];
 		      writethis.Mass=plcgroups[i].Mass*params.ParticleMass*hfactor;
 		      writethis.theta=theta;
 		      writethis.phi=phi;
+		      v_los=(plcgroups[i].x[0]*plcgroups[i].v[0]+
+			     plcgroups[i].x[1]*plcgroups[i].v[1]+
+			     plcgroups[i].x[2]*plcgroups[i].v[2])/rhor;
+		      writethis.obsz=plcgroups[i].z+v_los/SPEEDOFLIGHT*(1.0+plcgroups[i].z);
+#ifndef LIGHT_OUTPUT
+		      writethis.vx=plcgroups[i].v[0];
+		      writethis.vy=plcgroups[i].v[1];
+		      writethis.vz=plcgroups[i].v[2];
 		      writethis.x=plcgroups[i].x[0]*hfactor;
 		      writethis.y=plcgroups[i].x[1]*hfactor;
 		      writethis.z=plcgroups[i].x[2]*hfactor;
-		      writethis.v_los=(plcgroups[i].x[0]*plcgroups[i].v[0]+
-                                       plcgroups[i].x[1]*plcgroups[i].v[1]+
-	                               plcgroups[i].x[2]*plcgroups[i].v[2])/rhor;
-		      writethis.obsz=plcgroups[i].z+writethis.v_los/SPEEDOFLIGHT*(1.0+plcgroups[i].z);
+		      writethis.v_los=v_los;
+#endif
 
+#ifdef LIGHT_OUTPUT
+		      fprintf(file," %12Lu %16.6f %16.6f %16.6f %16.6f %16.6f\n",
+			      writethis.name,
+			      writethis.red,
+			      writethis.Mass,
+			      writethis.theta,
+			      writethis.phi,
+			      writethis.obsz);
+#else
 		      fprintf(file," %12Lu %16.6f %16.6f %16.6f %16.6f %16.6f %16.6f %16.6f %15.8e %16.6f %16.6f %16.6f %16.6f\n",
 			      writethis.name,
 			      writethis.red,
@@ -659,6 +684,7 @@ int write_PLC(int flag)
 			      writethis.phi,
 			      writethis.v_los,
 			      writethis.obsz);
+#endif
 		      nhalos++;
 		    }
 		}
@@ -669,33 +695,36 @@ int write_PLC(int flag)
 		  fwrite(&nstored,sizeof(int),1,file);
 		  fwrite(&idummy,sizeof(int),1,file);
 
-		  idummy=nstored*sizeof(struct towrite);
+		  idummy=nstored*sizeof(plc_write_data);
 		  fwrite(&idummy,sizeof(int),1,file);
 		  for (i=0; i<nstored; i++)
 		    {
 		      coord_transformation_cartesian_polar(plcgroups[i].x,&rhor,&theta,&phi);
 		      writethis.name=plcgroups[i].name;
 		      writethis.red=plcgroups[i].z;
-		      writethis.vx=plcgroups[i].v[0];
-		      writethis.vy=plcgroups[i].v[1];
-		      writethis.vz=plcgroups[i].v[2];
 		      writethis.Mass=plcgroups[i].Mass*params.ParticleMass*hfactor;
 		      writethis.theta=theta;
 		      writethis.phi=phi;
+		      v_los=(plcgroups[i].x[0]*plcgroups[i].v[0]+
+			     plcgroups[i].x[1]*plcgroups[i].v[1]+
+			     plcgroups[i].x[2]*plcgroups[i].v[2])/rhor;
+		      writethis.obsz=plcgroups[i].z+v_los/SPEEDOFLIGHT*(1.0+plcgroups[i].z);
+#ifndef LIGHT_OUTPUT
+		      writethis.vx=plcgroups[i].v[0];
+		      writethis.vy=plcgroups[i].v[1];
+		      writethis.vz=plcgroups[i].v[2];
 		      writethis.x=plcgroups[i].x[0]*hfactor;
 		      writethis.y=plcgroups[i].x[1]*hfactor;
 		      writethis.z=plcgroups[i].x[2]*hfactor;
-		      writethis.v_los=(plcgroups[i].x[0]*plcgroups[i].v[0]+
-				       plcgroups[i].x[1]*plcgroups[i].v[1]+
-				       plcgroups[i].x[2]*plcgroups[i].v[2])/rhor;
-		      writethis.obsz=plcgroups[i].z+writethis.v_los/SPEEDOFLIGHT*(1.0+plcgroups[i].z);
+		      writethis.v_los=v_los;
+#endif
 
-		      fwrite(&writethis,sizeof(struct towrite),1,file);
+		      fwrite(&writethis,sizeof(plc_write_data),1,file);
 
 
 		      nhalos++;
 		    }
-		  idummy=nstored*sizeof(struct towrite);
+		  idummy=nstored*sizeof(plc_write_data);
 		  fwrite(&idummy,sizeof(int),1,file);
 		}
 	    }
@@ -766,8 +795,11 @@ int write_PLC(int flag)
 }
 #endif
 
-
+#ifdef ONLYFORFIRSTBHS
+int write_histories(int iout)
+#else
 int write_histories(void)
+#endif
 {
   /* writes merger histories at the end of the run */
 
@@ -897,16 +929,23 @@ int write_histories(void)
   /* collector task opens the file and writes the header */
   if (ThisTask==collector)
     {
+
+#ifdef ONLYFORFIRSTBHS
+      if (params.NumFiles>1)
+	sprintf(filename,"pinocchio.%6.4f.%s.histories.out.%d",outputs.z[iout],params.RunFlag,ThisFile);
+      else
+	sprintf(filename,"pinocchio.%6.4f.%s.histories.out",outputs.z[iout],params.RunFlag);
+#else
       if (params.NumFiles>1)
 	sprintf(filename,"pinocchio.%s.histories.out.%d",params.RunFlag,ThisFile);
       else
 	sprintf(filename,"pinocchio.%s.histories.out",params.RunFlag);
+#endif
 
       if (!ThisTask)
 	printf("[%s] Opening file %s\n",fdate(),filename);
 
       file=fopen(filename,"w");
-      thistree=0;
 
       if (params.CatalogInAscii)
 	{
@@ -925,16 +964,16 @@ int write_histories(void)
 	  fprintf(file,"#\n");
 	  fprintf(file,"# Ntrees & Nbranches: \n");
 	  fprintf(file," %d  %d\n",ntrees_global, nbranch_global);
+	  thistree=0;
 	}
       else
 	{
-
 	  idummy=sizeof(int);
 	  fwrite(&idummy,sizeof(int),1,file);
 	  idummy=sizeof(histories_data);
 	  fwrite(&idummy,sizeof(int),1,file);
 	  idummy=sizeof(int);
-	  fwrite(&idummy,sizeof(int),1,file);	  
+	  fwrite(&idummy,sizeof(int),1,file);
 
 	  idummy=2*sizeof(int);
 	  fwrite(&idummy,sizeof(int),1,file);
@@ -974,14 +1013,38 @@ int write_histories(void)
 	    }
 	  else
 	    {
-	      for (itree=0; itree<ntrees; itree++)
+
+#ifndef LIGHT_OUTPUT
+	      idummy=sizeof(int);
+	      fwrite(&idummy,sizeof(int),1,file);
+	      fwrite(&ntrees,sizeof(int),1,file);
+	      fwrite(&idummy,sizeof(int),1,file);
+
+	      idummy=ntrees*sizeof(int);
+	      fwrite(&idummy,sizeof(int),1,file);
+	      for (itree=0, ibranch=0; itree<ntrees; itree++)
 		{
+		  fwrite(&mycat[ibranch].nick,sizeof(int),1,file);
+		  ibranch+=mycat[ibranch].nick;
+		}
+	      fwrite(&idummy,sizeof(int),1,file);
+
+	      idummy=nbranch_all*sizeof(histories_data);
+	      fwrite(&idummy,sizeof(int),1,file);
+#endif
+	      for (ibranch=0; ibranch<nbranch_all; ibranch++)
+		  fwrite(mycat+ibranch,sizeof(histories_data),1,file);
+#ifndef LIGHT_OUTPUT
+	      fwrite(&idummy,sizeof(int),1,file);
+#endif
+
+	  /*
 		  nbranch_tree=mycat[thisbranch].nick;
 		  idummy=2*sizeof(int);
 		  fwrite(&idummy,sizeof(int),1,file);
 		  fwrite(&thistree,sizeof(int),1,file);
 		  fwrite(&nbranch_tree,sizeof(int),1,file);
-		  ++thistree;
+ 		  ++thistree;
 		  fwrite(&idummy,sizeof(int),1,file);
 
 		  idummy=nbranch_tree*sizeof(histories_data);
@@ -990,7 +1053,7 @@ int write_histories(void)
 		    fwrite(mycat+thisbranch++,sizeof(histories_data),1,file);
 		  idummy=nbranch_tree*sizeof(histories_data);
 		  fwrite(&idummy,sizeof(int),1,file);
-		}
+		  } */
 	    }
 	}
     }
@@ -1043,6 +1106,31 @@ int write_histories(void)
 		}
 	      else
 		{
+#ifndef LIGHT_OUTPUT
+		  idummy=sizeof(int);
+		  fwrite(&idummy,sizeof(int),1,file);
+		  fwrite(&ntrees,sizeof(int),1,file);
+		  fwrite(&idummy,sizeof(int),1,file);
+      
+		  idummy=ntrees*sizeof(int);
+		  fwrite(&idummy,sizeof(int),1,file);
+		  for (itree=0, ibranch=0; itree<ntrees; itree++)
+		    {
+		      fwrite(&mycat[ibranch].nick,sizeof(int),1,file);
+		      ibranch+=mycat[ibranch].nick;
+		    }
+		  fwrite(&idummy,sizeof(int),1,file);
+
+		  idummy=nbranch_all*sizeof(histories_data);
+		  fwrite(&idummy,sizeof(int),1,file);
+#endif
+		  for (ibranch=0; ibranch<nbranch_all; ibranch++)
+		    fwrite(mycat+ibranch,sizeof(histories_data),1,file);
+#ifndef LIGHT_OUTPUT
+		  fwrite(&idummy,sizeof(int),1,file);
+#endif
+
+		  /*
 		  for (itree=0; itree<ntrees; itree++)
 		    {
 		      nbranch_tree=mycat[thisbranch].nick;
@@ -1059,7 +1147,7 @@ int write_histories(void)
 			fwrite(mycat+thisbranch++,sizeof(histories_data),1,file);
 		      idummy=nbranch_tree*sizeof(histories_data);
 		      fwrite(&idummy,sizeof(int),1,file);
-		    }
+		      } */
 		}
 	    }
 	}

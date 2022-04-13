@@ -1237,7 +1237,7 @@ int estimate_file_size(void)
   if (params.StartingzForPLC>0.)
     {
       number = compute_Nhalos_in_PLC(params.LastzForPLC, params.StartingzForPLC);
-      size = number * sizeof(catalog_data);
+      size = number * sizeof(plc_write_data);
       total+=size;
       gb=size2Mb(&size);
       printf("past light cone, number of halos: %d, size: %f %s",(int)number, size,(gb?"Gbyte":"Mbyte"));

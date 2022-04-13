@@ -1342,7 +1342,6 @@ int set_fft_decomposition(void)
 int check_parameters_and_directives(void)
 {
   
-  static unsigned long long largest32 = (unsigned)1<<31;
 
 #ifndef SNAPSHOT
   if (params.WriteTimelessSnapshot || params.WriteDensity)
@@ -1354,6 +1353,8 @@ int check_parameters_and_directives(void)
 #endif
 
 #ifdef SNAPSHOT
+
+  static unsigned long long largest32 = (unsigned)1<<31;
 
 #ifndef LONGIDS
   if ((params.WriteTimelessSnapshot || params.WriteDensity) && MyGrids[0].Ntotal > largest32)

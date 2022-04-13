@@ -358,12 +358,12 @@ int main(int argc, char **argv, char **envp)
   printf("   BoundaryLayerFactor   %3.1f\n",params.BoundaryLayerFactor);
   if (sigma>5.)
     printf("WARNING: this is a %shigh resolution run, it may fail at first attempt,\n  but in this case the code will suggest where the problem is.\n",(sigma>6?"very ":""));
-  printf("\n");
 
 #ifndef CLASSIC_FRAGMENTATION
   if (sigma>6.)
-    printf("  Please consider using 2.5 or even 2.0 for BoundaryLayerFactor to increase the probability of success");
+    printf("  Please consider using 2.5 or even 2.0 for BoundaryLayerFactor to increase the probability of success\n");
 #endif
+  printf("\n");
 
   (void)estimate_file_size();
   printf("\n");

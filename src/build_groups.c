@@ -54,7 +54,7 @@ int build_groups(int Npeaks, double zstop, int first_call)
   static unsigned long long counters[NCOUNTERS],all_counters[NCOUNTERS];
 
 #ifdef PLC
-  static int plc_started=0, last_check_done=0, plc_saved=0;
+  static int plc_started=0, last_check_done=0;
   int irep, save, mysave, storex, storey, storez;
   static double NextF_PLC, DeltaF_PLC;
   double aa, bb, Fplc;
@@ -97,12 +97,12 @@ int build_groups(int Npeaks, double zstop, int first_call)
 #ifdef PLC
       /* initialization of the root finding routine */
       cPLC.function = &condition_F;
-      brent = gsl_root_fsolver_brent;
+      brent  = gsl_root_fsolver_brent;
       solver = gsl_root_fsolver_alloc (brent);
-      NextF_PLC=plc.Fstart;
-      DeltaF_PLC=0.99; // CAPIRE COME FISSARLO
-      brent_err = 1.e-2 * params.InterPartDist;
-      plc.Nstored=0;
+      DeltaF_PLC  = 0.9; // CAPIRE COME FISSARLO
+      NextF_PLC   = plc.Fstart * DeltaF_PLC;
+      brent_err   = 1.e-2 * params.InterPartDist;
+      plc.Nstored = plc.Nstored_last = 0;
 #endif
 
       first_call=0;
@@ -134,63 +134,36 @@ int build_groups(int Npeaks, double zstop, int first_call)
 	}
 
 #ifdef PLC
-      if (frag[iz].Fmax >= plc.Fstop)
+      /* checks if it is time to write the stored PLC halos */
+      if (plc_started && frag[iz].Fmax < NextF_PLC && frag[iz].Fmax >= plc.Fstop)
 	{
-	  /* check whether the plc buffer is full so that it is necessary to write the plc catalog */
-	  if (plc.Nmax - plc.Nstored < plc.Nreplications)
+	  // LEVARE le informazioni in piu`
+	  if (!ThisTask)
+	    printf("[%s] Syncing tasks for PLC...  Nmax=%d, Nstored=%d, Nstored_last=%d, Fmax=%f\n",fdate(),plc.Nmax, plc.Nstored, plc.Nstored_last,frag[iz].Fmax);
+
+	  /* check whether the plc buffer is full so that it is necessary to write the plc catalog 
+	     the criterion is that you need at least space for 
+	     SAFEPLC times the number of halos that have been updated after last check */
+	  mysave = (plc.Nmax - plc.Nstored < SAFEPLC * (plc.Nstored - plc.Nstored_last));
+
+	  MPI_Reduce(&mysave, &save, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+	  MPI_Bcast(&save, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+	  // questo lo mettiamo dentro l'if dopo i test
+	  if (!ThisTask)
+	    printf("[%s] %d tasks require to store PLC halos at F=%6.3F...\n",fdate(),save,frag[iz].Fmax);
+
+	  if (save)
 	    {
-	      /* this condition should not be met twice in the same time interval */
-	      if (plc_saved)
-		{
-
-		  printf(" %d %d %f\n",plc.Nmax, plc.Nstored, frag[iz].Fmax);
-
-		  printf("ERROR on Task %d: it needs to write PLC halos on the file\n",ThisTask);
-		  printf("                  but this has already been done in this time interval.\n");
-		  printf("                  The run will continue but the PLC will be incomplete.\n");
-		  printf("                  Probably there are too many replications.\n");
-
-		  plc.Nstored=0;
-		}
-	      else
-		{
-
-		  /* if the number of free slots is less than the number
-		     of replications, it is time to store the plc */
-		  mysave=1;
-		  MPI_Reduce(&mysave, &save, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-		  MPI_Bcast(&save, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-		  plc_saved=1;
-
-		  if (write_PLC(0))
-		    return 1;
-		  plc.Nstored=0;
-
-		}
-
+	      /* Save PLC halos if at least one task asks to */
+	      if (write_PLC(0))
+		return 1;
+	      plc.Nstored=0;
 	    }
 
-	  if (frag[iz].Fmax < NextF_PLC)
-	    {
-
-	      if (!plc_saved)
-		{
-		  /* this task has no need to save halos */
-		  mysave = 0;
-		  MPI_Reduce(&mysave, &save, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-		  MPI_Bcast(&save, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-		  if (save)
-		    {
-		      if (write_PLC(0))
-			return 1;
-		      plc.Nstored=0;
-		    }
-		}
-	      NextF_PLC *= DeltaF_PLC;
-	      plc_saved=0;
-	    }
+	  NextF_PLC *= DeltaF_PLC;
+	  plc.Nstored_last = plc.Nstored;
+	    
 	}
 #endif
 
@@ -317,7 +290,7 @@ int build_groups(int Npeaks, double zstop, int first_call)
 		{
 		  plc_started=1;
 		  if (!ThisTask)
-		    printf("[%s] Starting PLC reconstruction\n",fdate());
+		    printf("[%s] Starting PLC reconstruction, Task 0 will store at most %d halos\n",fdate(),plc.Nmax);
 		  cputmp=MPI_Wtime();
 		}
 
@@ -810,11 +783,19 @@ int build_groups(int Npeaks, double zstop, int first_call)
 	  if (compute_mf(iout))
 	    return 1;
 
+#ifdef ONLYFORFIRSTBHS
+	  if (iout==outputs.n-1 || iout==10)  /* Here 10 corresponds to z=8 */
+	    {	      
+	      if (write_histories(iout))
+		return 1;
+	    }
+#else
 	  if (iout==outputs.n-1)
 	    {	      
 	      if (write_histories())
 		return 1;
 	    }
+#endif
 
 	  cputime.io += MPI_Wtime() - cputmp;
 
@@ -1599,13 +1580,17 @@ int store_PLC(PRODFLOAT F)
   int i,ii;
   PRODFLOAT x[3];
   double rhor,theta,phi;
+  static int give_message=0;
 
   if (plc.Nstored==plc.Nmax)
     {
-      printf("ERROR on task %d: PLC count overshooted\n",ThisTask);
-      printf("Fragmentation will continue without PLC reconstruction\n");
-      fflush(stdout);
-      plc.Fstart=plc.Fstop=-1;
+      if (!give_message)
+	{
+	  printf("ERROR on task %d: PLC storage overshooted\n",ThisTask);
+	  printf("The PLC output will be incomplete\n");
+	  fflush(stdout);
+	  give_message=1;
+	}
       return 0;
     }
 
