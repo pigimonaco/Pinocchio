@@ -21,9 +21,6 @@ int shift_all_displacements(void);
 int recompute_group_velocities(void);
 #endif
 
-int ngroups;
-
-
 void set_fragment_parameters(int order)
 {
 
@@ -1140,7 +1137,7 @@ int recompute_group_velocities()
 
 
 double myz;
-gsl_function Function;
+static gsl_function Function;
 
 double Integrand_MF(double logm, void *param)
 {

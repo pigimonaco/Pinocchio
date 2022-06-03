@@ -52,7 +52,7 @@ static int WhichSpectrum, NPowerTable=0, NtabEoS=0;
 static double PkNorm, MatterDensity, OmegaK, OmegaRad;
 
 /* declaration of gsl quantities */
-gsl_function Function;
+static gsl_function Function;
 
 #ifdef SCALE_DEPENDENT
 static double kmin,kmax;
