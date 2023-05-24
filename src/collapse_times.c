@@ -1,5 +1,5 @@
 /*****************************************************************
- *                        PINOCCHIO  V4.1                        *
+ *                        PINOCCHI0  V5.0                        *
  *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
  *****************************************************************
  
@@ -24,317 +24,1606 @@
  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 */
 
+
 #include "pinocchio.h"
+#include <gsl/gsl_interp2d.h>
+#include <gsl/gsl_spline2d.h>
+#include <immintrin.h>
 
-double inverse_collapse_time(double *, double *, double *, double *, int *);
-double ell(double,double,double,double,double);
-void ord(double *,double *,double *);
+/*------------------------------------------------------- Macros declaration --------------------------------------------------------*/
 
-int compute_collapse_times(int ismooth)
+
+#define SMALL ((double)1.e-20)
+
+
+/*------------------------------------------------------- Functions definition -------------------------------------------------------*/
+
+
+/* Ellipsoidal solution at 3rd perturbative order in two different ways */
+
+__attribute__((always_inline)) double ell_classic               ( int, double, double, double);  
+__attribute__((always_inline)) double ell_sng                   ( int, double, double, double);  
+
+/* Collapase time calculation */
+
+__attribute__((always_inline)) double ell                       ( int, double, double, double); 
+
+/* Normal calculation of inverse collpase time */
+
+__attribute__((always_inline)) double inverse_collapse_time     ( int, double *, double *, double *, double *, int *);
+
+/* Interpolation of collpase time from a table containing collpase times */
+
+#ifdef TABULATED_CT
+
+__attribute__((always_inline)) double interpolate_collapse_time (double, double, double);
+
+#endif 
+
+/* Order inverse collpase time */
+
+__attribute__((always_inline)) void ord                         (double *,double *,double *);
+
+
+/*------------------------------------------------------- Global Variables declaration ----------------------------------------------------*/
+
+
+/* Declaring the replicated variables that will be use by each single thread */
+/* NOTE: Threadprivate directive specifies that variables are replicated, with each thread having its own copy. It's a declarative directive */
+
+#if defined( _OPENMP )
+
+/* Cpu_time for elliptical collapse */
+
+double cputime_ell;
+#pragma omp threadprivate(cputime_ell) // threadprivate directive specifies that variables are replicated, with each thread having its own copy
+
+
+/* It will be use as a fail "flag" indicating that for some reason the calculation of collapse time failed */
+
+int fails;
+#pragma omp threadprivate(fails)
+
+/* If there's no _OPENMP macro then define cputime_ell */
+
+#else
+#define cputime_ell            cputime.ell
+#endif
+
+/* Declaring smoothing radius */
+
+int ismooth;
+
+
+/*------------------------------------------------------- Functions implementation --------------------------------------------------------*/
+
+
+/* Classical ellipsoidal collapse solution */
+
+
+inline double  ell_classic(int ismooth, double l1, double l2, double l3) 
+{
+	/*
+	This rouine computes the smallest non-negative solution of the 3rd
+	order equation for the ellipsoid, and corrects it to reproduce the
+	spherical collapse correctly.
+	*/
+
+	/* Local variables declaration */
+
+	double ell;
+	double del = l1 + l2 + l3;    // l1,l2 e l3 sono gli autovalori del tensore di deformazione (lambda1, lambda2, lambda3). del = delta_linear
+	double det = l1 * l2 * l3;    // Determinante del tensore diagonalizzato
+	
+	/* Vanishing lambda1 eigenvalue case */
+
+	if (fabs(l1) < SMALL)
+		{
+		ell = -0.1;
+		}
+	
+	/* Not vanishing lambda1 eigenvalue case */
+
+	else
+		{
+		double den = det / 126. + 5. * l1 * del * ( del - l1 ) / 84.;   // den == D nel paper 
+
+		/* Check 1st pertubative order conditions */
+
+		if (fabs(den) < SMALL) 
+			{
+			if (fabs(del-l1) < SMALL)
+				{
+				if (l1 > 0.0)
+					{
+
+					/* Zel'dovich approximation */
+
+					ell = 1. / l1; // 1/lambda1  
+					    
+					}                
+				else
+					{
+
+					ell = -.1;
+
+					}
+				}
+
+			else
+				{
+
+				/* Check 2nd perturbative order conditions */
+
+				double dis = 7. * l1 * ( l1 + 6. * del ); // radice quadrata negativa altrimenti
+				if (dis < 0.0)
+					{
+					ell = -.1;
+					}
+
+				/* 2nd order solution */
+
+				else
+					{
+					ell = ( 7. * l1 - sqrt(dis) ) / ( 3. *l1 * ( l1 - del ) );
+					if (ell < 0.)
+						{ 
+						ell = -.1;
+						}
+					}
+				}
+			}
+		else
+			{
+
+			/* 3rd order perturbative solution. For more details about the equations implemented see Monaco 1996a */
+
+			/* Intermediate values */
+
+			double rden = 1.0 / den ;
+		
+			double a1   = 3. * l1 * ( del - l1 ) / 14. * rden ;
+			double a1_2 = a1 * a1 ;
+		
+			double a2 = l1 * rden ;
+			double a3 = -1.0 * rden ;
+
+			/* The collapse time b_c will a combination of R, Q and D == den,  */
+
+			double q  = ( a1_2 - 3. * a2 ) / 9. ;
+			double r  = ( 2. * a1_2 * a1 - 9. * a1 * a2 + 27. * a3 ) / 54. ;
+
+			double r_2_q_3 = r * r - q * q * q ; 
+		
+			/* Check 3rd perturbative order conditions */
+  
+			/* ---------------- Case 1 --------------- */
+			/* If R^2 - Q^2 Z > 0,  which is valid for spherical and quasi spherical perturbations. */
+
+    		/* 3rd order solution */
+
+			if (r_2_q_3 > 0) // radice quadrata negativa altrimenti 
+				{
+				double fabs_r = fabs(r);
+				double sq  = pow(sqrt(r_2_q_3) + fabs_r, 0.333333333333333) ;
+				ell = -fabs_r / r * (sq + q / sq) - a1 / 3. ;
+
+				if (ell < 0.) 
+					{
+					ell = -.1;
+					}
+				}
+
+			/* ---------------- Case 2 --------------- */
+			/* The solution has to be chosen as the smallest non-negative one between s1, s2 and s3 */
+  
+			/* 3rd order solution */
+
+			else
+				{
+				double sq    = 2 * sqrt(q);
+				double inv_3 = 1.0 / 3;
+				double t     = acos(2 * r / q / sq);
+				double s1 = -sq * cos(t * inv_3) -a1 * inv_3;
+				double s2 = -sq * cos((t + 2. * PI) * inv_3) - a1 * inv_3;
+				double s3 = -sq * cos((t + 4. * PI) * inv_3) - a1 * inv_3;
+				
+				if (s1 < 0.) 
+					{
+					s1 =1.e10;
+					} 
+				if (s2 < 0.) 
+					{			
+					s2 = 1.e10;
+					}
+				if (s3 < 0.)
+					{ 
+					s3 = 1.e10;
+					}
+				
+				ell = (s1 < s2? s1 : s2);
+				ell = (s3 < ell? s3 : ell);
+				if (ell == 1.e10) 
+					{
+					ell =- .1;
+					}
+				}
+			}
+		}
+	
+	if (del > 0. && ell > 0.)
+		{
+		double inv_del = 1.0 / del;
+		ell += -.364 * inv_del * exp( -6.5 * ( l1 - l2 ) * inv_del - 2.8 * ( l2 - l3 ) * inv_del);
+		}
+
+	return ell;
+}
+
+
+/* Ellipsoidal collapse following Nadkarni-Ghosh & Singhal (2016) */
+
+/* We follow the dynamics of triaxial collapse in terms of eigenvalues of the deformation tensor (lambda_a), the velocity derivative tensor (lambda_v) and the gravity Hessian 
+(lambda_d). The idea is: starting from BM96, where the dynamic is characterized by the evolution of the three principal axes (the physical coordinates is r=a_i(t)q(i = 1,2,3)). 
+In this case the evolution of the ellipse is completely determined once six parameters are known: the three axes lengths and their velocities at some initial epoch a_init. 
+An alternate description of the ellipse can be given by a set of nine dimensionless parameters lambda_a, lambda_v, lambda_d. In this description when an axis is collpasing 
+lamda_a ----> 1, whereas for an expanding axes lambda_a -----> -inf.
+delta = lambda_d_1 + lambda_d_2 + lambda_d_3 
+The nine (dimensionless) eigenvalues completely characterize the density, velocity and shape perturbations in this model of ellipsoidal collapse. 
+For the net system for the nine eigenvalues see Nadkarni-Ghosh & Singhal (2016) pag. 5 */
+
+
+/* We have then to solve a system of differential equations          */
+/* System of ODEs: specify f_i(t) = r.h.s. of differential equations */
+/* f[i] = d(l_a)/da; f[i+3] = d(l_v)/da; d(l_d)/da                   */
+
+int sng_system(double t, const double y[], double f[], void *sng_par)
 {
 
-  int local_x,local_y,local_z,index,i,fail;
-  double Fnew,diff_ten[6],delta,local_average,local_variance,global_average,global_variance,Np;
-  double lambda1,lambda2,lambda3;
+    /* Local variables declaration */
 
-  /* initialize the variance of the slice */
-  local_variance = 0.0;
-  local_average  = 0.0;
+	int i,j;
+	double sum;
 
-  /* initialize Fmax if it is the first smoothing */
-  if (!ismooth)
-    for (i=0; i<MyGrids[0].total_local_size; i++)
-      {
-	products[i].Fmax   = -10.0;
-	products[i].Rmax   = -1;
-	products[i].Vmax[0] = 0.0;
-	products[i].Vmax[1] = 0.0;
-	products[i].Vmax[2] = 0.0;
+	/* Needed cosmological parameters calculation at the given z */
+
+	double omegam = OmegaMatter(1. / t-1.);  /* Cosmological mass density parameter as a function of redshift DIMENSIONLESS. From cosmo.c */
+	double omegal = OmegaLambda(1. / t-1.);  /* Cosmological mass density parameter as a function of redshift DIMENSIONLESS. From cosmo.c */
+
+	/* y array contains the eigenvalues lambda_a, lambda_v and lambda_d */
+	/* In this case y[6] = lambda_d_1, y[7] = lambda_d_2, y[8] = lambda_d_3 */
+
+	double delta = y[6] + y[7] + y[8];
+
+    /* Calculating r.h.s sums of lambda_d_i evolution */
+	/* Loop from 0 -----> 3 beacause lambda_i has 3 component (it's the same for lambda_a and lmabda_v) */
+	
+	/* ---------------- Sum  i != j --------------- */
+
+	for (i=0; i<3; i++) 
+		{
+		sum=0.;
+		for (j=0; j<3; j++) 
+			{
+			if (i==j || y[i] == y[j]) // Check i != j
+				{
+				continue;
+				}
+    		else
+				{
+				sum += (y[j+6] - y[i+6]) * ((1. - y[i]) * (1. - y[i]) * (1. + y[i+3]) 
+				       - (1. - y[j]) * (1. - y[j]) * (1. + y[j+3])) 
+					   / ((1. - y[i]) * (1. - y[i]) - (1. - y[j]) * (1. - y[j]));
+				}
+			}
+
+
+	/* ---------------- Gathering r.h.s of lambda_d_i equation --------------- */		
+    
+		f[i+6] = ((5./6. + y[i+6]) * 
+				 ((3. + y[3] + y[4] + y[5]) 
+		 		 - (1. + delta) / (2.5 + delta) * (y[3] + y[4] + y[5]))
+				 - (2.5 + delta) * (1. + y[i+3]) + sum) / t;
+
+    /* ---------------- Gathering r.h.s of lambda_a_i equation --------------- */	
+
+		f[i]   = (y[i+3]*(y[i]-1.0)) / t;
+
+	/* ---------------- Gathering r.h.s of lambda_v_i equation --------------- */
+	/* NOTE: here is the part where models of modified gravity can be introduced bacause there's a direct dependece on OMEGA_M and OMEGA_LAMBDA   */	
+
+		f[i+3] = (0.5 * (y[i+3] * (omegam - 2.0 * omegal - 2.0) 
+
+#ifdef MOD_GRAV_FR
+				 - 3.0 * omegam * y[i+6] * (1. + ForceModification(*(double*)sng_par, t, delta))
+#else
+				 - 3.0 * omegam * y[i+6] 
+#endif
+				 - 2.0 * y[i+3] * y[i+3])) / t;
+
+		}
+
+	return GSL_SUCCESS; // GSL_SUCCESS if the calculation of the SNG ODE system was completed successfully
+}
+
+/* Solving the ODE system for the ellipsoidal collapse following SNG */
+
+inline double  ell_sng(int ismooth, double l1, double l2, double l3) 
+{
+	/* Needed variables for the integrations step */
+	
+	double ode_param, hh = 1.e-6; // hh = initial step-size, ode_param = arbitrary parameters of the system == Smoothing_radius in our case
+
+    /* Setting integration time */
+
+	double amin = 1.e-5, amax = 5.0;
+	double mya = amin;
+    
+	/* Step type: Explicit embedded Runge-Kutta-Fehlberg (4, 5) method */
+
+	const gsl_odeiv2_step_type *T = gsl_odeiv2_step_rkf45;
+
+	/* Newly allocated instance of a stepping function of type T for a system of dim = 9 */
+
+	gsl_odeiv2_step    *ode_s     = gsl_odeiv2_step_alloc(T,9); 
+
+	/* The control function examines the proposed change to the solution produced by a stepping function and attempts to determine the optimal step-size for a user-specified level of error.
+	The standard control object is a four parameter heuristic based on absolute and relative errors eps_abs and eps_rel,and scaling factors a_y and a_dydt 
+	for the system state y(t) and derivatives y'(t) respectively. */
+
+	gsl_odeiv2_control *ode_c     = gsl_odeiv2_control_standard_new(1.0e-6, 1.0e-6, 1.0, 1.0);
+
+	/* The evolution function combines the results of a stepping function and control function to reliably advance the solution forward one step using an acceptable step-size.
+	This function returns a pointer to a newly allocated instance of an evolution function for a system of dim = 9 */
+
+	gsl_odeiv2_evolve  *ode_e     = gsl_odeiv2_evolve_alloc(9);
+
+	/* A system of equations is defined using the gsl_odeiv2_system datatype */
+	/* This data type defines a general ODE system with arbitrary parameters. In this case we need the r.h.s of the system that will be solved: sng_system
+	The vector of derivatives elements: jac
+	The dimension of the system of equations: 9 
+	A pointer to the arbitrary parameters of the system: (void*)&ode_param */
+    
+	gsl_odeiv2_system   ode_sys   = {sng_system, jac, 9, (void*)&ode_param};
+
+    /* GrowingMode is linear growing mode, interpolated on the grid. See cosmo.c for details (double GrowingMode(double z, double k))*/
+    /*---------------- Scale dependent case --------------- */
+
+#ifdef SCALE_DEPENDENT
+
+	double D_in = GrowingMode(1./amin-1.,params.k_for_GM/Smoothing.Radius[ismooth]*params.InterPartDist); 
+
+	/*---------------- Scale independent case --------------- */
+
+#else
+
+	double D_in = GrowingMode(1./amin-1.,0.);
+
+#endif
+    
+    /* ------------------- Chiedere a cosa serve questo valore -------------------------------- */
+
+	double y[9] = {l1*D_in, l2*D_in, l3*D_in,
+		          l1*D_in/(l1*D_in - 1.), l2*D_in/(l2*D_in - 1.), l3*D_in/(l3*D_in - 1.),
+		          l1*D_in, l2*D_in, l3*D_in};
+    
+    /* Assignment of ode_param in two different cases */
+
+#ifdef MOD_GRAV_FR
+
+	if (ismooth<Smoothing.Nsmooth-1)
+		{
+		ode_param = Smoothing.Radius[ismooth];
+		}
+	else
+		{
+		ode_param = Smoothing.Radius[ismooth-1];
+		}
+#endif
+
+    /*---------------- Integration step --------------- */
+
+	double olda = mya; 
+	double oldlam = y[0]; 
+
+	while ( mya < amax )
+		{
+			
+		/* gsl_odeiv2_evolve_apply advances the system from time t and position y using the stepping function selected before i.e. rkf45. 
+		The new time and position are stored in t and y on output*/
+			
+		int status = gsl_odeiv2_evolve_apply(ode_e, ode_c, ode_s, &ode_sys, &mya, amax, &hh, y);
+
+		/* Correct integration check */
+
+		if (status!=GSL_SUCCESS) 
+			{
+			printf("ERROR on task %d: integration of cosmological quantities failed\n",ThisTask);
+			fflush(stdout);
+			return -1;
+			}
+
+    	/*---------------- Update ellipsoid axis --------------- */
+
+		if (y[0] >= 0.99999)
+			{
+			return olda + (1. - oldlam) * (mya - olda) / (y[0] - oldlam);
+			}
+		}
+
+	/* In this case the ellipsoid does not collapse */
+
+	return 0;
+}
+
+/*------------------------------------------------------------------------------------------------------------------------------------*/
+/* --------------------------------------------------- Modified gravity model --------------------------------------------------------*/
+
+#ifdef MOD_GRAV_FR
+
+double ForceModification(double size, double a, double delta)
+{
+
+	double ff        = 4.*params.OmegaLambda/params.Omega0;
+	double thickness = FR0 / params.Omega0 / pow(H_over_c * size,2.0)
+					   * pow(a,7.)  * pow((1.+delta),-1./3.)
+	                   * ( pow((1.0 + ff) / (1.0 + ff*pow(a,3.)) ,2.0) - pow((1.0 + ff) / (1.0 + delta + ff*pow(a,3.)) ,2.0));
+	double F3        = (thickness * (3. + thickness * (-3. + thickness)));
+	if (F3<0.)
+		{
+		F3=0.;
+		}
+	return (F3<1. ? F3/3. : 1./3);
+}
+
+#endif
+
+/*------------------------------------------------------------------------------------------------------------------------------------*/
+
+/*---------------------------------------- Calculation of b_c == growing mode at collapse time ---------------------------------------*/
+
+inline double ell(int ismooth, double l1, double l2, double l3) 
+{
+
+/*---------------- Classic ellipsoidal collapse case --------------- */
+
+#ifdef ELL_CLASSIC
+
+	double bc = ell_classic(ismooth, l1, l2, l3); // ismooth == Smoothing radius, l1,l2,l3 are the deformation tensor eigenvalues 
+
+	if (bc > 0.0)
+		{
+		return 1. + InverseGrowingMode(bc,ismooth);
+		}
+	else
+		{
+		return 0.0;
+		}
+#endif
+
+/*---------------- SNG ellipsoidal collapse case --------------- */
+
+#ifdef ELL_SNG
+
+	double bc = ell_sng(ismooth, l1, l2, l3);
+
+	if (bc > 0.0)
+		{
+		return 1. / bc;
+		}
+	else
+		{
+		return 0.0;
+		}
+#endif
+
+}
+
+/* ------------------------------------  Computation of collapse time i.e. F = 1 + z_collapse and variance ------------------------------------ */
+
+inline int compute_collapse_times(int ismooth)
+{
+    /* Local avarage and variance declaration */
+
+	double local_average , local_variance;
+
+	/* Initialization */
+
+	local_variance = 0.0;
+	local_average  = 0.0;
+
+	/* Initialize Fmax, Rmax and velocity if it is the first smoothing */
+	/* The initialization is done in a parallel way */
+	/* Each thread initializes its corresponding array elements. 
+	This can improve the initialization performance when executed on systems with multiple processors or cores */
+
+	if (!ismooth)
+			
+    	/* ---------------- Parallel initialization --------------- */
+
+#if defined( _OPENMP )
+#pragma omp parallel for 
+#endif 
+    
+		/* Loop on all particles */ 
+	
+		for (int i = 0; i < MyGrids[0].total_local_size; i++)
+			{
+
+			/*----------- Common initialization ----------- */		
+
+			products[i].Fmax   = -10.0;
+			products[i].Rmax   = -1;
+
+			/*----------- Zel'dovich case ----------- */
+
+			products[i].Vel[0] = 0.0;
+			products[i].Vel[1] = 0.0;
+			products[i].Vel[2] = 0.0;
+
+			/*----------- TWO_LPT case ----------- */
+
 #ifdef TWO_LPT
-	products[i].Vmax_2LPT[0] = 0.0;
-	products[i].Vmax_2LPT[1] = 0.0;
-	products[i].Vmax_2LPT[2] = 0.0;
+
+			products[i].Vel_2LPT[0] = 0.0;
+			products[i].Vel_2LPT[1] = 0.0;
+			products[i].Vel_2LPT[2] = 0.0;
+
+			/*----------- Three_LPT case ----------- */
+
 #ifdef THREE_LPT
-	products[i].Vmax_3LPT_1[0] = 0.0;
-	products[i].Vmax_3LPT_1[1] = 0.0;
-	products[i].Vmax_3LPT_1[2] = 0.0;
-	products[i].Vmax_3LPT_2[0] = 0.0;
-	products[i].Vmax_3LPT_2[1] = 0.0;
-	products[i].Vmax_3LPT_2[2] = 0.0;
+			
+			products[i].Vel_3LPT_1[0] = 0.0;
+			products[i].Vel_3LPT_1[1] = 0.0;
+			products[i].Vel_3LPT_1[2] = 0.0;
+			products[i].Vel_3LPT_2[0] = 0.0;
+			products[i].Vel_3LPT_2[1] = 0.0;
+			products[i].Vel_3LPT_2[2] = 0.0;
 #endif
 #endif
-      }
+			}
+			
+	/* Declaration and initialization of variables when the openmp option is ON */	
+	/* Inside the parallel region, each thread initializes its own local variables i.e.
+	/* mylocal_average, mylocal_variance, cputime_invcoll, and cputime_ell */ 
+	/* These variables are private to each thread and are not shared among threads, ensuring data consistency.*/
+     
+#if defined( _OPENMP )
 
-  /* loop on all particles in the slice */
-  for (local_z=0; local_z < MyGrids[0].GSlocal_z; local_z++)
-    {
-      for (local_y=0; local_y < MyGrids[0].GSlocal_y; local_y++)
-	{
-	  for (local_x=0; local_x < MyGrids[0].GSlocal_x; local_x++)
-	    {
+	double invcoll_update = 0, ell_update = 0;
 
-	      index = local_x + (MyGrids[0].GSlocal_x) * 
-		(local_y + local_z * MyGrids[0].GSlocal_y);
+#pragma omp parallel
 
-	      /* NB: THIS IS THE POINT WHERE DIFFERENT BOXES SHOULD BE CONSIDERED */
+	{   
 
-	      /* sum all contributions */
-	      for (i=0; i<6; i++)
-		diff_ten[i] = second_derivatives[0][i][index];
+	/* Thread-specific variables declaration */	
 
-	      /* Computation of the variance of the linear density field */
-	      delta = diff_ten[0]+diff_ten[1]+diff_ten[2];
-	      local_average  = local_average  + delta;
-	      local_variance = local_variance + delta*delta;
+	double  mylocal_average, mylocal_variance;
+    double  cputime_invcoll;
+		
+	/* Support variables */	
 
-	      /* Computation of ellipsoidal collapse */
-	      Fnew = inverse_collapse_time(diff_ten, &lambda1, &lambda2, &lambda3, &fail);
+	int     fails = 0;
+	int     pid = omp_get_thread_num();
+		
+	/* Initializitation */
 
-#ifdef SCALE_DEPENDENT_GROWTH
-	      SDGM.flag=0;
-	      SDGM.ismooth=ismooth;
+	mylocal_average     = 0;
+	mylocal_variance    = 0;
+	cputime_invcoll     = 0;
+	cputime_ell         = 0;
+
+#else
+
+	/* If openmp is OFF */
+	/* This approach is used to avoid conditional compilation directives within the code and maintain consistency in variable
+	names across the parallel and serial versions of the code. 
+	When OpenMP is disabled, the program uses the same variable names, but they refer to the original variables directly */
+
+#define mylocal_average   local_average
+#define mylocal_variance  local_variance
+#define cputime_invcoll   cputime.invcoll
+#define cputime_ell       cputime.ell
+	
 #endif
-	      /* comment these two lines out if F is the inverse growing mode */
-	      if (Fnew>0)
-		Fnew = 1.+InverseGrowingMode(1./Fnew);
 
-	      if (fail)
+/*----------------- Calculation of variance, avarage and collapse time ----------------*/
+
+	double tmp = MPI_Wtime();
+
+	/* When you use a parallel region, OpenMP will automatically wait for all threads to finish before execution */
+	/* If you do not need synchronization after the loop, you can disable it with nowait */
+
+#ifdef _OPENMP
+#pragma omp for nowait
+#endif
+
+	/* Loop on all particle */
+
+	for (int index = 0; index < MyGrids[0].total_local_size; index++)
 		{
-		  printf("ERROR on task %d: failure in inverse_collapse_time\n",ThisTask);
-		  fflush(stdout);
-		  return 1;
+
+		/* Computation of second derivatives of the potential i.e. the gravity Hessian */
+	
+		double diff_ten[6]; 
+		for (int i = 0; i < 6; i++)
+			{
+			diff_ten[i] = second_derivatives[0][i][index];
+			}
+
+		/* Computation of the variance of the linear density field */
+	
+		double delta      = diff_ten[0] + diff_ten[1] + diff_ten[2];
+		mylocal_average  += delta;
+		mylocal_variance += delta*delta;
+
+		/* Computation of the collapse time */
+
+		double lambda1,lambda2,lambda3;
+		int    fail;
+		double Fnew = inverse_collapse_time(ismooth, diff_ten, &lambda1, &lambda2, &lambda3, &fail); 
+    
+		/* Fail check during computation of the collapse time */
+
+		if (fail)
+			{
+			printf("ERROR on task %d: failure in inverse_collapse_time\n",ThisTask);
+			fflush(stdout);
+
+    		/* Workflow control */
+
+#if !defined( _OPENMP )		    		    
+			return 1;
+#else
+			fails = 1;
+#endif
+			}
+    
+		/* Updating collapse time */
+
+		if (products[index].Fmax < Fnew)
+			{
+			products[index].Fmax = Fnew;
+			products[index].Rmax = ismooth;
+			}	      
+
 		}
 
-	      if (products[index].Fmax < Fnew)
-		{
-		  products[index].Fmax = Fnew;
-		  products[index].Rmax = ismooth;
-		}
+	/* CPU collapse time */
 
-	    }
+	cputime_invcoll += MPI_Wtime() - tmp;
+	
+
+/* ------------------- Updates local variance and local average using OpenMP atomic operations  ------------------*/
+/* local_variance and local_average are shared variables that are updated by each thread (mylocal_variance and mylocal_average)*/
+
+#if defined( _OPENMP )
+
+#pragma omp atomic
+
+	local_variance += mylocal_variance;
+
+#pragma omp atomic
+
+	local_average += mylocal_average;  
+
+/* ------------------------------------ Updates total CPU collapse time -----------------------------------*/
+/* cputime_invcoll and cputime_ell are local variables that are updated by each thread and then accumulated using atomic operations */
+
+#pragma omp atomic
+
+	invcoll_update += cputime_invcoll;
+
+#pragma omp atomic	
+
+	ell_update     += cputime_ell;
+
+#endif	
+
+#if defined( _OPENMP ) 
 	}
-    }
-
-  /* Computes the obtained variance */
-  global_variance = 0.0;
-  global_average  = 0.0;
-
-  MPI_Reduce(&local_variance, &global_variance, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-  MPI_Reduce(&local_average , &global_average , 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-
-  if (!ThisTask)
-    {
-      Np = (double)MyGrids[0].GSglobal_x * (double)MyGrids[0].GSglobal_y *(double)MyGrids[0].GSglobal_z;
-      global_variance /= Np;
-      global_average  /= Np;
-    }
-
-  MPI_Bcast(&global_variance, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-
-  Smoothing.TrueVariance[ismooth]=global_variance;
-
-#ifdef SCALE_DEPENDENT_GROWTH
-  SDGM.flag=0;
-  SDGM.ismooth=ismooth;
-  Smoothing.TrueVariance[ismooth] *= GrowingMode(params.camb.ReferenceRedshift);
 #endif
 
+	int all_fails = 0; 
 
-  return 0;
+/* -------------------------- Updates cpu collapse time for a single threads -----------------------------*/
+
+#if defined (_OPENMP)
+
+#pragma omp atomic
+
+	cputime.invcoll += invcoll_update/internal.nthreads_omp; 
+
+#pragma omp atomic	
+
+	cputime.ell     += ell_update/internal.nthreads_omp;
+
+#pragma omp atomic
+
+	/* fails is a local variable that indicates the number of failures in the computation. 
+	Each thread updates fails, and then the values are accumulated using atomic operations */
+
+	all_fails       += fails;
+
+#endif
+    
+	/* Fail check during computation of the inverse collapse time */
+	/* If there were failures, an error message is printed and the function returns 1*/
+
+	if (all_fails)
+		{
+		printf("ERROR on task %d: failure in inverse_collapse_time\n",ThisTask);
+		fflush(stdout);
+		return 1;
+		}
+
+	/* Calculating obtained variance and avarage */		
+
+	double global_variance = 0.0;
+	double global_average  = 0.0;
+    
+	/* Calculates the global variance and average by reducing the values of local_variance and local_average across all MPI tasks*/
+
+	MPI_Reduce(&local_variance, &global_variance, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+	MPI_Reduce(&local_average , &global_average , 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+
+	/* If the current task is the root task (task 0), it divides the global variance and average by the total number of data points (MyGrids[0].Ntotal) 
+	to obtain the average values per data point */
+
+	if (!ThisTask)
+		{
+		global_variance /= (double)MyGrids[0].Ntotal;
+		global_average  /= (double)MyGrids[0].Ntotal;
+		}
+	
+	/* Broadcasts the value of global_variance from the root task to all other tasks using MPI_Bcast */
+
+	MPI_Bcast(&global_variance, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+	/* Stores the true variance*/
+
+	Smoothing.TrueVariance[ismooth] = global_variance;
+
+	return 0;
+}
+
+/* ------------------------------------  Diagonalization of the potential Hessian ------------------------------------ */
+
+
+inline double inverse_collapse_time(int ismooth, double * restrict deformation_tensor, double * restrict x1, double * restrict x2, double * restrict x3, int * restrict fail) 
+{
+    
+	/* Local variables declaration */
+	/* mu1, mu2 and mu3 are the principal invariants of the 3x3 tensor of second derivatives */
+
+	double mu1, mu2, mu3;
+	double dtensor[6] = { deformation_tensor[0], deformation_tensor[1] ,
+					 	  deformation_tensor[2], deformation_tensor[3] ,
+					 	  deformation_tensor[4], deformation_tensor[5] };
+	*fail = 0;
+
+	/*  Performs diagonalization of the tensor by calculating the values of mu1, mu2, and mu3 */
+
+	mu1 = dtensor[0] + dtensor[1] + dtensor[2];
+	double mu1_2 = mu1 * mu1;
+	mu2 = 0.5 * mu1_2;
+
+    /* By define add[3] inside and outside the scope, the code ensures that any previous variable with the same name add is not affected
+	and a new variable add is created within the block. This is useful when the same variable name needs to be used again in the code without
+	conflicting with any previous variable of the same name */
+
+	{
+	double add[3];
+	add[0] = dtensor[0]*dtensor[0];
+	add[1] = dtensor[1]*dtensor[1];
+	add[2] = dtensor[2]*dtensor[2];
+	mu2 -= 0.5 * (add[0] + add[1] + add[2]);
+	}
+
+	/* Redefinition outside the block to calculate the squares of dtensor[3], dtensor[4], and dtensor[5].
+	 This allows separate storage for these intermediate calculations, preventing any unintended interference or confusion between the two sets of calculations.*/
+	
+	double add[3];
+	add[0] = dtensor[3]*dtensor[3];
+	add[1] = dtensor[4]*dtensor[4];
+	add[2] = dtensor[5]*dtensor[5];
+	mu2 -= add[0] + add[1] + add[2];
+
+    /* mu3 calculation */
+
+	mu3 =  dtensor[0]*dtensor[1]*dtensor[2] +
+		2.*dtensor[3]*dtensor[4]*dtensor[5] -
+		dtensor[0]*add[2] -
+		dtensor[1]*add[1] -
+		dtensor[2]*add[0];
+
+	/* Check if the tensor is already diagonal */
+
+	double q;
+	q = ( mu1_2 - 3.0*mu2 ) /9.0;
+
+	if (q == 0.)
+		{
+
+		/* In this case the tensor is already diagonal */
+
+		*x1 = dtensor[0];
+		*x2 = dtensor[1];
+		*x3 = dtensor[2];
+
+		}
+	else
+		{  
+
+		/* The solution has to be chosen as the smallest non-negative one between x1, x2 and x3 */
+
+		double r = -(2.*mu1_2*mu1 - 9.0*mu1*mu2 + 27.0*mu3)/54.;
+        
+		/* Fail check */
+
+		if (q*q*q < r*r || q<0.0)
+			{
+			return -10.0;
+			}
+
+        /* Calculating x1, x2, x3 solution in the same way as it done in ell_classic */
+
+		double sq = 2 * sqrt(q);
+		double t = acos(2*r/q/sq);
+		double inv_3 = 1.0/3.0;
+		*x1 = -sq*cos(t * inv_3) + mu1 * inv_3;
+		*x2 = -sq*cos((t + 2.*PI) * inv_3 )+ mu1 * inv_3;
+		*x3 = -sq*cos((t + 4.*PI) * inv_3 )+ mu1 * inv_3;
+		
+		}
+
+	/* Ordering and inverse collapse time */
+
+	ord(x1, x2, x3);
+	
+/* -------------------------------- Tabulated collapse time case -------------------------------- */
+
+#ifdef TABULATED_CT
+
+	double t = interpolate_collapse_time(*x1,*x2,*x3);
+
+/* ---------------------------------------- DEBUG case: additional debugging operations ------------------------------------------- */
+
+#ifdef DEBUG
+
+	double t2 = ell(ismooth,*x1,*x2,*x3);
+
+	if (t2 > 0.9)
+		{
+		ave_diff += t - t2;
+		var_diff += pow(t - t2, 2.0);
+		counter += 1;
+
+#ifdef PRINTJUNK
+
+		double ampl = sqrt(Smoothing.Variance[ismooth]);
+		fprintf(JUNK,"%d  %f %f %f   %f %f %f   %20g %20g %20g\n",ismooth, (*x1 + *x2 + *x3)/ampl, (*x1 - *x2)/ampl, (*x2 - *x3)/ampl, *x1, *x2, *x3, t, t2, t - t2);
+
+#endif
+		}
+#endif
+
+#else
+    
+	/* Final computation of collpase time*/
+
+	double t = ell(ismooth,*x1,*x2,*x3);
+
+#endif
+	
+	return t;
+
+	
+}
+
+/* ------------------------------------  Tabulated collapse time ------------------------------------ */
+
+#ifdef TABULATED_CT
+
+/* Macros declaration only if TABULATED_CT is on*/
+
+#define BILINEAR_SPLINE
+#define CT_NBINS_XY (50) 
+#define CT_NBINS_D (100) 
+#define CT_SQUEEZE (1.2) 
+#define CT_EXPO   (1.75)  
+#define CT_RANGE_D (7.0)  
+#define CT_RANGE_X (3.5)
+#define CT_DELTA0 (-1.0)
+
+/* Variables declaration */
+
+double *CT_table = 0x0;
+double bin_x;
+static gsl_interp_accel *accel = 0x0;
+gsl_spline ***CT_Spline;
+double *delta_vector;
+int Ncomputations, start, length;
+
+/* Precompiler directives in the case of interpolated collpase time */
+
+#ifdef TRILINEAR
+#ifdef HISTO
+
+int *CT_histo = 0x0;
+
+#endif
+#endif
+
+#ifdef DEBUG
+
+double ave_diff = 0.0, var_diff = 0.0;
+int counter = 0;
+
+#ifdef PRINTJUNK
+
+FILE *JUNK;
+
+#endif
+#endif
+
+/* Variable and function declarations */
+
+FILE *CTtableFilePointer;
+int check_CTtable_header();
+void write_CTtable_header();
+
+
+int initialize_collapse_times(int ismooth, int onlycompute)
+{	
+
+	/* Variable declarations */
+
+	double l1, l2, l3, del, ampl, x, y, interval, ref_interval, deltaf;
+
+	/* Variables used for loop indices, counters, and flags */
+
+	int	ix, iy, i, j, dummy, fail; // Si potrebbero rimuovere tutti e dichiararli direttamente all'inizializzazione dei loop
+
+	/* File name */
+
+	char fname[LBLENGTH];
+
+	/* The bin size for delta varies like (delta - CT_DELTA0)^CT_EXPO, 
+	so it is smallest around CT_DELTA0 if CT_EXPO>1. The bin size 
+	is never smaller than CT_MIN_INTERVAL.
+
+
+	/*-------------------------- FIRST SMOOTHING RADIUS CASE --------------------------*/ 
+	
+	/* The delta vector is computed at the first smoothing radius. */
+
+	if (!ismooth)
+		{
+		
+		/* Dynamically allocation of memory for the delta_vector */
+
+		delta_vector = (double*)malloc(CT_NBINS_D * sizeof(double));
+
+		/* Sets the sampling in density delta */
+		/* CT_EXPO value determines the sampling method*/
+
+		if (CT_EXPO == 1)
+			{
+		
+			/* In this case the spacing is even */
+			/* The interval between the elements is 2 times the range of the delta vector divided by the number of bins in the delta vector */
+
+			interval = 2. * CT_RANGE_D / (double)CT_NBINS_D;
+
+#pragma omp parallel for
+
+			for (int id = 0; id < CT_NBINS_D; ++id)
+				{
+				delta_vector[id] = id * interval - CT_RANGE_D;
+				}
+			}
+		else
+			{
+
+			/* In this case the sampling is finer around CT_DELTA0 */
+			
+			deltaf = pow(CT_SQUEEZE / CT_EXPO, 1. / (CT_EXPO - 1.));
+
+			if (CT_EXPO == 2)
+				{
+
+				ref_interval = ((log((CT_RANGE_D - CT_DELTA0) / deltaf) + log((CT_RANGE_D + CT_DELTA0) / deltaf))/ CT_EXPO + 
+							   2. * deltaf / CT_SQUEEZE ) / (CT_NBINS_D - 2.0);
+				}
+			else
+				{
+
+				ref_interval = ((pow(CT_RANGE_D - CT_DELTA0, 2. - CT_EXPO) + pow(CT_RANGE_D + CT_DELTA0, 2. - CT_EXPO) 
+					           - 2. *pow(deltaf, 2. - CT_EXPO) ) / CT_EXPO / (2. - CT_EXPO) + 2. *deltaf / CT_SQUEEZE ) / (CT_NBINS_D - 2.0);
+				}
+
+			// id  = 0;
+
+			del =- CT_RANGE_D ;
+
+			/* Initial interval */
+
+		    double interval = CT_EXPO * ref_interval;
+
+#pragma omp parallel for
+
+			for(int id = 0; id < CT_NBINS_D; ++id) 
+				{
+				
+				/* Assign current value to delta_vector */
+
+        		delta_vector[id] = del; 
+
+				/* Adjust the interval based on the difference from CT_DELTA0 */
+
+        		interval *= pow(fabs(del - CT_DELTA0), CT_EXPO - 1.0); 
+
+				/* Ensure interval is within the desired range */
+        		
+				interval = (interval / ref_interval < CT_SQUEEZE ? ref_interval * CT_SQUEEZE : interval);
+
+        		/* Increment the value */
+
+				del += interval; 
+
+				}
+
+			}
+
+			// do 
+			// 	{
+			// 	delta_vector[id] = del;
+			// 	interval = CT_EXPO * ref_interval * pow(fabs(del - CT_DELTA0), CT_EXPO - 1.0);
+			// 	interval = (interval / ref_interval < CT_SQUEEZE ? ref_interval * CT_SQUEEZE : interval);
+			// 	del += interval;
+			// 	id++;
+			// 	}  
+			// while (id < CT_NBINS_D);
+			// }
+
+            /* If the current task is the first task */
+
+			if (!ThisTask)
+				{
+				printf("[%s] Grid for interpolating collapse times: CT_NBINS_D=%d, CT_NBINS_XY=%d\n",fdate(),CT_NBINS_D,CT_NBINS_XY);
+				}
+
+			/* Computations are divided among tasks */
+
+			Ncomputations = CT_NBINS_D * CT_NBINS_XY * CT_NBINS_XY;
+			bin_x = CT_RANGE_X /(double)(CT_NBINS_XY);
+
+			/* Allocate memory for spline interpolations */
+
+/*-------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+			/* MY SUGGESTION */
+
+			/* Gsl_interp_accel type is a structure defined in the GSL library that provides an acceleration mechanism for interpolation 
+			 The function gsl_interp_accel_alloc() dynamically allocates memory for a gsl_interp_accel object and returns a pointer to the allocated memory */
+
+			/* Allocate memory for gsl_interp_accel object */
+
+			gsl_interp_accel* accel = gsl_interp_accel_alloc();
+			// accel = gsl_interp_accel_alloc();
+
+			/* Allocate memory for CT_Spline array */
+			/* gsl_spline*** CT_Spline represents a three-dimensional array of gsl_spline objects. The dimensions of this array are CT_NBINS_XY x CT_NBINS_XY x CT_NBINS_D */
+
+            gsl_spline*** CT_Spline = (gsl_spline***)calloc(CT_NBINS_XY, sizeof(gsl_spline**));
+			// CT_Spline=(gsl_spline***)calloc(CT_NBINS_XY,sizeof(gsl_spline**));
+
+			for (int i = 0; i < CT_NBINS_XY; ++i)
+				{
+				CT_Spline[i] = (gsl_spline**)calloc(CT_NBINS_XY, sizeof(gsl_spline*));
+				for (int j = 0; j < CT_NBINS_XY; ++j)
+					{
+					CT_Spline[i][j] = gsl_spline_alloc(gsl_interp_cspline, CT_NBINS_D);
+					}
+				}
+
+			/* Allocate memory for CT_table array */
+
+			CT_table = (double *)calloc(Ncomputations, sizeof(double));
+
+			// LUCA è meglio dichiarare fuori oppure direttamente dentro?
+			/* TIPO double* CT_table = (double*)calloc(Ncomputations, sizeof(double)); */
+
+#ifdef TRILINEAR
+#ifdef HISTO
+
+			/* Allocate memory for CT_histo array */
+
+			CT_histo=(int *)calloc(Ncomputations, sizeof(int));
+#endif
+#endif
+
+#ifdef DEBUG
+#ifdef PRINTJUNK
+
+			/* Create a debug file for writing debug output */
+
+			char filename[50];
+			sprintf(filename,"debug.task%d.txt",ThisTask);
+			JUNK=fopen(filename,"w");
+#endif
+#endif
+
+		}
+    
+	/*--------------------------  NOT FIRST SMOOTHING RADIUS CASE --------------------------*/
+
+	/* In this case collapse times are read from a file */
+
+	/* Check if collapse times should be read from a file and not in the "onlycompute" mode */
+
+	if (strcmp(params.CTtableFile,"none") && !onlycompute)
+		{
+
+		/* In the case where ismooth is false (i.e., the current smoothing iteration is not being performed), Task 0 reads the file */
+
+		if (!ismooth)
+			{
+
+			/* Task 0 reads the file */
+			
+			if (!ThisTask)
+				{
+
+				/* Performs consistency checks using check_CTtable_header */
+
+				CTtableFilePointer = fopen(params.CTtableFile , "r");
+				fail = check_CTtable_header(CTtableFilePointer);
+				}
+
+			/* Broadcast the fail status to all tasks to ensure consistency across the parallel execution */
+
+			MPI_Bcast(&fail, sizeof(int), MPI_BYTE, 0, MPI_COMM_WORLD);
+			if (fail)
+				return 1;
+			}
+
+			if (!ThisTask)
+				{
+
+				/* Read collapse times from the file */
+
+				fread(&dummy, sizeof(int), 1, CTtableFilePointer);
+				fread(CT_table, sizeof(double), Ncomputations, CTtableFilePointer);
+
+				}
+			
+			/* Broadcast CT_table array to all tasks */
+
+			MPI_Bcast(CT_table, Ncomputations, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+			/* If the current task is task 0 and ismooth is true for the last smoothing iteration */
+
+			if (!ThisTask && ismooth == Smoothing.Nsmooth - 1)
+				fclose(CTtableFilePointer);
+
+		}
+	else
+        {
+
+		/* The collapse time table is computed for each smoothing radius */
+		
+		ampl = sqrt(Smoothing.Variance[ismooth]);
+
+		/* Map of computations of all tasks */
+
+		int *counts=(int*)malloc(NTasks*sizeof(int));
+		int *displs=(int*)malloc(NTasks*sizeof(int));
+		int bunch = Ncomputations / NTasks;
+		int remainder = Ncomputations % NTasks;
+
+		for (i=0, ix=0; i<NTasks; i++)
+			{
+			counts[i] = bunch + (i < remainder);
+			displs[i] = bunch*i + ((remainder > i)? i : remainder );
+			}
+
+		/* Computations for this task */
+
+		for (i=displs[ThisTask]; i<displs[ThisTask]+counts[ThisTask]; i++)
+			{
+			int id = i % CT_NBINS_D;
+			ix = (i / CT_NBINS_D) % CT_NBINS_XY;
+			iy = i / CT_NBINS_D / CT_NBINS_XY;
+
+			x   = ix * bin_x;
+			y   = iy * bin_x;
+			l1  = (delta_vector[id] + 2.*x +    y)/3.0*ampl;
+			l2  = (delta_vector[id] -    x +    y)/3.0*ampl;
+			l3  = (delta_vector[id] -    x - 2.*y)/3.0*ampl;
+
+			CT_table[i]= ell(ismooth,l1,l2,l3);
+
+			}
+			
+/*------------------------------------------------------------------------------------------------------------------------------*/
+
+			MPI_Allgatherv( MPI_IN_PLACE, counts[ThisTask], MPI_DOUBLE, CT_table, counts, displs, MPI_DOUBLE, MPI_COMM_WORLD );
+
+			free(displs);
+			free(counts);
+
+			/* Writes the table on a file */
+			if (!ThisTask)
+	{
+		if (onlycompute)
+			strcpy(fname,params.CTtableFile);
+		else
+			sprintf(fname,"pinocchio.%s.CTtable.out",params.RunFlag);
+		if (!ismooth)
+			{
+				CTtableFilePointer=fopen(fname,"w");
+				write_CTtable_header(CTtableFilePointer);
+			}
+		else
+			CTtableFilePointer=fopen(fname,"a");
+#ifdef ASCII
+		fprintf(CTtableFilePointer,"################\n# smoothing %2d #\n################\n",ismooth);
+
+		for (i=0; i<Ncomputations; i++)
+			{
+				id=i%CT_NBINS_D;
+				ix=(i/CT_NBINS_D)%CT_NBINS_XY;
+				iy=i/CT_NBINS_D/CT_NBINS_XY;
+
+				x   = ix * bin_x;
+				y   = iy * bin_x;
+				l1  = (delta_vector[id] + 2.*x +    y)/3.0*ampl;
+				l2  = (delta_vector[id] -    x +    y)/3.0*ampl;
+				l3  = (delta_vector[id] -    x - 2.*y)/3.0*ampl;
+
+				fprintf(CTtableFilePointer," %d   %3d %3d %3d   %8f %8f %8f   %8f %8f %8f   %20g\n",
+					ismooth,id,ix,iy,delta_vector[id],x,y,l1,l2,l3,CT_table[i]);
+
+			}
+#else
+		fwrite(&ismooth,sizeof(int),1,CTtableFilePointer);
+		fwrite(CT_table,sizeof(double),Ncomputations,CTtableFilePointer);
+#endif
+
+		fclose(CTtableFilePointer);
+	}
+
+		}
+
+	/* now initialize the splines */
+	for (i=0; i<CT_NBINS_XY; i++)
+		for (j=0; j<CT_NBINS_XY; j++)
+	gsl_spline_init(CT_Spline[i][j],delta_vector,&CT_table[i*CT_NBINS_D+j*CT_NBINS_D*CT_NBINS_XY],CT_NBINS_D);
+	
+	return 0;
+}
+
+
+int reset_collapse_times(int ismooth)
+{
+	
+
+#ifdef DEBUG
+	if (counter)
+		{
+#ifdef TRILINEAR
+			int flag=1;
+#endif
+#ifdef BILINEAR_SPLINE
+			int flag=2;
+#endif
+#ifdef ALL_SPLINE
+			int flag=3;
+#endif
+
+			double aa=ave_diff/(double)counter;
+			printf("%d   %2d  %10d   %3d %3d %5.2f %5.2f   %20g  %20g DEBUG\n",
+			 flag, ismooth, counter, CT_NBINS_D, CT_NBINS_XY, CT_EXPO, CT_SQUEEZE,
+			 aa,sqrt(var_diff/(double)counter)-aa*aa);
+		}
+	/* else */
+	/*   printf("N=0, no average or std dev\n"); */
+	ave_diff=var_diff=0.0;
+	counter=0;
+
+#endif
+
+#ifdef TRILINEAR
+#ifdef HISTO
+	// scrive l'istogramma della tabella
+
+	// QUESTA PARTE ANDREBBE SCRITTA E COMMENTATA MEGLIO
+
+	char fname[50];
+	FILE *fd;
+	int i,id,ix,iy;
+	double x,y,l1,l2,l3;
+	sprintf(fname,"popolazione.txt");
+	if (!ismooth)
+		fd=fopen(fname,"w");
+	else
+		fd=fopen(fname,"a");
+	fprintf(fd,"################\n# smoothing %2d #\n################\n",ismooth);
+	double ampl = sqrt(Smoothing.Variance[ismooth]);
+	for (i=0; i<Ncomputations; i++)
+		{
+			id=i%CT_NBINS_D;
+			ix=(i/CT_NBINS_D)%CT_NBINS_XY;
+			iy=i/CT_NBINS_D/CT_NBINS_XY;
+
+			x   = ix * bin_x;
+			y   = iy * bin_x;
+			l1  = (delta_vector[id] + 2.*x +    y)/3.0*ampl;
+			l2  = (delta_vector[id] -    x +    y)/3.0*ampl;
+			l3  = (delta_vector[id] -    x - 2.*y)/3.0*ampl;
+
+			fprintf(fd," %d   %3d %3d %3d   %8f %8f %8f   %8f %8f %8f   %20d\n",
+				ismooth,id,ix,iy,delta_vector[id],x,y,l1,l2,l3,CT_histo[i]);
+		}
+	fclose(fd);
+#endif
+#endif
+
+	return 0;
+}
+
+
+int compare_search(const void *A, const void *B)
+{
+	if ( *(double*)A >= *(double*)B && *(double*)A < *((double*)B+1))
+		return 0;
+	if ( *(double*)A < *(double*)B )
+		return -1;
+	return 1;
 }
 
 
 
-double inverse_collapse_time(double *deformation_tensor, double *x1, double *x2, double *x3, int *fail)
+
+inline double interpolate_collapse_time(double l1, double l2, double l3) 
+{
+	int ix, iy;
+	double ampl, d, x, y;
+
+	ampl = sqrt(Smoothing.Variance[ismooth]);
+	d = (l1+l2+l3)/ampl;
+	x = (l1-l2)/ampl;
+	y = (l2-l3)/ampl;
+	ix = (int)(x/bin_x);
+	iy = (int)(y/bin_x);
+
+	/* in the unlikely event the point is beyond the limits */
+	if (ix>=CT_NBINS_XY-1)
+		ix=CT_NBINS_XY-2;
+	if (ix<0)
+		ix=0;
+	if (iy>=CT_NBINS_XY-1)
+		iy=CT_NBINS_XY-2;
+	if (iy<0)
+		iy=0;
+
+#ifdef ALL_SPLINE
+
+	int ixx, iyy, ixstart, iystart, N=4;
+	double xls[4],yls[4],zls[16];
+	const gsl_interp2d_type *T = gsl_interp2d_bicubic;
+	gsl_interp_accel *xacc = gsl_interp_accel_alloc();
+	gsl_interp_accel *yacc = gsl_interp_accel_alloc();
+
+	if (ix==0)
+		ixstart=0;
+	else if (ix>=CT_NBINS_XY-2)
+		ixstart=CT_NBINS_XY-4;
+	else
+		ixstart=ix-1;
+
+	if (iy==0)
+		iystart=0;
+	else if (iy>=CT_NBINS_XY-2)
+		iystart=CT_NBINS_XY-4;
+	else
+		iystart=iy-1;
+
+	/* little 4x4 array for interpolation */
+	for (ixx=0; ixx<4; ixx++)
+		{
+			xls[ixx]=(ixx+ixstart)*bin_x;
+			yls[ixx]=(ixx+iystart)*bin_x;
+		}
+	for (ixx=0; ixx<4; ixx++)
+		for (iyy=0; iyy<4; iyy++)
+			zls[ixx+iyy*4]=my_spline_eval(CT_Spline[ixx+ixstart][iyy+iystart], d, accel);
+
+	/* initialize interpolation */
+
+	gsl_spline2d *LittleSpline = gsl_spline2d_alloc(T, N, N);
+	gsl_spline2d_init(LittleSpline, xls, yls, zls, N, N);
+
+	double a=gsl_spline2d_eval(LittleSpline, x, y, xacc, yacc);
+	gsl_spline2d_free(LittleSpline);
+
+	return a;
+
+#endif
+
+#ifdef TRILINEAR
+
+	int id;
+	if (d<=delta_vector[0])
+		id=0;
+	else if (d>=delta_vector[CT_NBINS_D-1])
+		id = CT_NBINS_D-2;
+	else
+		id = (double*)bsearch((void*)&d, (void*)delta_vector, (size_t)(CT_NBINS_D-1), sizeof(double), compare_search)-delta_vector;
+
+#ifdef HISTO
+	CT_histo[id + ix*CT_NBINS_D + iy*CT_NBINS_D*CT_NBINS_XY]++;
+#endif
+
+	double dd = (d-delta_vector[id])/(delta_vector[id+1]-delta_vector[id]);
+	double dx = x/bin_x-ix;
+	double dy = y/bin_x-iy;
+
+	return ((1.-dd)*(1.-dx)*(1.-dy)*CT_table[id   + (ix  )*CT_NBINS_D + (iy  )*CT_NBINS_D*CT_NBINS_XY]+
+		(   dd)*(1.-dx)*(1.-dy)*CT_table[id+1 + (ix  )*CT_NBINS_D + (iy  )*CT_NBINS_D*CT_NBINS_XY]+
+		(1.-dd)*(   dx)*(1.-dy)*CT_table[id   + (ix+1)*CT_NBINS_D + (iy  )*CT_NBINS_D*CT_NBINS_XY]+
+		(   dd)*(   dx)*(1.-dy)*CT_table[id+1 + (ix+1)*CT_NBINS_D + (iy  )*CT_NBINS_D*CT_NBINS_XY]+
+		(1.-dd)*(1.-dx)*(   dy)*CT_table[id   + (ix  )*CT_NBINS_D + (iy+1)*CT_NBINS_D*CT_NBINS_XY]+
+		(   dd)*(1.-dx)*(   dy)*CT_table[id+1 + (ix  )*CT_NBINS_D + (iy+1)*CT_NBINS_D*CT_NBINS_XY]+
+		(1.-dd)*(   dx)*(   dy)*CT_table[id   + (ix+1)*CT_NBINS_D + (iy+1)*CT_NBINS_D*CT_NBINS_XY]+
+		(   dd)*(   dx)*(   dy)*CT_table[id+1 + (ix+1)*CT_NBINS_D + (iy+1)*CT_NBINS_D*CT_NBINS_XY]);
+
+#endif
+
+#ifdef BILINEAR_SPLINE
+
+	double dx = x/bin_x-ix;
+	double dy = y/bin_x-iy;
+
+	return ((1.-dx)*(1.-dy)*my_spline_eval(CT_Spline[ix  ][iy  ], d, accel)+
+		(   dx)*(1.-dy)*my_spline_eval(CT_Spline[ix+1][iy  ], d, accel)+
+		(1.-dx)*(   dy)*my_spline_eval(CT_Spline[ix  ][iy+1], d, accel)+
+		(   dx)*(   dy)*my_spline_eval(CT_Spline[ix+1][iy+1], d, accel));
+
+#endif
+
+}
+
+int check_CTtable_header()
 {
 
-  int m;
-  double mu1,mu2,mu3,c,q,r,sq,t;
+	/* checks that the information contained in the header is consistent with the run 
+		 NB: this is done by Task 0 */
 
-  /* mu1, mu2 and mu3 are the principal invariants of the 3x3 tensor 
-     of second derivatives. */
+	int fail=0, dummy;
+	double fdummy;
 
-  *fail=0;
+	fread(&dummy,sizeof(int),1,CTtableFilePointer);
+#ifdef ELL_CLASSIC 
+	if (dummy!=1)   /* classic ellipsoidal collapse, tabulated */
+		{
+			fail=1;
+			printf("ERROR: CT table not constructed for ELL_CLASSIC, %d\n",
+			 dummy);
+		}
+#endif
+#ifdef ELL_SNG
+#ifndef MOD_GRAV_FR
+	if (dummy!=3)   /* standard gravity, numerical ellipsoidal collapse */
+		{
+			fail=1;
+			printf("ERROR: CT table not constructed for ELL_SNG and standard gravity, %d\n",
+			 dummy);
+		}
+#else
+	if (dummy!=4)   /* f(R) gravity, numerical ellipsoidal collapse */
+		{
+			fail=1;
+			printf("ERROR: CT table not constructed for ELL_SNG and MOD_GRAV_FR, %d\n",
+			 dummy);
+		}
+#endif
+#endif
+	fread(&fdummy,sizeof(double),1,CTtableFilePointer);
+	if (fabs(fdummy-params.Omega0)>1.e-10)
+		{
+			fail=1;
+			printf("ERROR: CT table constructed for the wrong Omega0, %f in place of %f\n",
+			 fdummy,params.Omega0);
+		}
+	fread(&fdummy,sizeof(double),1,CTtableFilePointer);
+	if (fabs(fdummy-params.OmegaLambda)>1.e-10)
+		{
+			fail=1;
+			printf("ERROR: CT table constructed for the wrong OmegaLambda, %f in place of %f\n",
+			 fdummy,params.OmegaLambda);
+		}
+	fread(&fdummy,sizeof(double),1,CTtableFilePointer);
+	if (fabs(fdummy-params.Hubble100)>1.e-10)
+		{
+			fail=1;
+			printf("ERROR: CT table constructed for the wrong Hubble100, %f in place of %f\n",
+			 fdummy,params.Hubble100);
+		}
 
-  /* diagonalization of the tensor */
-  mu1=deformation_tensor[0]+deformation_tensor[1]+deformation_tensor[2];
-  mu2=.5*mu1*mu1;
-  for (m=0; m<6; m++)
-    {
-      if (m<3)
-	c=0.5;
-      else
-	c=1.0;
-      mu2 -= c*deformation_tensor[m]*deformation_tensor[m];
-    }
+	fread(&dummy,sizeof(int),1,CTtableFilePointer);
+	if (dummy != Ncomputations)
+		{
+			fail=1;
+			printf("ERROR: CT table has the wrong size, %d in place of %d\n",
+			 dummy,Ncomputations);
+		}
+	fread(&dummy,sizeof(int),1,CTtableFilePointer);
+	if (dummy != CT_NBINS_D)
+		{
+			fail=1;
+			printf("ERROR: CT table has the wrong density sampling, %d in place of %d\n",
+			 dummy,CT_NBINS_D);
+		}
+	fread(&dummy,sizeof(int),1,CTtableFilePointer);
+	if (dummy != CT_NBINS_XY)
+		{
+			fail=1;
+			printf("ERROR: CT table has the wrong x and y sampling, %d in place of %d\n",
+			 dummy,CT_NBINS_XY);
+		}
 
-  mu3 =  deformation_tensor[0]*deformation_tensor[1]*deformation_tensor[2]
-    + 2.*deformation_tensor[3]*deformation_tensor[4]*deformation_tensor[5]
-       - deformation_tensor[0]*deformation_tensor[5]*deformation_tensor[5]
-       - deformation_tensor[1]*deformation_tensor[4]*deformation_tensor[4]
-       - deformation_tensor[2]*deformation_tensor[3]*deformation_tensor[3];
-
-  q=(mu1*mu1-3.0*mu2)/9.0;
-
-  if (q==0.)
-    {
-      /* in this case the tensor is already diagonal */
-      *x1=deformation_tensor[0];
-      *x2=deformation_tensor[1];
-      *x3=deformation_tensor[2];
-    }
-  else
-    {
-      r=-(2.*mu1*mu1*mu1 - 9.0*mu1*mu2 + 27.0*mu3)/54.;
-
-      if (q*q*q < r*r || q<0.0)
-	{
-	  *fail=1;
-	  return -10.0;
-	}
-
-      sq=sqrt(q);
-      t=acos(r/q/sq);
-      *x1=-2.*sq*cos(t/3.)+mu1/3.;
-      *x2=-2.*sq*cos((t+2.*PI)/3.)+mu1/3.;
-      *x3=-2.*sq*cos((t+4.*PI)/3.)+mu1/3.;
-    }
-
-  /* ordering and inverse collapse time */
-  /* ord(&x1,&x2,&x3); */
-  /* t=ell(x1,x2,x3,mu1,mu3); */
-  ord(x1,x2,x3);
-  t=ell(*x1,*x2,*x3,mu1,mu3);
-
-  /* return value */
-  if (t>0.)
-    return 1./t;
-  else
-    return -10.;
+	return fail;
 }
 
 
-
-double ell(double l1,double l2,double l3,double del,double det)
+void write_CTtable_header()
 {
 
-  /*
-    This rouine computes the smallest non-negative solution of the 3rd
-    order equation for the ellipsoid, and corrects it to reproduce the
-    spherical collapse correctly.
-  */
+	int dummy;
 
+#ifdef ELL_CLASSIC 
+	dummy=1;   /* classic ellipsoidal collapse, tabulated */
+	fwrite(&dummy,sizeof(int),1,CTtableFilePointer);
+#endif
+#ifdef ELL_SNG
+#ifndef MOD_GRAV_FR
+	dummy=3;   /* standard gravity, numerical ellipsoidal collapse */
+	fwrite(&dummy,sizeof(int),1,CTtableFilePointer);
+#else
+	dummy=4;   /* f(R) gravity, numerical ellipsoidal collapse */
+	fwrite(&dummy,sizeof(int),1,CTtableFilePointer);
+#endif
+#endif
+	fwrite(&params.Omega0,sizeof(double),1,CTtableFilePointer);
+	fwrite(&params.OmegaLambda,sizeof(double),1,CTtableFilePointer);
+	fwrite(&params.Hubble100,sizeof(double),1,CTtableFilePointer);
 
-  double a1,a2,a3,den,dis,r,q,sq,t,s1,s2,s3,ell;
+	fwrite(&Ncomputations,sizeof(int),1,CTtableFilePointer);
+	dummy=CT_NBINS_D;
+	fwrite(&dummy,sizeof(int),1,CTtableFilePointer);
+	dummy=CT_NBINS_XY;
+	fwrite(&dummy,sizeof(int),1,CTtableFilePointer);
 
-  den=det/126.+5.*l1*del*(del-l1)/84.;
-  if (l1==0.)
-    ell=-0.1;
-
-  else if (den==0.)
-    {
-     if (del==l1)
-       {
-        if (l1>0.0)
-	  ell=1./l1;
-        else
-	  ell=-.1;
-       }
-     else
-       {
-	 dis=7.*l1*(l1+6.*del);
-	 if (dis<0.0)
-           ell=-.1;
-	 else
-	   {
-	     ell=(7.*l1-sqrt(dis))/(3.*l1*(l1-del));
-	     if (ell<0.) 
-	       ell=-.1;
-	   }
-       }
-    }
-  else
-    {
-      a1=3.*l1*(del-l1)/14./den;
-      a2=l1/den;
-      a3=-1./den;
-      q=(a1*a1-3.*a2)/9.;
-      r=(2.*a1*a1*a1-9.*a1*a2+27.*a3)/54.;
-      if (r*r>q*q*q)
-	{
-	  sq=pow(sqrt(r*r-q*q*q)+fabs(r),0.333333333333333);
-	  ell=-fabs(r)/r*(sq+q/sq)-a1/3.;
-	  if (ell<0.) 
-	    ell=-.1;
-	}
-      else
-	{
-	  sq=sqrt(q);
-	  t=acos(r/q/sq);
-	  s1=-2.*sq*cos(t/3.)-a1/3.;
-	  s2=-2.*sq*cos((t+2.*PI)/3.)-a1/3.;
-	  s3=-2.*sq*cos((t+4.*PI)/3.)-a1/3.;
-	  if (s1<0.) 
-	    s1=1.e10;
-	  if (s2<0.) 
-	    s2=1.e10;
-	  if (s3<0.) 
-	    s3=1.e10;
-	  ell=(s1<s2?s1:s2);
-	  ell=(s3<ell?s3:ell);
-	  if (ell==1.e10) 
-	    ell=-.1;
-	}
-    }
-  if (del > 0. && ell > 0.)
-    ell+=-.364/del*exp(-6.5*(l1-l2)/del-2.8*(l2-l3)/del);
-
-  return ell;
 }
+
+#endif /* TABULATED_CT */
 
 
 #define min(a,b) ((a)<(b)?(a):(b))
 #define max(a,b) ((a)>(b)?(a):(b))
 
-void ord(double *a, double *b, double *c)
+inline void ord(double * restrict a, double * restrict b, double * restrict c)
 {
-  /* orders a,b,c in decreasing order a>b>c */
-  double lo,hi;
+	/* orders a,b,c in decreasing order a>b>c */
+	double lo,hi;
 
-  hi=max( max(*a,*b), *c );
-  lo=min( min(*a,*b), *c );
+	hi = max( max(*a,*b), *c );
+	lo = min( min(*a,*b), *c );
 
-  *b=*a+*b+*c-lo-hi;
-  *a=hi;
-  *c=lo;
+	*b = *a + *b+ *c - lo - hi;
+	*a = hi;
+	*c = lo;
 }
 
-
-int compute_velocities(int ismooth)
-{
-
-  int local_x, local_y, local_z, index, i;
-
-#ifdef SMOOTH_VELOCITIES
-  int final=(ismooth==Smoothing.Nsmooth-1);
-#endif
-  /* loop on all particles in the slice */
-  for (local_z=0; local_z < MyGrids[0].GSlocal_z; local_z++)
-    for (local_y=0; local_y < MyGrids[0].GSlocal_y; local_y++)
-      for (local_x=0; local_x < MyGrids[0].GSlocal_x; local_x++)
-	{
-
-	  index = local_x + (MyGrids[0].GSlocal_x) * 
-	    (local_y + local_z * MyGrids[0].GSlocal_y);
-
-	  /* NB: THIS IS THE POINT WHERE DIFFERENT BOXES SHOULD BE CONSIDERED */
-
-#ifdef SMOOTH_VELOCITIES
-	  if (products[index].Rmax==ismooth || (products[index].Fmax<0.0 && final) )
-#endif
-	    for (i=0;i<3;i++)
-	      products[index].Vmax[i]=first_derivatives[0][i][index];
-	}
-
-  return 0;
-}
