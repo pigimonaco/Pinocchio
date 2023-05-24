@@ -27,64 +27,129 @@
 
 RUNDIR = ./
 
-EXEC = pinocchio.x
+EXEC = pinocchio_test.x
+
+DEBUG = NO
+OMP   = YES
+
+#OPTIONS += -DCLASSIC_FRAGMENTATION
+#OPTIONS += -DLIGHT_OUTPUT
+#OPTIONS += -DSNAPSHOT
+
 OPTIONS += -DTWO_LPT
 OPTIONS += -DTHREE_LPT
 OPTIONS += -DPLC
-#OPTIONS += -DROTATE_BOX
+OPTIONS += -DNORADIATION
+OPTIONS += -DTABULATED_CT
+OPTIONS += -DHISTO
+OPTIONS += -DTRILINEAR
+OPTIONS += -DPRINTJUNK
+
+#OPTIONS += -DELL_SNG
+OPTIONS += -DELL_CLASSIC
+#OPTIONS += -DSCALE_DEPENDENT
+#OPTIONS += -DMOD_GRAV_FR
+#OPTIONS += -DFR0=1.e-4
+#OPTIONS += -DRECOMPUTE_DISPLACEMENTS
+# OPTIONS += -DUSE_GPERFTOOLS
+
+
+# output
+#OPTIONS += -DADD_RMAX_TO_SNAPSHOT
+#OPTIONS += -DLONGIDS
+#OPTIONS += -DLIGHT_OUTPUT
+
+# other options
 #OPTIONS += -DWHITENOISE
 #OPTIONS += -DNO_RANDOM_MODULES
-#OPTIONS += -DNORADIATION
-#OPTIONS += -DSCALE_DEPENDENT_GROWTH
+#OPTIONS += -DDOUBLE_PRECISION_PRODUCTS
+# OPTIONS += -DVETTORIALIZZA
 
+ifeq ($(OMP), YES)
+# OPTIONS += -DUSE_FFT_THREADS
+OMP_FLAG = -fopenmp
+OMP_FFTW = -lfftw3_omp
+else
+OMP_FLAG =
+OMP_FFTW =
+endif
 
 SYSTYPE="my_machine"
 
+ifeq ($(SYSTYPE),"Marconi100")
+CC          =  mpicc
+CDEBUG      = -ggdb3 -Wall $(OMP_FLAG)
+COPTIMIZED  = -O2 -Wno-unused-result  $(OMP_FLAG)
+FFTW_LIBR   = -L$(HOME)/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
+FFTW_INCL   = -I$(HOME)/include
+PFFT_LIBR   = -lpfft
+PFFT_INCL   = 
+MPI_LIBR    = -L$(SMPI_ROOT)/lib -lmpi_ibm
+MPI_INCL    = -I$(SMPI_ROOT)/include
+GSL_LIBR    = -L$(GSL_LIB) -lgsl -lgslcblas -lm
+GSL_INCL    = -I$(GSL_INC)
+endif
+
+ifeq ($(SYSTYPE),"amonra")
+CC          =  mpicc
+CDEBUG      = -ggdb3 -Wall $(OMP_FLAG)
+COPTIMIZED  = -O3 -Wno-unused-result $(OMP_FLAG)
+FFTW_LIBR   = -L$(FFTW_LIB) -lfftw3_mpi -lfftw3 $(OMP_FFTW)
+FFTW_INCL   = -I$(FFTW_INC)
+PFFT_LIBR   = -L$(HOME)/lib -lpfft
+PFFT_INCL   = -I$(HOME)/include
+MPI_LIBR    =
+MPI_INCL    =
+GSL_LIBR    = -L$(GSL_LIB) -lgsl -lgslcblas -lm
+GSL_INCL    = -I$(GSL_INC)
+endif
+
 
 ifeq ($(SYSTYPE),"my_machine")
-CC          =  mpicc
-CDEBUG      = -ggdb3 -Wall
-COPTIMIZED  = -O3 -Wno-unused-result
-FFTW_LIBR   = -L$(HOME)/lib -lfftw3_mpi -lfftw3
-FFTW_INCL   = -I/usr/local/include -I$(HOME)/include
-MPI_LIBR    = -lmpi
+CC          =  mpicc 
+CDEBUG      =  -ggdb3 -Wall $(OMP_FLAG)
+COPTIMIZED  =  -g -O3 -Wno-unused-result -march=native $(OMP_FLAG)
+FFTW_LIBR   = -L/usr/local/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
+FFTW_INCL   = -I/usr/local/include 
+PFFT_LIBR   = -L/usr/local/lib -lpfft
+PFFT_INCL   = 
+MPI_LIBR    =
 MPI_INCL    =
-GSL_LIBR    = -lgsl -lgslcblas -lm
-GSL_INCL    = -I/usr/include
+GSL_LIBR    = -L/usr/local/lib -lgsl -lgslcblas
+GSL_INCL    = -I/usr/local/include
 endif
 
 
 # included libraries, shared libraries 
-INC =  $(FFTW_INCL)  $(MPI_INCL) $(GSL_INCL)
-LIB =  $(FFTW_LIBR)  $(MPI_LIBR) $(GSL_LIBR)
+INC =  $(PFFT_INCL) $(FFTW_INCL) $(MPI_INCL) $(GSL_INCL)
+LIB =  -lm $(PFFT_LIBR) $(FFTW_LIBR) $(MPI_LIBR) $(GSL_LIBR)
 
 
 # compiler options : choose from CDEBUG or COPTIMIZED
-#COPTS = $(CDEBUG)
+# compiler options
+ifeq ($(DEBUG), YES)
+COPTS = $(CDEBUG)
+else
 COPTS = $(COPTIMIZED)
-
-# source files:
-OBJECTS = fmax.o variables.o initialization.o collapse_times.o fmax-fftw.o GenIC.o \
-	ReadParamfile.o ReadWhiteNoise.o write_fields.o allocations.o LPT.o fragment.o \
-	build_groups.o distribute.o write_halos.o write_snapshot.o cosmo.o
-
-ifeq (SCALE_DEPENDENT_GROWTH,$(findstring SCALE_DEPENDENT_GROWTH,$(OPTIONS)))
-OBJECTS += Pk_from_CAMB.o
 endif
 
+# source files:
+OBJECTS = fmax.o variables.o initialization.o my_collapse_time.o fmax-pfft.o GenIC.o \
+	ReadParamfile.o allocations.o LPT.o distribute.o \
+	fragment.o build_groups.o write_halos.o write_snapshot.o cosmo.o
+#ReadWhiteNoise.o
 
 # rules
-%.o: %.c Makefile pinocchio.h fragment.h
+%.o: %.c Makefile pinocchio.h def_splines.h
 	$(CC) $(INC) $(COPTS) $(OPTIONS) -c $<
 
-
 pinocchio: $(OBJECTS) pinocchio.o Makefile
-	$(CC) $(INC) $(COPTS) -o $(EXEC) pinocchio.o $(OBJECTS) $(LIB)
+	$(CC) $(INC) $(COPTS) -o $(RUNDIR)$(EXEC) pinocchio.o $(OBJECTS) $(LIB)
 
-memorytest: $(OBJECTS) memorytest.o Makefile
-	$(CC) $(INC) $(COPTS) -o memorytest memorytest.o $(OBJECTS) $(LIB)
+run_planner: $(OBJECTS) run_planner.o Makefile
+	$(CC) $(INC) $(COPTS) -o run_planner run_planner.o $(OBJECTS) $(LIB)
 
 clean:
-	\rm -f *.o *~ $(EXEC) memorytest
+	\rm -f *.o *~ $(EXEC) run_planner
 
 
