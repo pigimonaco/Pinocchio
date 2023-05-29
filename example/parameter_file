@@ -26,9 +26,10 @@ InputSpectrum_UnitLength_in_cm 0    % units of tabulated P(k), or 0 if it is in 
 WDM_PartMass_in_kev    0.0          % WDM cut following Bode, Ostriker & Turok (2001)
 
 # control of memory requirements
-BoundaryLayerFactor    1.0          % width of the boundary layer for fragmentation
+BoundaryLayerFactor    3.0          % width of the boundary layer for fragmentation
 MaxMem                 3600         % max available memory to an MPI task in Mbyte
-MaxMemPerParticle      300          % max available memory in bytes per particle
+MaxMemPerParticle      150          % max available memory in bytes per particle
+PredPeakFactor         0.8          % guess for the number of peaks in the subvolume
 
 # output
 CatalogInAscii                      % catalogs are written in ascii and not in binary format

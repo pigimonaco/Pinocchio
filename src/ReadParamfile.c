@@ -26,8 +26,8 @@
 
 /* 
    The similarity of this code with the read_parameter_file() function in the Gadget code,
-   by V. Springel (http://www.gadgetcode.org), is not a coincidence.  
-   I have adopted the same code structure.
+   by V. Springel (http://www.gadgetcode.org), is not a coincidence. 
+   Many thanks to Volker for the inspiration.
 */
 
 
@@ -39,17 +39,18 @@
 #define LOGICAL 4
 #define INT3 5
 #define DOUBLE3 6
-#define INT_SKIP 99
+#define INT_SKIP_DEF 98   /* this is previously set to the default value */
+#define INT_SKIP 99       /* this is set to 0 if not present in the parameter file */
 #define MAXTAGS 100
 
 int read_parameter_file()
 {
   FILE *fd;
-  char buf[BLENGTH], buf1[BLENGTH], buf2[BLENGTH], buf3[BLENGTH], buf4[BLENGTH];
+  char buf[SBLENGTH], buf1[SBLENGTH], buf2[SBLENGTH], buf3[SBLENGTH], buf4[SBLENGTH];
   int i, j, nt, number_of_fields;
   int id[MAXTAGS];
   void *addr[MAXTAGS];
-  char tag[MAXTAGS][BLENGTH];
+  char tag[MAXTAGS][SBLENGTH];
   double z;
 
   if (!ThisTask)
@@ -146,16 +147,20 @@ int read_parameter_file()
       addr[nt] = &params.MinHaloMass;
       id[nt++] = INT;
 
-      strcpy(tag[nt], "WriteFmax");
-      addr[nt] = &params.WriteFmax;
+      strcpy(tag[nt], "WriteDensity");
+      addr[nt] = &params.WriteDensity;
       id[nt++] = LOGICAL;
 
-      strcpy(tag[nt], "WriteVmax");
-      addr[nt] = &params.WriteVmax;
+      strcpy(tag[nt], "WriteProducts");
+      addr[nt] = &params.WriteProducts;
       id[nt++] = LOGICAL;
 
-      strcpy(tag[nt], "WriteRmax");
-      addr[nt] = &params.WriteRmax;
+      strcpy(tag[nt], "DumpProducts");
+      addr[nt] = &params.DumpProducts;
+      id[nt++] = LOGICAL;
+
+      strcpy(tag[nt], "ReadProductsFromDumps");
+      addr[nt] = &params.ReadProductsFromDumps;
       id[nt++] = LOGICAL;
 
       strcpy(tag[nt], "NumFiles");
@@ -182,8 +187,8 @@ int read_parameter_file()
       addr[nt] = &params.DoNotWriteHistories;
       id[nt++] = LOGICAL;
 
-      strcpy(tag[nt], "WriteSnapshot");
-      addr[nt] = &params.WriteSnapshot;
+      strcpy(tag[nt], "WriteTimelessSnapshot");
+      addr[nt] = &params.WriteTimelessSnapshot;
       id[nt++] = LOGICAL;
 
       strcpy(tag[nt], "OutputInH100");
@@ -206,7 +211,19 @@ int read_parameter_file()
       addr[nt] = params.TabulatedEoSfile;
       id[nt++] = STRING;
 
-#ifdef SCALE_DEPENDENT_GROWTH
+      strcpy(tag[nt], "MaxMemPerParticle");
+      addr[nt] = &(params.MaxMemPerParticle);
+      id[nt++] = DOUBLE;
+
+      strcpy(tag[nt], "PredPeakFactor");
+      addr[nt] = &(params.PredPeakFactor);
+      id[nt++] = DOUBLE;
+
+      strcpy(tag[nt], "ExitIfExtraParticles");
+      addr[nt] = &params.ExitIfExtraParticles;
+      id[nt++] = LOGICAL;
+
+#ifdef READ_PK_TABLE
       strcpy(tag[nt], "CAMBMatterFileTag");
       addr[nt] = params.camb.MatterFile;
       id[nt++] = STRING;
@@ -222,21 +239,66 @@ int read_parameter_file()
       strcpy(tag[nt], "CAMBRedsfhitsFile");
       addr[nt] = params.camb.RedshiftsFile;
       id[nt++] = STRING;
-
-      strcpy(tag[nt], "CAMBReferenceOutput");
-      addr[nt] = &params.camb.ReferenceOutput;
-      id[nt++] = INT;
-
-      strcpy(tag[nt], "CAMBReferenceScale");
-      addr[nt] = &params.camb.ReferenceScale;
-      id[nt++] = INT;
 #endif
 
-      strcpy(tag[nt], "MaxMemPerParticle");
-      addr[nt] = &(params.MaxMemPerParticle);
-      id[nt++] = DOUBLE;
+#ifdef TABULATED_CT
+      strcpy(tag[nt], "CTtableFile");
+      addr[nt] = params.CTtableFile;
+      id[nt++] = STRING;
+#endif
 
+      strcpy(tag[nt], "UseTransposedFFT");
+      addr[nt] = &(params.use_transposed_fft);
+      id[nt++] = LOGICAL;
 
+      strcpy(tag[nt], "DumpVectors");        // LEVARE
+      addr[nt] = &(internal.dump_vectors);
+      id[nt++] = LOGICAL;
+
+      strcpy(tag[nt], "DumpSeedPlane");      // LEVARE
+      addr[nt] = &(internal.dump_seedplane);
+      id[nt++] = INT_SKIP_DEF;
+
+      strcpy(tag[nt], "DumpKDensity");       // LEVARE
+      addr[nt] = &(internal.dump_kdensity);
+      id[nt++] = INT_SKIP_DEF;
+
+      strcpy(tag[nt], "UseInPlaceFFT");      // LEVARE
+      addr[nt] = &(params.use_inplace_fft);
+      id[nt++] = LOGICAL;
+
+      strcpy(tag[nt], "VerboseLevel");       // LEVARE
+      addr[nt] = &(internal.verbose_level);
+      id[nt++] = INT_SKIP_DEF;
+
+      strcpy(tag[nt], "MimicOldSeed");
+      addr[nt] = &(internal.mimic_original_seedtable);
+      id[nt++] = LOGICAL;
+      
+      strcpy(tag[nt], "LargePlane");         // LASCIARE DI DEFAULT?
+      addr[nt] = &(internal.large_plane);
+      id[nt++] = LOGICAL;
+
+      strcpy(tag[nt], "Constrain_dim0");
+      addr[nt] = &(internal.constrain_task_decomposition[0]);
+      id[nt++] = INT_SKIP_DEF;
+
+      strcpy(tag[nt], "Constrain_dim1");
+      addr[nt] = &(internal.constrain_task_decomposition[1]);
+      id[nt++] = INT_SKIP_DEF;
+
+      strcpy(tag[nt], "Constrain_dim2");
+      addr[nt] = &(internal.constrain_task_decomposition[2]);
+      id[nt++] = INT_SKIP_DEF;
+      
+
+#ifdef USE_FFT_THREADS
+// Using the same threads for FFTs
+//      strcpy(tag[nt], "NThreads");
+//      addr[nt] = &(internal.nthreads_fft);
+//      id[nt++] = INT;
+#endif      
+      
       for (j=0; j<nt; j++)     /* All logical tags are FALSE by default */
 	if (id[j]==LOGICAL)
 	  *((int *) addr[j]) = 0;
@@ -249,7 +311,7 @@ int read_parameter_file()
 	  while(!feof(fd))
 	    {
 	      *buf = 0;
-	      (void)fgets(buf, BLENGTH, fd);
+	      (void)fgets(buf, SBLENGTH, fd);
 	      number_of_fields = sscanf(buf, "%s %s %s %s", buf1, buf2, buf3, buf4);
 	      if(number_of_fields < 1)
 		continue;
@@ -292,6 +354,13 @@ int read_parameter_file()
 		      break;
 
 		    case INT_SKIP:
+		      if (number_of_fields<2)
+			j=-10;
+		      else
+			*((int *) addr[j]) = atoi(buf2);
+		      break;
+
+		    case INT_SKIP_DEF:
 		      if (number_of_fields<2)
 			j=-10;
 		      else
@@ -361,7 +430,7 @@ int read_parameter_file()
 	    {
 	      if (id[i]==LOGICAL || id[i]==INT_SKIP || id[i]==DOUBLE3) 
 		*((int *) addr[i]) = 0;
-	      else
+	      else if (id[i]!=INT_SKIP_DEF)
 		{
 		  printf("ERROR on task 0: I miss a value for tag '%s' in parameter file '%s'.\n", tag[i], params.ParameterFile);
 		  fflush(stdout);
@@ -377,7 +446,7 @@ int read_parameter_file()
 	while(!feof(fd))
 	  {
 	    *buf = 0;
-	    (void)fgets(buf, BLENGTH, fd);
+	    (void)fgets(buf, SBLENGTH, fd);
 	    if (buf[0] != '#' && buf[0] != '%' && sscanf(buf,"%lf",&z) != EOF)
 	      outputs.z[outputs.n++]=z;
 	    if (outputs.n == MAXOUTPUTS)
@@ -411,6 +480,7 @@ int read_parameter_file()
 
   /* processor 0 broadcasts the parameters to all other processors */
   MPI_Bcast(&params, sizeof(param_data), MPI_BYTE, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&internal, sizeof(internal_data), MPI_BYTE, 0, MPI_COMM_WORLD); // PERCHE' QUI?
   MPI_Bcast(&outputs.n, sizeof(output_data), MPI_BYTE, 0, MPI_COMM_WORLD);
 
   return 0;

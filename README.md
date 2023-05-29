@@ -1,3 +1,9 @@
+# DEV BRANCH
+
+## This branch is not for normal users: the code is undergoing a drastic development, pls refer to master branch
+## ---
+
+
 # Pinocchio
 
 PINOCCHIO is a fast code to generate catalogues of cosmological dark matter halos with known mass, position, velocity and merger history.
@@ -12,7 +18,7 @@ The latest version, V4.1, is available in github. This version is written in C, 
 
 Important: version 4.1 contains an important bug fix with respect to v 4.0
 
-Latest version: 4.1.3, yet another bug fix in the lightcone reconstruction, and improvements in the writing of snapshots.
+Latest version: 4.1.1, yet another bug fix in the lightcone reconstruction, and improvements in the writing of snapshots.
 
 Webpage:
 http://adlibitum.oats.inaf.it/monaco/pinocchio.html
