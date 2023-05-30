@@ -910,7 +910,7 @@ inline double inverse_collapse_time(int ismooth, double * restrict deformation_t
 
 #else
     
-	/* Final computation of collpase time*/
+	/* Final computation of collpse time*/
 
 	double t = ell(ismooth,*x1,*x2,*x3);
 
@@ -1043,8 +1043,6 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 					           - 2. *pow(deltaf, 2. - CT_EXPO) ) / CT_EXPO / (2. - CT_EXPO) + 2. *deltaf / CT_SQUEEZE ) / (CT_NBINS_D - 2.0);
 				}
 
-			// id  = 0;
-
 			del =- CT_RANGE_D ;
 
 			/* Initial interval */
@@ -1101,22 +1099,18 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 
 			/* Allocate memory for spline interpolations */
 
-/*-------------------------------------------------------------------------------------------------------------------------------------------------------------*/
-			/* MY SUGGESTION */
-
-			/* Gsl_interp_accel type is a structure defined in the GSL library that provides an acceleration mechanism for interpolation 
-			 The function gsl_interp_accel_alloc() dynamically allocates memory for a gsl_interp_accel object and returns a pointer to the allocated memory */
-
+			/* gsl_interp_accel type is a structure defined in the GSL library that provides an acceleration mechanism for interpolation 
+			The function gsl_interp_accel_alloc() dynamically allocates memory for a gsl_interp_accel object and returns a pointer to the allocated memory */
 			/* Allocate memory for gsl_interp_accel object */
 
 			gsl_interp_accel* accel = gsl_interp_accel_alloc();
-			// accel = gsl_interp_accel_alloc();
 
 			/* Allocate memory for CT_Spline array */
 			/* gsl_spline*** CT_Spline represents a three-dimensional array of gsl_spline objects. The dimensions of this array are CT_NBINS_XY x CT_NBINS_XY x CT_NBINS_D */
 
             gsl_spline*** CT_Spline = (gsl_spline***)calloc(CT_NBINS_XY, sizeof(gsl_spline**));
-			// CT_Spline=(gsl_spline***)calloc(CT_NBINS_XY,sizeof(gsl_spline**));
+
+#pragma omp parallel for
 
 			for (int i = 0; i < CT_NBINS_XY; ++i)
 				{
@@ -1129,17 +1123,14 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 
 			/* Allocate memory for CT_table array */
 
-			CT_table = (double *)calloc(Ncomputations, sizeof(double));
-
-			// LUCA è meglio dichiarare fuori oppure direttamente dentro?
-			/* TIPO double* CT_table = (double*)calloc(Ncomputations, sizeof(double)); */
+			CT_table = (double*)calloc(Ncomputations, sizeof(double));
 
 #ifdef TRILINEAR
 #ifdef HISTO
 
 			/* Allocate memory for CT_histo array */
 
-			CT_histo=(int *)calloc(Ncomputations, sizeof(int));
+			CT_histo = (int *)calloc(Ncomputations, sizeof(int));
 #endif
 #endif
 
@@ -1149,8 +1140,8 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 			/* Create a debug file for writing debug output */
 
 			char filename[50];
-			sprintf(filename,"debug.task%d.txt",ThisTask);
-			JUNK=fopen(filename,"w");
+			sprintf(filename, "debug.task%d.txt", ThisTask);
+			JUNK = fopen(filename,"w");
 #endif
 #endif
 
@@ -1179,6 +1170,7 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 
 				CTtableFilePointer = fopen(params.CTtableFile , "r");
 				fail = check_CTtable_header(CTtableFilePointer);
+
 				}
 
 			/* Broadcast the fail status to all tasks to ensure consistency across the parallel execution */
@@ -1188,24 +1180,24 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 				return 1;
 			}
 
-			if (!ThisTask)
-				{
+		if (!ThisTask)
+			{
 
-				/* Read collapse times from the file */
+			/* Read collapse times from the file */
 
-				fread(&dummy, sizeof(int), 1, CTtableFilePointer);
-				fread(CT_table, sizeof(double), Ncomputations, CTtableFilePointer);
+			fread(&dummy, sizeof(int), 1, CTtableFilePointer);
+			fread(CT_table, sizeof(double), Ncomputations, CTtableFilePointer);
 
-				}
+			}
 			
-			/* Broadcast CT_table array to all tasks */
+		/* Broadcast CT_table array to all tasks */
 
-			MPI_Bcast(CT_table, Ncomputations, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+		MPI_Bcast(CT_table, Ncomputations, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-			/* If the current task is task 0 and ismooth is true for the last smoothing iteration */
+		/* If the current task is task 0 and ismooth is true for the last smoothing iteration */
 
-			if (!ThisTask && ismooth == Smoothing.Nsmooth - 1)
-				fclose(CTtableFilePointer);
+		if (!ThisTask && ismooth == Smoothing.Nsmooth - 1)
+		fclose(CTtableFilePointer);
 
 		}
 	else
@@ -1215,66 +1207,86 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 		
 		ampl = sqrt(Smoothing.Variance[ismooth]);
 
-		/* Map of computations of all tasks */
+		/* Create a map of computations for all tasks by dividing the total number of computations (Ncomputations) among the tasks */
 
-		int *counts=(int*)malloc(NTasks*sizeof(int));
-		int *displs=(int*)malloc(NTasks*sizeof(int));
-		int bunch = Ncomputations / NTasks;
+		int *counts   = (int*)malloc(NTasks*sizeof(int));
+		int *displs   = (int*)malloc(NTasks*sizeof(int));
+		int bunch     = Ncomputations / NTasks;
 		int remainder = Ncomputations % NTasks;
 
-		for (i=0, ix=0; i<NTasks; i++)
+		for (int i = 0, ix = 0; i < NTasks; ++i)
 			{
 			counts[i] = bunch + (i < remainder);
-			displs[i] = bunch*i + ((remainder > i)? i : remainder );
+			displs[i] = bunch*i + ((remainder > i) ? i : remainder );
 			}
 
 		/* Computations for this task */
 
-		for (i=displs[ThisTask]; i<displs[ThisTask]+counts[ThisTask]; i++)
+		for (int i = displs[ThisTask]; i < displs[ThisTask] + counts[ThisTask]; ++i)
 			{
+
 			int id = i % CT_NBINS_D;
 			ix = (i / CT_NBINS_D) % CT_NBINS_XY;
 			iy = i / CT_NBINS_D / CT_NBINS_XY;
 
 			x   = ix * bin_x;
 			y   = iy * bin_x;
-			l1  = (delta_vector[id] + 2.*x +    y)/3.0*ampl;
-			l2  = (delta_vector[id] -    x +    y)/3.0*ampl;
-			l3  = (delta_vector[id] -    x - 2.*y)/3.0*ampl;
+			l1  = (delta_vector[id] + 2.*x +    y) / 3.0*ampl;
+			l2  = (delta_vector[id] -    x +    y) / 3.0*ampl;
+			l3  = (delta_vector[id] -    x - 2.*y) / 3.0*ampl;
 
 			CT_table[i]= ell(ismooth,l1,l2,l3);
 
 			}
 			
-/*------------------------------------------------------------------------------------------------------------------------------*/
+        /* Synchronize computed CT_table across all tasks */
 
-			MPI_Allgatherv( MPI_IN_PLACE, counts[ThisTask], MPI_DOUBLE, CT_table, counts, displs, MPI_DOUBLE, MPI_COMM_WORLD );
+		MPI_Allgatherv( MPI_IN_PLACE, counts[ThisTask], MPI_DOUBLE, CT_table, counts, displs, MPI_DOUBLE, MPI_COMM_WORLD );
+            
+		/* Free memory */
 
-			free(displs);
-			free(counts);
+		free(displs);
+		free(counts);
 
-			/* Writes the table on a file */
-			if (!ThisTask)
-	{
-		if (onlycompute)
-			strcpy(fname,params.CTtableFile);
-		else
-			sprintf(fname,"pinocchio.%s.CTtable.out",params.RunFlag);
-		if (!ismooth)
+		/* Write the table on a file */
+			
+		if (!ThisTask)
 			{
-				CTtableFilePointer=fopen(fname,"w");
+			if (onlycompute)
+				{
+				strcpy(fname, params.CTtableFile);
+				}
+			else
+				{
+				sprintf(fname,"pinocchio.%s.CTtable.out",params.RunFlag);
+				}
+			if (!ismooth)
+				{
+				/* Create a new file and write header if ismooth is false */
+
+				CTtableFilePointer = fopen(fname,"w");
 				write_CTtable_header(CTtableFilePointer);
-			}
-		else
-			CTtableFilePointer=fopen(fname,"a");
-#ifdef ASCII
-		fprintf(CTtableFilePointer,"################\n# smoothing %2d #\n################\n",ismooth);
 
-		for (i=0; i<Ncomputations; i++)
-			{
-				id=i%CT_NBINS_D;
-				ix=(i/CT_NBINS_D)%CT_NBINS_XY;
-				iy=i/CT_NBINS_D/CT_NBINS_XY;
+				}
+			else
+				{
+				/* Append to the existing file if ismooth is true */
+				
+				CTtableFilePointer = fopen(fname,"a");
+				}
+
+        
+#ifdef ASCII
+
+             /* Write table contents in ASCII format */
+
+			fprintf(CTtableFilePointer,"################\n# smoothing %2d #\n################\n",ismooth);
+
+			for (int i = 0; i < Ncomputations; i++)
+				{
+				id = i % CT_NBINS_D;
+				ix = (i / CT_NBINS_D) % CT_NBINS_XY;
+				iy = i / CT_NBINS_D / CT_NBINS_XY;
 
 				x   = ix * bin_x;
 				y   = iy * bin_x;
@@ -1282,28 +1294,35 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 				l2  = (delta_vector[id] -    x +    y)/3.0*ampl;
 				l3  = (delta_vector[id] -    x - 2.*y)/3.0*ampl;
 
-				fprintf(CTtableFilePointer," %d   %3d %3d %3d   %8f %8f %8f   %8f %8f %8f   %20g\n",
-					ismooth,id,ix,iy,delta_vector[id],x,y,l1,l2,l3,CT_table[i]);
+				fprintf(CTtableFilePointer, " %d   %3d %3d %3d   %8f %8f %8f   %8f %8f %8f   %20g\n",
+					    ismooth, id, ix, iy, delta_vector[id], x, y, l1, l2, l3, CT_table[i]);
 
-			}
+				}
 #else
-		fwrite(&ismooth,sizeof(int),1,CTtableFilePointer);
-		fwrite(CT_table,sizeof(double),Ncomputations,CTtableFilePointer);
+			/* Write table contents in binary format */
+			
+			fwrite(&ismooth, sizeof(int), 1, CTtableFilePointer);
+			fwrite(CT_table, sizeof(double), Ncomputations, CTtableFilePointer);
 #endif
 
-		fclose(CTtableFilePointer);
-	}
+			fclose(CTtableFilePointer);
+			}
 
 		}
 
-	/* now initialize the splines */
-	for (i=0; i<CT_NBINS_XY; i++)
-		for (j=0; j<CT_NBINS_XY; j++)
-	gsl_spline_init(CT_Spline[i][j],delta_vector,&CT_table[i*CT_NBINS_D+j*CT_NBINS_D*CT_NBINS_XY],CT_NBINS_D);
-	
+	/* Initialize the splines */
+
+	for (int i = 0; i < CT_NBINS_XY; ++i)
+		{
+		for (int j = 0; j < CT_NBINS_XY; ++j)
+			{
+			gsl_spline_init(CT_Spline[i][j],delta_vector,&CT_table[i*CT_NBINS_D+j*CT_NBINS_D*CT_NBINS_XY],CT_NBINS_D);
+			}
+		}
 	return 0;
 }
 
+/*-------------------------------------------------------------------------------------------------------------------------------------------------*/
 
 int reset_collapse_times(int ismooth)
 {
