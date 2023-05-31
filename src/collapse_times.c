@@ -927,7 +927,6 @@ inline double inverse_collapse_time(int ismooth, double * restrict deformation_t
 
 /* Macros declaration only if TABULATED_CT is on*/
 
-#define BILINEAR_SPLINE
 #define CT_NBINS_XY (50) 
 #define CT_NBINS_D (100) 
 #define CT_SQUEEZE (1.2) 
@@ -942,7 +941,7 @@ double *CT_table = 0x0;
 double bin_x;
 static gsl_interp_accel *accel = 0x0;
 gsl_spline ***CT_Spline;
-double *delta_vector;
+double *delta_vector; 
 int Ncomputations, start, length;
 
 /* Precompiler directives in the case of interpolated collpase time */
@@ -973,6 +972,7 @@ FILE *CTtableFilePointer;
 int check_CTtable_header();
 void write_CTtable_header();
 
+/* ------------------------------------- Initialization of the collapse times ------------------------------------- */
 
 int initialize_collapse_times(int ismooth, int onlycompute)
 {	
@@ -1074,17 +1074,6 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 
 			}
 
-			// do 
-			// 	{
-			// 	delta_vector[id] = del;
-			// 	interval = CT_EXPO * ref_interval * pow(fabs(del - CT_DELTA0), CT_EXPO - 1.0);
-			// 	interval = (interval / ref_interval < CT_SQUEEZE ? ref_interval * CT_SQUEEZE : interval);
-			// 	del += interval;
-			// 	id++;
-			// 	}  
-			// while (id < CT_NBINS_D);
-			// }
-
             /* If the current task is the first task */
 
 			if (!ThisTask)
@@ -1141,7 +1130,7 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 
 			char filename[50];
 			sprintf(filename, "debug.task%d.txt", ThisTask);
-			JUNK = fopen(filename,"w");
+			JUNK = fopen(filename, "w");
 #endif
 #endif
 
@@ -1274,16 +1263,20 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 				
 				CTtableFilePointer = fopen(fname,"a");
 				}
-
-        
+      
 #ifdef ASCII
 
-             /* Write table contents in ASCII format */
+            /* Write table contents in ASCII format */
 
 			fprintf(CTtableFilePointer,"################\n# smoothing %2d #\n################\n",ismooth);
 
-			for (int i = 0; i < Ncomputations; i++)
+			/* The private clause is used to declare variables that should have private copies for each thread to avoid data races */
+
+#pragma omp parallel for private(i, id, ix, iy, x, y, l1, l2, l3)
+
+			for (i = 0; i < Ncomputations; i++)
 				{
+
 				id = i % CT_NBINS_D;
 				ix = (i / CT_NBINS_D) % CT_NBINS_XY;
 				iy = i / CT_NBINS_D / CT_NBINS_XY;
@@ -1316,82 +1309,113 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 		{
 		for (int j = 0; j < CT_NBINS_XY; ++j)
 			{
-			gsl_spline_init(CT_Spline[i][j],delta_vector,&CT_table[i*CT_NBINS_D+j*CT_NBINS_D*CT_NBINS_XY],CT_NBINS_D);
+			gsl_spline_init(CT_Spline[i][j], delta_vector, &CT_table[i * CT_NBINS_D + j * CT_NBINS_D * CT_NBINS_XY], CT_NBINS_D);
 			}
 		}
+
 	return 0;
 }
 
-/*-------------------------------------------------------------------------------------------------------------------------------------------------*/
+/* ------------------------------------- Reset the collapse times ------------------------------------- */
 
 int reset_collapse_times(int ismooth)
 {
-	
 
 #ifdef DEBUG
-	if (counter)
+
+	if (counter > 0)
 		{
+		int flag = 0;
+
 #ifdef TRILINEAR
-			int flag=1;
+		flag = 1;  // Use trilinear interpolation
 #endif
+
 #ifdef BILINEAR_SPLINE
-			int flag=2;
+		flag = 2;  // Use bilinear spline interpolation
 #endif
+
 #ifdef ALL_SPLINE
-			int flag=3;
+		flag = 3;  // Use all spline interpolation
 #endif
 
-			double aa=ave_diff/(double)counter;
-			printf("%d   %2d  %10d   %3d %3d %5.2f %5.2f   %20g  %20g DEBUG\n",
-			 flag, ismooth, counter, CT_NBINS_D, CT_NBINS_XY, CT_EXPO, CT_SQUEEZE,
-			 aa,sqrt(var_diff/(double)counter)-aa*aa);
+		double aa = ave_diff / (double)counter;
+		double std_dev = sqrt(var_diff / (double)counter) - aa * aa;
+
+		/* Print debug information */
+
+		printf("%d   %2d  %10d   %3d %3d %5.2f %5.2f   %20g  %20g DEBUG\n",
+			   flag, ismooth, counter, CT_NBINS_D, CT_NBINS_XY, CT_EXPO, CT_SQUEEZE,
+			   aa, std_dev);
 		}
-	/* else */
-	/*   printf("N=0, no average or std dev\n"); */
-	ave_diff=var_diff=0.0;
-	counter=0;
+
+	/* Reset variables for the next iteration */
+
+	ave_diff = 0.0;
+	var_diff = 0.0;
+	counter = 0;
 
 #endif
-
 #ifdef TRILINEAR
 #ifdef HISTO
-	// scrive l'istogramma della tabella
 
-	// QUESTA PARTE ANDREBBE SCRITTA E COMMENTATA MEGLIO
+	/* Write the histogram of the table */
 
+	/* Create and open the file for writing the histogram */
+	
 	char fname[50];
 	FILE *fd;
-	int i,id,ix,iy;
-	double x,y,l1,l2,l3;
-	sprintf(fname,"popolazione.txt");
-	if (!ismooth)
-		fd=fopen(fname,"w");
-	else
-		fd=fopen(fname,"a");
-	fprintf(fd,"################\n# smoothing %2d #\n################\n",ismooth);
+
+    /* Variable declarations */
+	
+	double x, y, l1, l2, l3;
+	int i, id, ix, iy;
+
+	/* Set name and open output file */
+
+	sprintf(fname, "popolazione.txt");
+	fd = fopen(fname, (ismooth ? "a" : "w"));
+
+	/* Write the header for the smoothing iteration */
+
+	fprintf(fd, "################\n# smoothing %2d #\n################\n", ismooth);
+
+	/* Compute amplitude based on variance */
+
 	double ampl = sqrt(Smoothing.Variance[ismooth]);
-	for (i=0; i<Ncomputations; i++)
-		{
-			id=i%CT_NBINS_D;
-			ix=(i/CT_NBINS_D)%CT_NBINS_XY;
-			iy=i/CT_NBINS_D/CT_NBINS_XY;
 
-			x   = ix * bin_x;
-			y   = iy * bin_x;
-			l1  = (delta_vector[id] + 2.*x +    y)/3.0*ampl;
-			l2  = (delta_vector[id] -    x +    y)/3.0*ampl;
-			l3  = (delta_vector[id] -    x - 2.*y)/3.0*ampl;
+	/* Iterate over the computations and write the histogram values */
+    /* The private clause is used to declare variables that should have private copies for each thread to avoid data races */
 
-			fprintf(fd," %d   %3d %3d %3d   %8f %8f %8f   %8f %8f %8f   %20d\n",
-				ismooth,id,ix,iy,delta_vector[id],x,y,l1,l2,l3,CT_histo[i]);
-		}
+#pragma omp parallel for private(i, id, ix, iy, x, y, l1, l2, l3)
+
+	for (i = 0; i < Ncomputations; ++i)
+	{
+		id = i % CT_NBINS_D;
+		ix = (i / CT_NBINS_D) % CT_NBINS_XY;
+		iy = i / CT_NBINS_D / CT_NBINS_XY;
+
+		x = ix * bin_x;
+		y = iy * bin_x;
+		l1 = (delta_vector[id] + 2.0 * x + y) / 3.0 * ampl;
+		l2 = (delta_vector[id] - x + y) / 3.0 * ampl;
+		l3 = (delta_vector[id] - x - 2.0 * y) / 3.0 * ampl;
+
+		fprintf(fd, " %d   %3d %3d %3d   %8f %8f %8f   %8f %8f %8f   %20d\n",
+				ismooth, id, ix, iy, delta_vector[id], x, y, l1, l2, l3, CT_histo[i]);
+	}
+
+	/* Close the file */
+
 	fclose(fd);
+
 #endif
 #endif
 
 	return 0;
 }
 
+/* ------------------------------------- Comparison routine ------------------------------------- */
 
 int compare_search(const void *A, const void *B)
 {
@@ -1402,69 +1426,75 @@ int compare_search(const void *A, const void *B)
 	return 1;
 }
 
-
-
+/* ------------------------------------- Interpolation of collapse times ------------------------------------- */
 
 inline double interpolate_collapse_time(double l1, double l2, double l3) 
 {
-	int ix, iy;
-	double ampl, d, x, y;
+	/* Variable declarations and assignment */
 
-	ampl = sqrt(Smoothing.Variance[ismooth]);
-	d = (l1+l2+l3)/ampl;
-	x = (l1-l2)/ampl;
-	y = (l2-l3)/ampl;
-	ix = (int)(x/bin_x);
-	iy = (int)(y/bin_x);
+	double ampl = sqrt(Smoothing.Variance[ismooth]);
+	double d    = (l1 + l2 + l3) / ampl;
+	double x    = (l1 - l2) / ampl;
+	double y    = (l2 - l3) / ampl;
+	int ix      = (int)(x / bin_x);
+	int iy      = (int)(y / bin_x);
 
-	/* in the unlikely event the point is beyond the limits */
-	if (ix>=CT_NBINS_XY-1)
-		ix=CT_NBINS_XY-2;
-	if (ix<0)
-		ix=0;
-	if (iy>=CT_NBINS_XY-1)
-		iy=CT_NBINS_XY-2;
-	if (iy<0)
-		iy=0;
+	/* In the unlikely event the point is beyond the limits */
+
+	ix = (ix >= CT_NBINS_XY - 1) ? CT_NBINS_XY - 2 : (ix < 0) ? 0 : ix;
+    iy = (iy >= CT_NBINS_XY - 1) ? CT_NBINS_XY - 2 : (iy < 0) ? 0 : iy;
 
 #ifdef ALL_SPLINE
+    
+	/* Perform bicubic interpolation using a 4x4 grid of control points */
 
 	int ixx, iyy, ixstart, iystart, N=4;
-	double xls[4],yls[4],zls[16];
+	double xls[4], yls[4], zls[16];
+
 	const gsl_interp2d_type *T = gsl_interp2d_bicubic;
 	gsl_interp_accel *xacc = gsl_interp_accel_alloc();
 	gsl_interp_accel *yacc = gsl_interp_accel_alloc();
 
-	if (ix==0)
-		ixstart=0;
-	else if (ix>=CT_NBINS_XY-2)
-		ixstart=CT_NBINS_XY-4;
-	else
-		ixstart=ix-1;
+	/* Determine the starting indices for the control point grid */
 
-	if (iy==0)
-		iystart=0;
-	else if (iy>=CT_NBINS_XY-2)
-		iystart=CT_NBINS_XY-4;
-	else
-		iystart=iy-1;
+	ixstart = (ix == 0) ? 0 : (ix >= CT_NBINS_XY - 2) ? CT_NBINS_XY - 4 : ix - 1;
+	iystart = (iy == 0) ? 0 : (iy >= CT_NBINS_XY - 2) ? CT_NBINS_XY - 4 : iy - 1;
 
-	/* little 4x4 array for interpolation */
-	for (ixx=0; ixx<4; ixx++)
+	 /* Create a 4x4 grid of control points for interpolation */
+
+	// for (ixx=0; ixx<4; ixx++)
+	// 	{
+	// 		xls[ixx]=(ixx+ixstart)*bin_x;
+	// 		yls[ixx]=(ixx+iystart)*bin_x;
+	// 	}
+	// for (ixx=0; ixx<4; ixx++)
+	// 	for (iyy=0; iyy<4; iyy++)
+	// 		zls[ixx+iyy*4]=my_spline_eval(CT_Spline[ixx+ixstart][iyy+iystart], d, accel);
+
+	/* MY suggestion */
+
+	for (ixx = 0; ixx < 4; ixx++)
 		{
-			xls[ixx]=(ixx+ixstart)*bin_x;
-			yls[ixx]=(ixx+iystart)*bin_x;
-		}
-	for (ixx=0; ixx<4; ixx++)
-		for (iyy=0; iyy<4; iyy++)
-			zls[ixx+iyy*4]=my_spline_eval(CT_Spline[ixx+ixstart][iyy+iystart], d, accel);
+    	int idx_x = ixx + ixstart;
+    	double x_val = idx_x * bin_x;
+    	xls[ixx] = x_val;
+    	yls[ixx] = (ixx + iystart) * bin_x;
 
-	/* initialize interpolation */
+    	int idx_zls      = ixx * 4;
+    	zls[idx_zls]     = my_spline_eval(CT_Spline[idx_x][iystart], d, accel);
+    	zls[idx_zls + 1] = my_spline_eval(CT_Spline[idx_x][iystart + 1], d, accel);
+    	zls[idx_zls + 2] = my_spline_eval(CT_Spline[idx_x][iystart + 2], d, accel);
+    	zls[idx_zls + 3] = my_spline_eval(CT_Spline[idx_x][iystart + 3], d, accel);
+		}
+
+	/* Initialize the bicubic interpolation */
 
 	gsl_spline2d *LittleSpline = gsl_spline2d_alloc(T, N, N);
 	gsl_spline2d_init(LittleSpline, xls, yls, zls, N, N);
 
-	double a=gsl_spline2d_eval(LittleSpline, x, y, xacc, yacc);
+	/* Evaluate the interpolated value using bicubic interpolation */
+
+	double a = gsl_spline2d_eval(LittleSpline, x, y, xacc, yacc);
 	gsl_spline2d_free(LittleSpline);
 
 	return a;
@@ -1472,58 +1502,82 @@ inline double interpolate_collapse_time(double l1, double l2, double l3)
 #endif
 
 #ifdef TRILINEAR
+    
+	/* Trilinear interpolation based on the values of d, x, and y. The result is calculated using eight neighboring control points and their corresponding weights */
 
 	int id;
-	if (d<=delta_vector[0])
-		id=0;
-	else if (d>=delta_vector[CT_NBINS_D-1])
-		id = CT_NBINS_D-2;
-	else
-		id = (double*)bsearch((void*)&d, (void*)delta_vector, (size_t)(CT_NBINS_D-1), sizeof(double), compare_search)-delta_vector;
+
+	// if (d<=delta_vector[0])
+	// 	id=0;
+	// else if (d>=delta_vector[CT_NBINS_D-1])
+	// 	id = CT_NBINS_D-2;
+	// else
+	// 	id = (double*)bsearch((void*)&d, (void*)delta_vector, (size_t)(CT_NBINS_D-1), sizeof(double), compare_search)-delta_vector;
+
+	/* My suggestion */
+
+	id = (d <= delta_vector[0]) ? 0 : (d >= delta_vector[CT_NBINS_D - 1]) ? CT_NBINS_D - 2 :
+         (double*)bsearch((void*)&d, (void*)delta_vector, (size_t)(CT_NBINS_D - 1), sizeof(double), compare_search) - delta_vector;
 
 #ifdef HISTO
+
 	CT_histo[id + ix*CT_NBINS_D + iy*CT_NBINS_D*CT_NBINS_XY]++;
+
 #endif
+    
+	/* Calculates the interpolation coefficients dd, dx, and dy */
 
-	double dd = (d-delta_vector[id])/(delta_vector[id+1]-delta_vector[id]);
-	double dx = x/bin_x-ix;
-	double dy = y/bin_x-iy;
+	double dd = (d - delta_vector[id]) / (delta_vector[id + 1] - delta_vector[id]);
+	double dx = x / bin_x - ix;
+	double dy = y / bin_x - iy;
+    
+	/* Perform trilinear interpolation using the eight neighboring control points*/
 
-	return ((1.-dd)*(1.-dx)*(1.-dy)*CT_table[id   + (ix  )*CT_NBINS_D + (iy  )*CT_NBINS_D*CT_NBINS_XY]+
-		(   dd)*(1.-dx)*(1.-dy)*CT_table[id+1 + (ix  )*CT_NBINS_D + (iy  )*CT_NBINS_D*CT_NBINS_XY]+
-		(1.-dd)*(   dx)*(1.-dy)*CT_table[id   + (ix+1)*CT_NBINS_D + (iy  )*CT_NBINS_D*CT_NBINS_XY]+
-		(   dd)*(   dx)*(1.-dy)*CT_table[id+1 + (ix+1)*CT_NBINS_D + (iy  )*CT_NBINS_D*CT_NBINS_XY]+
-		(1.-dd)*(1.-dx)*(   dy)*CT_table[id   + (ix  )*CT_NBINS_D + (iy+1)*CT_NBINS_D*CT_NBINS_XY]+
-		(   dd)*(1.-dx)*(   dy)*CT_table[id+1 + (ix  )*CT_NBINS_D + (iy+1)*CT_NBINS_D*CT_NBINS_XY]+
-		(1.-dd)*(   dx)*(   dy)*CT_table[id   + (ix+1)*CT_NBINS_D + (iy+1)*CT_NBINS_D*CT_NBINS_XY]+
-		(   dd)*(   dx)*(   dy)*CT_table[id+1 + (ix+1)*CT_NBINS_D + (iy+1)*CT_NBINS_D*CT_NBINS_XY]);
+	return (((1. - dd) * (1. - dx) * (1. - dy) * CT_table[id + (ix) * CT_NBINS_D + (iy) * CT_NBINS_D * CT_NBINS_XY]) +
+           ((dd) * (1. - dx) * (1. - dy) * CT_table[(id + 1) + (ix) * CT_NBINS_D + (iy) * CT_NBINS_D * CT_NBINS_XY]) +
+    	   ((1. - dd) * (dx) * (1. - dy) * CT_table[id + (ix + 1) * CT_NBINS_D + (iy) * CT_NBINS_D * CT_NBINS_XY])   +
+           ((dd) * (dx) * (1. - dy) * CT_table[(id + 1) + (ix + 1) * CT_NBINS_D + (iy) * CT_NBINS_D * CT_NBINS_XY])  +
+           ((1. - dd) * (1. - dx) * (dy) * CT_table[id + (ix) * CT_NBINS_D + (iy + 1) * CT_NBINS_D * CT_NBINS_XY])   +
+           ((dd) * (1. - dx) * (dy) * CT_table[(id + 1) + (ix) * CT_NBINS_D + (iy + 1) * CT_NBINS_D * CT_NBINS_XY])  +
+           ((1. - dd) * (dx) * (dy) * CT_table[id + (ix + 1) * CT_NBINS_D + (iy + 1) * CT_NBINS_D * CT_NBINS_XY])    +
+           ((dd) * (dx) * (dy) * CT_table[(id + 1) + (ix + 1) * CT_NBINS_D + (iy + 1) * CT_NBINS_D * CT_NBINS_XY]))  ;
 
 #endif
 
 #ifdef BILINEAR_SPLINE
+    
+	/* Calculate the offsets */
 
-	double dx = x/bin_x-ix;
-	double dy = y/bin_x-iy;
+	double dx = x / bin_x-ix;
+	double dy = y / bin_x-iy;
 
-	return ((1.-dx)*(1.-dy)*my_spline_eval(CT_Spline[ix  ][iy  ], d, accel)+
-		(   dx)*(1.-dy)*my_spline_eval(CT_Spline[ix+1][iy  ], d, accel)+
-		(1.-dx)*(   dy)*my_spline_eval(CT_Spline[ix  ][iy+1], d, accel)+
-		(   dx)*(   dy)*my_spline_eval(CT_Spline[ix+1][iy+1], d, accel));
+    /* Perform bilinear interpolation using the four neighboring control points */
+
+	return ((1. - dx) * (1. - dy) * my_spline_eval(CT_Spline[ix][iy], d, accel) +
+		    (dx) * (1. - dy) * my_spline_eval(CT_Spline[ix + 1][iy], d, accel)  +
+		    (1. - dx) * (dy) * my_spline_eval(CT_Spline[ix][iy + 1], d, accel)  +
+		    (dx) * (dy) * my_spline_eval(CT_Spline[ix + 1][iy + 1], d, accel))  ;
 
 #endif
 
 }
 
+/*-------------------------- Consistency check of the header of CT Table file with the current run --------------------------------------------------------*/
+
 int check_CTtable_header()
 {
 
-	/* checks that the information contained in the header is consistent with the run 
-		 NB: this is done by Task 0 */
+	/* Checks that the information contained in the header is consistent with the run 
+	   NB: this is done by Task 0 */
 
-	int fail=0, dummy;
-	double fdummy;
+	int fail = 0;
+    int dummy;
+    double fdummy;
 
-	fread(&dummy,sizeof(int),1,CTtableFilePointer);
+	/* Check the CT table type based on compilation flags */
+
+    fread(&dummy, sizeof(int), 1, CTtableFilePointer);
+	
 #ifdef ELL_CLASSIC 
 	if (dummy!=1)   /* classic ellipsoidal collapse, tabulated */
 		{
@@ -1626,6 +1680,8 @@ void write_CTtable_header()
 	fwrite(&dummy,sizeof(int),1,CTtableFilePointer);
 
 }
+
+
 
 #endif /* TABULATED_CT */
 
