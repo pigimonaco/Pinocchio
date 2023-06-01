@@ -1579,123 +1579,159 @@ int check_CTtable_header()
     fread(&dummy, sizeof(int), 1, CTtableFilePointer);
 	
 #ifdef ELL_CLASSIC 
-	if (dummy!=1)   /* classic ellipsoidal collapse, tabulated */
-		{
-			fail=1;
-			printf("ERROR: CT table not constructed for ELL_CLASSIC, %d\n",
-			 dummy);
+
+	if (dummy != 1)   /* classic ellipsoidal collapse, tabulated */
+		{	
+        printf("ERROR: CT table not constructed for ELL_CLASSIC, %d\n", dummy);
+        fail = 1;
 		}
+
 #endif
+
 #ifdef ELL_SNG
 #ifndef MOD_GRAV_FR
-	if (dummy!=3)   /* standard gravity, numerical ellipsoidal collapse */
+
+	if (dummy != 3)   /* standard gravity, numerical ellipsoidal collapse */
 		{
-			fail=1;
-			printf("ERROR: CT table not constructed for ELL_SNG and standard gravity, %d\n",
-			 dummy);
+		printf("ERROR: CT table not constructed for ELL_SNG and standard gravity, %d\n", dummy);
+        fail = 1;
 		}
 #else
-	if (dummy!=4)   /* f(R) gravity, numerical ellipsoidal collapse */
-		{
-			fail=1;
-			printf("ERROR: CT table not constructed for ELL_SNG and MOD_GRAV_FR, %d\n",
-			 dummy);
-		}
-#endif
-#endif
-	fread(&fdummy,sizeof(double),1,CTtableFilePointer);
-	if (fabs(fdummy-params.Omega0)>1.e-10)
-		{
-			fail=1;
-			printf("ERROR: CT table constructed for the wrong Omega0, %f in place of %f\n",
-			 fdummy,params.Omega0);
-		}
-	fread(&fdummy,sizeof(double),1,CTtableFilePointer);
-	if (fabs(fdummy-params.OmegaLambda)>1.e-10)
-		{
-			fail=1;
-			printf("ERROR: CT table constructed for the wrong OmegaLambda, %f in place of %f\n",
-			 fdummy,params.OmegaLambda);
-		}
-	fread(&fdummy,sizeof(double),1,CTtableFilePointer);
-	if (fabs(fdummy-params.Hubble100)>1.e-10)
-		{
-			fail=1;
-			printf("ERROR: CT table constructed for the wrong Hubble100, %f in place of %f\n",
-			 fdummy,params.Hubble100);
+
+	if (dummy != 4)   /* f(R) gravity, numerical ellipsoidal collapse */
+		{	
+		printf("ERROR: CT table not constructed for ELL_SNG and MOD_GRAV_FR, %d\n", dummy);
+        fail = 1;	
 		}
 
-	fread(&dummy,sizeof(int),1,CTtableFilePointer);
-	if (dummy != Ncomputations)
+#endif
+#endif
+
+	/* Check the CT table parameters */
+
+	fread(&fdummy, sizeof(double), 1, CTtableFilePointer);
+	if (fabs(fdummy - params.Omega0) > 1.e-10)
 		{
-			fail=1;
-			printf("ERROR: CT table has the wrong size, %d in place of %d\n",
-			 dummy,Ncomputations);
-		}
-	fread(&dummy,sizeof(int),1,CTtableFilePointer);
-	if (dummy != CT_NBINS_D)
-		{
-			fail=1;
-			printf("ERROR: CT table has the wrong density sampling, %d in place of %d\n",
-			 dummy,CT_NBINS_D);
-		}
-	fread(&dummy,sizeof(int),1,CTtableFilePointer);
-	if (dummy != CT_NBINS_XY)
-		{
-			fail=1;
-			printf("ERROR: CT table has the wrong x and y sampling, %d in place of %d\n",
-			 dummy,CT_NBINS_XY);
+		printf("ERROR: CT table constructed for the wrong Omega0, %f in place of %f\n", fdummy, params.Omega0);
+        fail = 1;
 		}
 
-	return fail;
+    fread(&fdummy, sizeof(double), 1, CTtableFilePointer);
+    if (fabs(fdummy - params.OmegaLambda) > 1.e-10)
+    	{
+        printf("ERROR: CT table constructed for the wrong OmegaLambda, %f in place of %f\n", fdummy, params.OmegaLambda);
+        fail = 1;
+    	}
+
+	fread(&fdummy, sizeof(double), 1, CTtableFilePointer);
+    if (fabs(fdummy - params.Hubble100) > 1.e-10)
+    	{
+        printf("ERROR: CT table constructed for the wrong Hubble100, %f in place of %f\n", fdummy, params.Hubble100);
+        fail = 1;
+    	}
+
+	/* Check the CT table size and sampling */
+
+    fread(&dummy, sizeof(int), 1, CTtableFilePointer);
+    if (dummy != Ncomputations)
+   		{
+        printf("ERROR: CT table has the wrong size, %d in place of %d\n", dummy, Ncomputations);
+        fail = 1;
+    	}
+
+    fread(&dummy, sizeof(int), 1, CTtableFilePointer);
+    if (dummy != CT_NBINS_D)
+    	{
+        printf("ERROR: CT table has the wrong density sampling, %d in place of %d\n", dummy, CT_NBINS_D);
+        fail = 1;
+    	}
+
+    fread(&dummy, sizeof(int), 1, CTtableFilePointer);
+    if (dummy != CT_NBINS_XY)
+    	{
+        printf("ERROR: CT table has the wrong x and y sampling, %d in place of %d\n", dummy, CT_NBINS_XY);
+        fail = 1;
+    	}
+
+    return fail;
 }
 
+/*-------------------------- Write the infos into the header of CT_Table_file --------------------------------------------------------*/
 
 void write_CTtable_header()
 {
 
-	int dummy;
+    int dummy;
 
 #ifdef ELL_CLASSIC 
-	dummy=1;   /* classic ellipsoidal collapse, tabulated */
-	fwrite(&dummy,sizeof(int),1,CTtableFilePointer);
+
+	/* Classic ellipsoidal collapse, tabulated */
+
+    dummy = 1;   
+    fwrite(&dummy, sizeof(int), 1, CTtableFilePointer);
+
 #endif
+
 #ifdef ELL_SNG
 #ifndef MOD_GRAV_FR
-	dummy=3;   /* standard gravity, numerical ellipsoidal collapse */
-	fwrite(&dummy,sizeof(int),1,CTtableFilePointer);
-#else
-	dummy=4;   /* f(R) gravity, numerical ellipsoidal collapse */
-	fwrite(&dummy,sizeof(int),1,CTtableFilePointer);
-#endif
-#endif
-	fwrite(&params.Omega0,sizeof(double),1,CTtableFilePointer);
-	fwrite(&params.OmegaLambda,sizeof(double),1,CTtableFilePointer);
-	fwrite(&params.Hubble100,sizeof(double),1,CTtableFilePointer);
 
-	fwrite(&Ncomputations,sizeof(int),1,CTtableFilePointer);
-	dummy=CT_NBINS_D;
-	fwrite(&dummy,sizeof(int),1,CTtableFilePointer);
-	dummy=CT_NBINS_XY;
-	fwrite(&dummy,sizeof(int),1,CTtableFilePointer);
+	/* Standard gravity, numerical ellipsoidal collapse */
+
+    dummy = 3; 
+    fwrite(&dummy, sizeof(int), 1, CTtableFilePointer);
+#else
+
+	/* f(R) gravity, numerical ellipsoidal collapse */
+
+    dummy = 4;   
+    fwrite(&dummy, sizeof(int), 1, CTtableFilePointer);
+
+#endif
+#endif
+
+	/* Write Omega0 */
+
+	fwrite(&params.Omega0, sizeof(double), 1, CTtableFilePointer);  
+
+	/* Write OmegaLambda */
+	
+    fwrite(&params.OmegaLambda, sizeof(double), 1, CTtableFilePointer); 
+
+	/* Write Hubble100 */
+
+    fwrite(&params.Hubble100, sizeof(double), 1, CTtableFilePointer);  
+
+	/* Write Ncomputations */
+
+    fwrite(&Ncomputations, sizeof(int), 1, CTtableFilePointer); 
+
+	/* Write CT_NBINS_D */
+
+    dummy = CT_NBINS_D;
+    fwrite(&dummy, sizeof(int), 1, CTtableFilePointer);    
+
+	/* Write CT_NBINS_XY */
+
+    dummy = CT_NBINS_XY;
+    fwrite(&dummy, sizeof(int), 1, CTtableFilePointer);         
 
 }
 
+#endif 
 
-
-#endif /* TABULATED_CT */
-
+/* ------------------------------------  Tabulated collapse time : END ------------------------------------ */
 
 #define min(a,b) ((a)<(b)?(a):(b))
 #define max(a,b) ((a)>(b)?(a):(b))
 
 inline void ord(double * restrict a, double * restrict b, double * restrict c)
 {
-	/* orders a,b,c in decreasing order a>b>c */
-	double lo,hi;
+	/* Orders a,b,c in decreasing order a>b>c */
 
-	hi = max( max(*a,*b), *c );
-	lo = min( min(*a,*b), *c );
+	double lo , hi;
+
+	hi = max( max(*a, *b), *c );
+	lo = min( min(*a, *b), *c );
 
 	*b = *a + *b+ *c - lo - hi;
 	*a = hi;
