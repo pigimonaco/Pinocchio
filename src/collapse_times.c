@@ -1018,7 +1018,7 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 
 #pragma omp parallel for
 
-			for (int id = 0; id < CT_NBINS_D; ++id)
+			for (int id = 0; id < CT_NBINS_D; id++)
 				{
 				delta_vector[id] = id * interval - CT_RANGE_D;
 				}
@@ -1044,35 +1044,50 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 				}
 
 			del =- CT_RANGE_D ;
+      int id = 0;
+// 			/* Initial interval */
 
-			/* Initial interval */
+// 		    double interval = CT_EXPO * ref_interval;
 
-		    double interval = CT_EXPO * ref_interval;
+// #pragma omp parallel for
 
-#pragma omp parallel for
-
-			for(int id = 0; id < CT_NBINS_D; ++id) 
-				{
+// 			for(int id = 0; id < CT_NBINS_D; id++) 
+// 				{
 				
-				/* Assign current value to delta_vector */
+// 				/* Assign current value to delta_vector */
 
-        		delta_vector[id] = del; 
+//         		delta_vector[id] = del; 
 
-				/* Adjust the interval based on the difference from CT_DELTA0 */
+// 				/* Adjust the interval based on the difference from CT_DELTA0 */
 
-        		interval *= pow(fabs(del - CT_DELTA0), CT_EXPO - 1.0); 
+//         		interval *= pow(fabs(del - CT_DELTA0), CT_EXPO - 1.0); 
 
-				/* Ensure interval is within the desired range */
+// 				/* Ensure interval is within the desired range */
         		
-				interval = (interval / ref_interval < CT_SQUEEZE ? ref_interval * CT_SQUEEZE : interval);
+// 				interval = (interval / ref_interval < CT_SQUEEZE ? ref_interval * CT_SQUEEZE : interval);
 
-        		/* Increment the value */
+//         		/* Increment the value */
 
-				del += interval; 
+// 				del += interval; 
 
-				}
+// 				}
 
-			}
+
+      /*----------------------------------------------------*/
+			id=0;
+		del=-CT_RANGE_D;
+		do 
+			{
+				delta_vector[id]=del;
+				interval = CT_EXPO * ref_interval * pow(fabs(del-CT_DELTA0),CT_EXPO-1.0);
+				interval = (interval/ref_interval<CT_SQUEEZE? ref_interval*CT_SQUEEZE : interval);
+				del+=interval;
+				id++;
+			}  
+		while (id<CT_NBINS_D);
+      /*-------------------------------------------------------------*/    
+      }
+
 
             /* If the current task is the first task */
 
@@ -1092,19 +1107,19 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 			The function gsl_interp_accel_alloc() dynamically allocates memory for a gsl_interp_accel object and returns a pointer to the allocated memory */
 			/* Allocate memory for gsl_interp_accel object */
 
-			gsl_interp_accel* accel = gsl_interp_accel_alloc();
+			accel = gsl_interp_accel_alloc();
 
 			/* Allocate memory for CT_Spline array */
 			/* gsl_spline*** CT_Spline represents a three-dimensional array of gsl_spline objects. The dimensions of this array are CT_NBINS_XY x CT_NBINS_XY x CT_NBINS_D */
 
-            gsl_spline*** CT_Spline = (gsl_spline***)calloc(CT_NBINS_XY, sizeof(gsl_spline**));
+      CT_Spline = (gsl_spline***)calloc(CT_NBINS_XY, sizeof(gsl_spline**));
 
 #pragma omp parallel for
 
 			for (int i = 0; i < CT_NBINS_XY; ++i)
 				{
 				CT_Spline[i] = (gsl_spline**)calloc(CT_NBINS_XY, sizeof(gsl_spline*));
-				for (int j = 0; j < CT_NBINS_XY; ++j)
+				for (int j = 0; j < CT_NBINS_XY; j++)
 					{
 					CT_Spline[i][j] = gsl_spline_alloc(gsl_interp_cspline, CT_NBINS_D);
 					}
@@ -1203,7 +1218,7 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 		int bunch     = Ncomputations / NTasks;
 		int remainder = Ncomputations % NTasks;
 
-		for (int i = 0, ix = 0; i < NTasks; ++i)
+		for (int i = 0, ix = 0; i < NTasks; i++)
 			{
 			counts[i] = bunch + (i < remainder);
 			displs[i] = bunch*i + ((remainder > i) ? i : remainder );
