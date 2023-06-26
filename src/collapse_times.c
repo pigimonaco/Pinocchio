@@ -1043,8 +1043,8 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 					           - 2. *pow(deltaf, 2. - CT_EXPO) ) / CT_EXPO / (2. - CT_EXPO) + 2. *deltaf / CT_SQUEEZE ) / (CT_NBINS_D - 2.0);
 				}
 
-			del =- CT_RANGE_D ;
-      int id = 0;
+      		int id = 0;
+
 // 			/* Initial interval */
 
 // 		    double interval = CT_EXPO * ref_interval;
@@ -1074,17 +1074,29 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 
 
       /*----------------------------------------------------*/
-			id=0;
-		del=-CT_RANGE_D;
-		do 
-			{
-				delta_vector[id]=del;
-				interval = CT_EXPO * ref_interval * pow(fabs(del-CT_DELTA0),CT_EXPO-1.0);
-				interval = (interval/ref_interval<CT_SQUEEZE? ref_interval*CT_SQUEEZE : interval);
-				del+=interval;
+			
+			del = -CT_RANGE_D;
+			do
+				{
+				/* Assign current value to delta_vector */
+
+				delta_vector[id] = del;
+
+				/* Adjust the interval based on the difference from CT_DELTA0 */
+
+				interval = CT_EXPO * ref_interval * pow(fabs(del - CT_DELTA0), CT_EXPO -1.0);
+				
+				/* Ensure interval is within the desired range */
+
+				interval = (interval / ref_interval < CT_SQUEEZE ? ref_interval * CT_SQUEEZE : interval);
+				
+				/* Increment the value */
+
+				del += interval;
 				id++;
-			}  
-		while (id<CT_NBINS_D);
+				
+				}  
+			while (id<CT_NBINS_D);
       /*-------------------------------------------------------------*/    
       }
 
@@ -1112,7 +1124,7 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 			/* Allocate memory for CT_Spline array */
 			/* gsl_spline*** CT_Spline represents a three-dimensional array of gsl_spline objects. The dimensions of this array are CT_NBINS_XY x CT_NBINS_XY x CT_NBINS_D */
 
-      CT_Spline = (gsl_spline***)calloc(CT_NBINS_XY, sizeof(gsl_spline**));
+      		CT_Spline = (gsl_spline***)calloc(CT_NBINS_XY, sizeof(gsl_spline**));
 
 #pragma omp parallel for
 
