@@ -1043,8 +1043,6 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 					           - 2. *pow(deltaf, 2. - CT_EXPO) ) / CT_EXPO / (2. - CT_EXPO) + 2. *deltaf / CT_SQUEEZE ) / (CT_NBINS_D - 2.0);
 				}
 
-      		int id = 0;
-
 // 			/* Initial interval */
 
 // 		    double interval = CT_EXPO * ref_interval;
@@ -1073,9 +1071,10 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 // 				}
 
 
-      /*----------------------------------------------------*/
-			
+      		/*----------------------------------------------------*/
+	 	
 			del = -CT_RANGE_D;
+			int id = 0;
 			do
 				{
 				/* Assign current value to delta_vector */
@@ -1094,7 +1093,7 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 
 				del += interval;
 				id++;
-				
+
 				}  
 			while (id<CT_NBINS_D);
       /*-------------------------------------------------------------*/    
