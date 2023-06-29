@@ -925,6 +925,16 @@ inline double inverse_collapse_time(int ismooth, double * restrict deformation_t
 
 #ifdef TABULATED_CT
 
+/*-------------------- Interpolation option --------------------*/
+
+//#define DEBUG
+//#define PRINTJUNK
+
+//#define ALL_SPLINE
+//#define TRILINEAR
+//#define HISTO
+#define BILINEAR_SPLINE
+
 /* Macros declaration only if TABULATED_CT is on*/
 
 #define CT_NBINS_XY (50) 
@@ -1075,6 +1085,7 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 	 	
 			del = -CT_RANGE_D;
 			int id = 0;
+
 			do
 				{
 				/* Assign current value to delta_vector */
@@ -1096,6 +1107,7 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 
 				}  
 			while (id<CT_NBINS_D);
+			
       /*-------------------------------------------------------------*/    
       }
 
