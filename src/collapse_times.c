@@ -125,14 +125,14 @@ inline double  ell_classic(int ismooth, double l1, double l2, double l3)
 	/* Not vanishing lambda1 eigenvalue case */
 
 	else
-		{
+		{			
 		double den = det / 126. + 5. * l1 * del * ( del - l1 ) / 84.;   // den == D nel paper 
 
 		/* Check 1st pertubative order conditions */
 
 		if (fabs(den) < SMALL) 
 			{
-			if (fabs(del-l1) < SMALL)
+			if (fabs(del - l1) < SMALL)
 				{
 				if (l1 > 0.0)
 					{
@@ -541,12 +541,10 @@ inline int compute_collapse_times(int ismooth)
 			
     	/* ---------------- Parallel initialization --------------- */
 
-#if defined( _OPENMP )
-#pragma omp parallel for 
-#endif 
     
 		/* Loop on all particles */ 
-	
+
+		#pragma omp parallel for 
 		for (int i = 0; i < MyGrids[0].total_local_size; i++)
 			{
 
@@ -639,7 +637,7 @@ inline int compute_collapse_times(int ismooth)
 #endif
 
 	/* Loop on all particle */
-
+   
 	for (int index = 0; index < MyGrids[0].total_local_size; index++)
 		{
 
@@ -935,6 +933,11 @@ inline double inverse_collapse_time(int ismooth, double * restrict deformation_t
 //#define HISTO
 #define BILINEAR_SPLINE
 
+// Da modificare
+// O qua o dentro al MAKE fileeeeeeeeeeeeeeeeeeeee
+
+/*-------------------------------------------------------------*/
+
 /* Macros declaration only if TABULATED_CT is on*/
 
 #define CT_NBINS_XY (50) 
@@ -1026,8 +1029,7 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 
 			interval = 2. * CT_RANGE_D / (double)CT_NBINS_D;
 
-#pragma omp parallel for
-
+			#pragma omp parallel for
 			for (int id = 0; id < CT_NBINS_D; id++)
 				{
 				delta_vector[id] = id * interval - CT_RANGE_D;
@@ -1137,13 +1139,11 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 
       		CT_Spline = (gsl_spline***)calloc(CT_NBINS_XY, sizeof(gsl_spline**));
 
-#pragma omp parallel for
-
 			for (int i = 0; i < CT_NBINS_XY; ++i)
 				{
-				CT_Spline[i] = (gsl_spline**)calloc(CT_NBINS_XY, sizeof(gsl_spline*));
+				CT_Spline[i] = (gsl_spline**)calloc(CT_NBINS_XY, sizeof(gsl_spline*));	
 				for (int j = 0; j < CT_NBINS_XY; j++)
-					{
+					{	
 					CT_Spline[i][j] = gsl_spline_alloc(gsl_interp_cspline, CT_NBINS_D);
 					}
 				}
@@ -1310,8 +1310,7 @@ int initialize_collapse_times(int ismooth, int onlycompute)
 
 			/* The private clause is used to declare variables that should have private copies for each thread to avoid data races */
 
-#pragma omp parallel for private(i, id, ix, iy, x, y, l1, l2, l3)
-
+			// #pragma omp parallel for private(i, id, ix, iy, x, y, l1, l2, l3)
 			for (i = 0; i < Ncomputations; i++)
 				{
 
