@@ -25,46 +25,72 @@
 #
 
 
+# Directory settings #
+
 RUNDIR = ./
+
+# Executable name #
 
 EXEC = pinocchio.x
 
-DEBUG = NO
-OMP   = NO
+# Compilation options #
 
-# OPTIONS += -DCLASSIC_FRAGMENTATION
-#OPTIONS += -DLIGHT_OUTPUT
-#OPTIONS += -DSNAPSHOT
+DEBUG = NO
+OMP   = YES
+
+########## Preprocessor Definitions ########## 
+
+# Displacement LPT order # 
 
 OPTIONS += -DTWO_LPT
 OPTIONS += -DTHREE_LPT
-# OPTIONS += -DPLC
-# OPTIONS += -DNORADIATION
-OPTIONS += -DTABULATED_CT
-# OPTIONS += -DHISTO
+
+# Dynamics of triaxial collapse #
+
+OPTIONS += -DELL_CLASSIC
+# OPTIONS += -DELL_SNG
+
+# Building groups and fragmentation #
+
+OPTIONS += -DCLASSIC_FRAGMENTATION
+
+# Interpolation of collapse time from a TABLE #
+
+# OPTIONS += -DTABULATED_CT
 # OPTIONS += -DTRILINEAR
 # OPTIONS += -DBILINEAR_SPLINE
+# OPTIONS += -DALL_SPLINE
+# OPTIONS += -DASCII
+# OPTIONS += -DHISTO
+
+# Output #
+
+# OPTIONS += -DPLC
+# OPTIONS += -DSNAPSHOT
+# OPTIONS += -DADD_RMAX_TO_SNAPSHOT
+# OPTIONS += -DLIGHT_OUTPUT
+
+# Modified Gravity models #
+
+# OPTIONS += -DSCALE_DEPENDENT
+# OPTIONS += -DMOD_GRAV_FR
+# OPTIONS += -DFR0=1.e-4
+
+# Other options # 
+
+# OPTIONS += -DRECOMPUTE_DISPLACEMENTS
+# OPTIONS += -DUSE_GPERFTOOLS
+# OPTIONS += -DLONGIDS
+# OPTIONS += -DWHITENOISE
+# OPTIONS += -DNO_RANDOM_MODULES
+# OPTIONS += -DDOUBLE_PRECISION_PRODUCTS
+# OPTIONS += -DVETTORIALIZZA
+OPTIONS += -DNORADIATION
 # OPTIONS += -DPRINTJUNK
 
-#OPTIONS += -DELL_SNG
-OPTIONS += -DELL_CLASSIC
-#OPTIONS += -DSCALE_DEPENDENT
-#OPTIONS += -DMOD_GRAV_FR
-#OPTIONS += -DFR0=1.e-4
-#OPTIONS += -DRECOMPUTE_DISPLACEMENTS
-# OPTIONS += -DUSE_GPERFTOOLS
+########## Preprocessor Definitions end ########## 
 
-
-# output
-#OPTIONS += -DADD_RMAX_TO_SNAPSHOT
-#OPTIONS += -DLONGIDS
-#OPTIONS += -DLIGHT_OUTPUT
-
-# other options
-#OPTIONS += -DWHITENOISE
-#OPTIONS += -DNO_RANDOM_MODULES
-#OPTIONS += -DDOUBLE_PRECISION_PRODUCTS
-# OPTIONS += -DVETTORIALIZZA
+# OpenMP Configuration #
 
 ifeq ($(OMP), YES)
 # OPTIONS += -DUSE_FFT_THREADS
@@ -75,7 +101,11 @@ OMP_FLAG =
 OMP_FFTW =
 endif
 
-SYSTYPE="my_machine"
+########## System-specific Configuration ############
+
+SYSTYPE="pleiadi"
+
+###################### MARCONI ######################
 
 ifeq ($(SYSTYPE),"Marconi100")
 CC          =  mpicc
@@ -91,20 +121,39 @@ GSL_LIBR    = -L$(GSL_LIB) -lgsl -lgslcblas -lm
 GSL_INCL    = -I$(GSL_INC)
 endif
 
+###################### PLEIADI ######################
+
+ifeq ($(SYSTYPE),"pleiadi")
+CC          =  mpicc
+CDEBUG      = -ggdb3 -Wall $(OMP_FLAG)
+COPTIMIZED  = -O3 -Wno-unused-result $(OMP_FLAG)
+FFTW_LIBR   = -L/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/fftw-3.3.10-bap3ootbcmiypnmo7rouk57jbdhfjuty/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
+FFTW_INCL   = -I/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/fftw-3.3.10-bap3ootbcmiypnmo7rouk57jbdhfjuty/include
+PFFT_LIBR   = -L/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/pfft-1.0.8-alpha-qy6lqerctfrhjzaoamzjhbpga2ofejqf/lib -lpfft
+PFFT_INCL   = -I/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/pfft-1.0.8-alpha-qy6lqerctfrhjzaoamzjhbpga2ofejqf/include
+MPI_LIBR    =
+MPI_INCL    =
+GSL_LIBR    = -L/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/gsl-2.7.1-uehbowahpvubxundtx3cz4a4a5sdwzun/lib -lgsl -lgslcblas -lm
+GSL_INCL    = -I/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/gsl-2.7.1-uehbowahpvubxundtx3cz4a4a5sdwzun/include
+endif
+
+###################### AMONRA ######################
+
 ifeq ($(SYSTYPE),"amonra")
 CC          =  mpicc
 CDEBUG      = -ggdb3 -Wall $(OMP_FLAG)
 COPTIMIZED  = -O3 -Wno-unused-result $(OMP_FLAG)
 FFTW_LIBR   = -L$(FFTW_LIB) -lfftw3_mpi -lfftw3 $(OMP_FFTW)
 FFTW_INCL   = -I$(FFTW_INC)
-PFFT_LIBR   = -L$(HOME)/lib -lpfft
-PFFT_INCL   = -I$(HOME)/include
+PFFT_LIBR   = -L/u/pmonaco/lib -lpfft
+PFFT_INCL   = -I/u/monaco/include
 MPI_LIBR    =
 MPI_INCL    =
 GSL_LIBR    = -L$(GSL_LIB) -lgsl -lgslcblas -lm
 GSL_INCL    = -I$(GSL_INC)
 endif
 
+###################### MY_MACHINE ####################
 
 ifeq ($(SYSTYPE),"my_machine")
 CC          =  mpicc 
@@ -120,35 +169,44 @@ GSL_LIBR    = -L/usr/local/lib -lgsl -lgslcblas
 GSL_INCL    = -I/usr/local/include
 endif
 
+########## System-specific Configuration end ########## 
 
-# included libraries, shared libraries 
+# Include paths for libraries #
+
 INC =  $(PFFT_INCL) $(FFTW_INCL) $(MPI_INCL) $(GSL_INCL)
+
+# Library flags #
+
 LIB =  -lm $(PFFT_LIBR) $(FFTW_LIBR) $(MPI_LIBR) $(GSL_LIBR)
 
+# Compiler options : choose from CDEBUG or COPTIMIZED #
 
-# compiler options : choose from CDEBUG or COPTIMIZED
-# compiler options
 ifeq ($(DEBUG), YES)
 COPTS = $(CDEBUG)
 else
 COPTS = $(COPTIMIZED)
 endif
 
-# source files:
+# Source files #
+
 OBJECTS = fmax.o variables.o initialization.o collapse_times.o fmax-pfft.o GenIC.o \
 	ReadParamfile.o allocations.o LPT.o distribute.o \
 	fragment.o build_groups.o write_halos.o write_snapshot.o cosmo.o
-#ReadWhiteNoise.o
 
-# rules
-%.o: %.c Makefile pinocchio.h def_splines.h
-	$(CC) $(INC) $(COPTS) $(OPTIONS) -c $<
+# Main targets and rules
 
 pinocchio: $(OBJECTS) pinocchio.o Makefile
 	$(CC) $(INC) $(COPTS) -o $(RUNDIR)$(EXEC) pinocchio.o $(OBJECTS) $(LIB)
 
 run_planner: $(OBJECTS) run_planner.o Makefile
-	$(CC) $(INC) $(COPTS) -o run_planner run_planner.o $(OBJECTS) $(LIB)
+	$(CC) $(INC) $(COPTS) -o run_planner run_planner.o $(OBJECTS) $(LIB)	
+
+# Generic rule for compiling source files #
+
+%.o: %.c Makefile pinocchio.h def_splines.h
+	$(CC) $(INC) $(COPTS) $(OPTIONS) -c $<
+
+# Clean target #
 
 clean:
 	\rm -f *.o *~ $(EXEC) run_planner
