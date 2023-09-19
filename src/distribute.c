@@ -705,6 +705,7 @@ typedef struct
 {
   unsigned int pos;
   PRODFLOAT zacc;
+  int group_ID;
 } back_data;
 back_data *back_buffer;
 
@@ -826,8 +827,10 @@ int keep_data_back(int *fft_box)
 	    /* position in the fft domain */
 	    fftpos = COORD_TO_INDEX(ibox - fft_box[0], jbox - fft_box[1], kbox - fft_box[2], (fft_box+3));
 	    products[fftpos].zacc = frag[iz].zacc;
+      products[fftpos].group_ID = frag[iz].group_ID;
+      
+      printf(" Task %d keep: particle_ID:  %d  zacc: %f   group_ID: %d\n",ThisTask,iz,frag[iz].zacc, frag[iz].group_ID);
 
-	    // printf(" Task %d keep:  %d  %d %d %d  %d  %d  %f\n",ThisTask,iz,frag_pos[iz],ibox,jbox,kbox,fftpos,COORD_TO_INDEX(ibox,jbox,kbox,MyGrids[0].GSglobal)+1,frag[iz].zacc); // LEVARE
 	  }
       }
 
@@ -883,8 +886,9 @@ int send_data_back(int target)
 	    /* position in the fft domain */
 	    back_buffer[bufcount].pos = COORD_TO_INDEX(ibox - recv_box[0], jbox - recv_box[1], kbox - recv_box[2], (recv_box+3));
 	    back_buffer[bufcount].zacc = frag[iz].zacc;
+      back_buffer[bufcount].group_ID =frag[iz].group_ID;
 
-//	    printf(" Task %d send:  %d  %d  %f\n",ThisTask,iz+1,COORD_TO_INDEX(ibox,jbox,kbox,MyGrids[0].GSglobal)+1,back_buffer[iz].zacc); // LEVARE
+	    // printf(" Task %d send:  %d  %d  %f %d\n",ThisTask,iz+1,COORD_TO_INDEX(ibox,jbox,kbox,MyGrids[0].GSglobal)+1,back_buffer[iz].zacc,back_buffer[iz].group_ID); // LEVARE
 	    ++bufcount;
 	    ++sent;
 
@@ -938,8 +942,10 @@ int recv_data_back(int *mybox, int sender)
 	MPI_Recv(back_buffer, nsent * sizeof(back_data), MPI_BYTE, sender, 0, MPI_COMM_WORLD, &status);
       for (int iz=0; iz<nsent; iz++)
 	{
-//	  printf(" Task %d recv:  %d  %d  %f\n",ThisTask,iz+1,back_buffer[iz].pos+1,back_buffer[iz].zacc); // LEVARE
 	  products[back_buffer[iz].pos].zacc=back_buffer[iz].zacc;
+    products[back_buffer[iz].pos].group_ID=back_buffer[iz].group_ID;
+
+    // printf(" Task %d recv:  %d  %d  %f  %d\n",ThisTask,iz+1,back_buffer[iz].pos+1,back_buffer[iz].zacc, back_buffer[iz].group_ID);
 	}
       received+=nsent;
     }

@@ -835,6 +835,16 @@ int build_groups(int Npeaks, double zstop, int first_call)
       printf("\n");
     }
 
+/* Saving group_ID for the snapshot*/
+
+#ifdef SNAPSHOT
+	groups[0].name=0;
+   	groups[FILAMENT].name=FILAMENT;
+   	for (iz=0; iz<subbox.Nstored; iz++){
+     	frag[iz].group_ID = groups[group_ID[iz]].name;
+	}	
+#endif
+
 #ifdef PLC
 
   gsl_root_fsolver_free (solver);

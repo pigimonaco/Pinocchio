@@ -167,6 +167,7 @@ typedef struct  // RIALLINEARE?
 
 #ifdef SNAPSHOT
   PRODFLOAT zacc;
+  int group_ID;
 #endif
 
 #ifdef RECOMPUTE_DISPLACEMENTS

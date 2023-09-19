@@ -83,6 +83,7 @@ int initialize_3LPT_2(Block_data*);
 #endif
 #endif
 int initialize_ZACC(Block_data*);
+int initialize_GRUP(Block_data*);
 int initialize_POS(Block_data*);
 int initialize_VEL(Block_data*);
 int initialize_density(int, Block_data*);
@@ -175,7 +176,7 @@ int write_timeless_snapshot()
   /* allocates structure to handle the INFO block */
 #ifdef TWO_LPT
 #ifdef THREE_LPT
-  NBlocks=7;
+  NBlocks=8;
 #else
   NBlocks=5;
 #endif
@@ -267,6 +268,15 @@ int write_timeless_snapshot()
 
   /* writing of ZACC */
   if (initialize_ZACC(&block))
+    return 1;
+  if (add_to_info(block))
+    return 1;
+  if (write_block(block))
+    return 1;
+  free_block(block);
+
+   /* writing of particle GROUP_ID */
+  if (initialize_GRUP(&block))
     return 1;
   if (add_to_info(block))
     return 1;
@@ -818,6 +828,30 @@ int initialize_ZACC(Block_data *block)
   /* loop on all particles */
   for (int i=0; i < MyGrids[0].total_local_size; i++)
     ((float*)block->data)[i] = products[i].zacc;
+
+  return 0;
+}
+
+int initialize_GRUP(Block_data *block)
+{
+  /* this routine initializes the GRUOP_ID block */
+
+  my_strcpy(block->name,"GRUP",4);
+  my_strcpy(block->type,"LONG    ",8);
+  block->sizeof_type = sizeof(int);
+  block->ndim=1;
+
+  /* each task builds its catalogue: IDs */
+  block->data = (void *)malloc(Npart_array[collector] * sizeof(int));
+  if (block->data==0x0)
+    {
+      printf("ERROR on Task %d: could not allocate block to be written in snapshot\n",ThisTask);
+      return 1;
+    }
+
+  /* loop on all particles */
+  for (int i=0; i < MyGrids[0].total_local_size; i++)
+    ((int*)block->data)[i] = products[i].group_ID;
 
   return 0;
 }

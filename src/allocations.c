@@ -518,9 +518,11 @@ int reallocate_memory_for_fragmentation()
 #endif
 
 #ifdef SNAPSHOT
-  /* sets zacc to -1 before redistributing it */
-  for (int i=0; i<MyGrids[0].total_local_size; i++)
+  /* sets zacc to -1 and group_ID to 0 before redistributing it */
+  for (int i=0; i<MyGrids[0].total_local_size; i++){
     products[i].zacc=-1;
+    products[i].group_ID = 0;
+  }
 #endif
 
 #ifndef RECOMPUTE_DISPLACEMENTS
