@@ -525,7 +525,7 @@ int check_parameters_and_directives(void);
 /* prototypes in write_snapshot.c */
 #ifdef SNAPSHOT
 int write_density(int);
-int write_LPT_snapshot(void);
+int write_LPT_snapshot(double);
 int write_timeless_snapshot(void);
 #endif
 

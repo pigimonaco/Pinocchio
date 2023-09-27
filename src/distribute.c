@@ -829,7 +829,7 @@ int keep_data_back(int *fft_box)
 	    products[fftpos].zacc = frag[iz].zacc;
       products[fftpos].group_ID = frag[iz].group_ID;
       
-      printf(" Task %d keep: particle_ID:  %d  zacc: %f   group_ID: %d\n",ThisTask,iz,frag[iz].zacc, frag[iz].group_ID);
+      // printf(" Task %d keep: particle_ID:  %d  zacc: %f   group_ID: %d\n",ThisTask,iz,frag[iz].zacc, frag[iz].group_ID);
 
 	  }
       }

@@ -94,7 +94,7 @@ FILE *file;
 int NTasksPerFile,collector,ThisFile,NPartInFile,myNpart,myiout;
 int *Npart_array;
 
-int write_LPT_snapshot(void)
+int write_LPT_snapshot(double myiout)
 {
   /* writes positions of all particles obtained with LPT */
 
@@ -106,7 +106,7 @@ int write_LPT_snapshot(void)
   myiout=outputs.n-1;
 
   /* allocates structure to handle the INFO block */
-  NBlocks=3;
+  NBlocks=4;
   NextBlock=0;
   InfoBlock=(Block_data *)calloc(NBlocks, sizeof(Block_data));
 
@@ -144,6 +144,15 @@ int write_LPT_snapshot(void)
     return 1;
   free_block(block);
 
+  // /* writing of particle GROUP_ID */
+  // if (initialize_GRUP(&block))
+  //   return 1;
+  // if (add_to_info(block))
+  //   return 1;
+  // if (write_block(block))
+  //   return 1;
+  // free_block(block);
+
   /* writing of INFO block */
   if (write_info_block())
     return 1;
@@ -178,7 +187,7 @@ int write_timeless_snapshot()
 #ifdef THREE_LPT
   NBlocks=8;
 #else
-  NBlocks=5;
+  NBlocks=6;
 #endif
 #else
   NBlocks=4;
@@ -275,7 +284,7 @@ int write_timeless_snapshot()
     return 1;
   free_block(block);
 
-   /* writing of particle GROUP_ID */
+  /* writing of particle GROUP_ID */
   if (initialize_GRUP(&block))
     return 1;
   if (add_to_info(block))

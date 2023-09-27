@@ -36,14 +36,14 @@ EXEC = pinocchio.x
 # Compilation options #
 
 DEBUG = NO
-OMP   = YES
+OMP   = 
 
 ########## Preprocessor Definitions ########## 
 
 # Displacement LPT order # 
 
 OPTIONS += -DTWO_LPT
-OPTIONS += -DTHREE_LPT
+# OPTIONS += -DTHREE_LPT
 
 # Dynamics of triaxial collapse #
 

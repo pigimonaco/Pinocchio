@@ -55,6 +55,7 @@ int main(int argc, char **argv, char **envp)
   /*********** Special behaviour ***********/
   /*****************************************/
   /* On request, it writes the density field */
+
   if (params.WriteDensity || (argc>=3 && atoi(argv[2])==1) )
     {
 #ifdef SNAPSHOT
@@ -90,49 +91,47 @@ int main(int argc, char **argv, char **envp)
       return 0;
     }
 
-/*   /\* called as "pinocchio.x parameterfile 2" it computes and writes displacement fields, then exit *\/ */
-/*   if (argc>=3 && atoi(argv[2])==2) */
-/*     { */
-/*       if (!ThisTask) */
-/* 	{ */
-/* 	  printf("In this configuration pinocchio will only produce a GADGET snapshot\n"); */
-/* 	  printf("at the first redshift specified by the %s file (z=%f)\n", */
-/* 		 params.OutputList,outputs.z[0]); */
-/* 	} */
+  /* called as "pinocchio.x parameterfile 3" it computes and writes displacement fields, then exit */
 
+  if (argc>=3 && atoi(argv[2])==3)
+    {
+      if (!ThisTask)
+	      {
+	        printf("In this configuration pinocchio will only produce a GADGET snapshot\n");
+	        printf("at the first redshift specified by the %s file (z=%f)\n", params.OutputList,outputs.z[0]);
+        }
 
-/* #ifdef THREE_LPT */
-/*       if (!ThisTask) */
-/* 	{ */
+#ifdef THREE_LPT
+      if (!ThisTask)
+	      {
+	        printf("*********************************************************\n");
+	        printf("Writing of LPT snapshot presently does not work with 3LPT\n");
+	        printf("Please recompile without the THREE_LPT directive\n");
+	        printf("*********************************************************\n");
+	      }
 
-/* 	  // METTERE 3LPT!!!! */
+#else
 
-/* 	  printf("*********************************************************\n"); */
-/* 	  printf("Writing of LPT snapshot presently does not work with 3LPT\n"); */
-/* 	  printf("Please recompile without the THREE_LPT directive\n"); */
-/* 	  printf("*********************************************************\n"); */
-/* 	} */
-/* #else */
+      if (compute_displacements())
+          abort_code();
 
-/*       if (compute_displacements()) */
-/*         abort_code(); */
+      if (write_LPT_snapshot(outputs.z[0]))
+          abort_code();
 
-/*       /\* if (write_LPT_snapshot(outputs.z[0])) *\/  // RIMETTERE!!! */
-/*       /\*   abort_code(); *\/ */
+#endif
 
-/* #endif */
-	
-/*       if (!ThisTask) */
-/* 	printf("Pinocchio done!\n"); */
-/*       MPI_Finalize(); */
-/* #ifdef USE_GPERFTOOLS */
-/*       ProfilerStop(); */
-/* #endif */
+      if (!ThisTask) 
+        printf("Pinocchio done!\n");
+    
+      MPI_Finalize();
 
-/*       return 0; */
-/*     } */
+ #ifdef USE_GPERFTOOLS 
+      ProfilerStop();
 
+ #endif 
 
+      return 0; 
+    } 
 
 
   /* called as "pinocchio.x parameterfile 2" it computes and writes collapse time table, then exit */
