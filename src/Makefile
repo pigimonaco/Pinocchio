@@ -36,7 +36,7 @@ EXEC = pinocchio.x
 # Compilation options #
 
 DEBUG = NO
-OMP   = 
+OMP   = NO
 
 ########## Preprocessor Definitions ########## 
 
@@ -117,6 +117,23 @@ PFFT_LIBR   = -lpfft
 PFFT_INCL   = 
 MPI_LIBR    = -L$(SMPI_ROOT)/lib -lmpi_ibm
 MPI_INCL    = -I$(SMPI_ROOT)/include
+GSL_LIBR    = -L$(GSL_LIB) -lgsl -lgslcblas -lm
+GSL_INCL    = -I$(GSL_INC)
+endif
+
+###################### LEONARDO ######################
+
+ifeq ($(SYSTYPE),"LEONARDO")
+CC          =  mpicc
+CDEBUG      = -ggdb3 -Wall $(OMP_FLAG)
+COPTIMIZED  = -O3 -Wno-unused-result $(OMP_FLAG)
+FFTW_LIBR   = -L/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/fftw-3.3.10-aqomamymhcna6zjrd6nlrync7oag4fkg/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
+FFTW_INCL   = -I/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/fftw-3.3.10-aqomamymhcna6zjrd6nlrync7oag4fkg/include
+PFFT_LIBR   = -L$(HOME)/lib -lpfft
+PFFT_INCL   = -I$(HOME)/include
+
+MPI_LIBR    =
+MPI_INCL    =
 GSL_LIBR    = -L$(GSL_LIB) -lgsl -lgslcblas -lm
 GSL_INCL    = -I$(GSL_INC)
 endif
