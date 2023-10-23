@@ -2028,6 +2028,7 @@ double AnalyticMassFunction(double mass, double z)
 
 }
 
+#pragma omp declare target
 double my_spline_eval(gsl_spline *spline, double x, gsl_interp_accel *accel)
 {
   /* this function performs linear extrapolation beyond the x-range limits,
@@ -2038,7 +2039,9 @@ double my_spline_eval(gsl_spline *spline, double x, gsl_interp_accel *accel)
     return spline->y[spline->size-1]+(x-spline->x[spline->size-1])*
       (spline->y[spline->size-1]-spline->y[spline->size-2])/(spline->x[spline->size-1]-spline->x[spline->size-2]);
   else
+   
     return gsl_spline_eval(spline,x,accel);
 
 }
+#pragma omp end declare target
 

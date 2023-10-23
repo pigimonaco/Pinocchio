@@ -31,19 +31,19 @@ RUNDIR = ./
 
 # Executable name #
 
-EXEC = pinocchio.x
+EXEC = pinocchio_GPU.x
 
 # Compilation options #
 
 DEBUG = NO
-OMP   = NO
+OMP   = YES
 
 ########## Preprocessor Definitions ########## 
 
 # Displacement LPT order # 
 
 OPTIONS += -DTWO_LPT
-# OPTIONS += -DTHREE_LPT
+OPTIONS += -DTHREE_LPT
 
 # Dynamics of triaxial collapse #
 
@@ -66,8 +66,8 @@ OPTIONS += -DCLASSIC_FRAGMENTATION
 # Output #
 
 # OPTIONS += -DPLC
-OPTIONS += -DSNAPSHOT
-OPTIONS += -DADD_RMAX_TO_SNAPSHOT
+# OPTIONS += -DSNAPSHOT
+# OPTIONS += -DADD_RMAX_TO_SNAPSHOT
 # OPTIONS += -DLIGHT_OUTPUT
 
 # Modified Gravity models #
@@ -103,7 +103,7 @@ endif
 
 ########## System-specific Configuration ############
 
-SYSTYPE="pleiadi"
+SYSTYPE="LEONARDO"
 
 ###################### MARCONI ######################
 
@@ -124,16 +124,17 @@ endif
 ###################### LEONARDO ######################
 
 ifeq ($(SYSTYPE),"LEONARDO")
-CC          =  mpicc
+CC          =  nvc
 CDEBUG      = -ggdb3 -Wall $(OMP_FLAG)
-COPTIMIZED  = -O3 -Wno-unused-result $(OMP_FLAG)
+COPTIMIZED  = -mp=gpu -gpu=cc80  -gpu=managed -Minfo=mp $(OMP_FLAG)
+# COPTIMIZED  = -O3 -Wno-unused-result -foffload=-lm -fno-fast-math -fno-associative-math $(OMP_FLAG)
 FFTW_LIBR   = -L/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/fftw-3.3.10-aqomamymhcna6zjrd6nlrync7oag4fkg/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
 FFTW_INCL   = -I/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/fftw-3.3.10-aqomamymhcna6zjrd6nlrync7oag4fkg/include
 PFFT_LIBR   = -L$(HOME)/lib -lpfft
 PFFT_INCL   = -I$(HOME)/include
 
-MPI_LIBR    =
-MPI_INCL    =
+MPI_LIBR    = -L/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/openmpi-4.1.4-si334jjzldoxyl3jbbb3cf6legzshlqn/lib -lmpi
+MPI_INCL    = -I/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/openmpi-4.1.4-si334jjzldoxyl3jbbb3cf6legzshlqn/include
 GSL_LIBR    = -L$(GSL_LIB) -lgsl -lgslcblas -lm
 GSL_INCL    = -I$(GSL_INC)
 endif
@@ -206,9 +207,9 @@ endif
 
 # Source files #
 
-OBJECTS = fmax.o variables.o initialization.o collapse_times.o fmax-pfft.o GenIC.o \
+OBJECTS = fmax.o  variables.o initialization.o collapse_times_GPU.o fmax-pfft.o GenIC.o \
 	ReadParamfile.o allocations.o LPT.o distribute.o \
-	fragment.o build_groups.o write_halos.o write_snapshot.o cosmo.o
+	fragment.o build_groups.o write_halos.o write_snapshot.o cosmo.o 
 
 # Main targets and rules
 
@@ -217,6 +218,7 @@ pinocchio: $(OBJECTS) pinocchio.o Makefile
 
 run_planner: $(OBJECTS) run_planner.o Makefile
 	$(CC) $(INC) $(COPTS) -o run_planner run_planner.o $(OBJECTS) $(LIB)	
+
 
 # Generic rule for compiling source files #
 

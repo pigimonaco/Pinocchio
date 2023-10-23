@@ -546,7 +546,9 @@ double GrowingMode(double,double);
 double GrowingMode_2LPT(double,double);
 double GrowingMode_3LPT_1(double,double);
 double GrowingMode_3LPT_2(double,double);
+#pragma omp declare target
 double InverseGrowingMode(double,int);
+#pragma omp end declare target
 double ComovingDistance(double);
 double InverseComovingDistance(double);
 double dComovingDistance_dz(double);
