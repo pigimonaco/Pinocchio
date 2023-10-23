@@ -888,6 +888,8 @@ void clean_list(int *arr)
 
 #define RMS0 1.0
 
+/*--------------------------------- F(R) paper --------------------------------------------------------------------------------------*/
+
 PRODFLOAT virial(int grp,PRODFLOAT F,int flag)
 {
   /* Gives the SQUARE OF the "virial radius" of a group */
@@ -911,6 +913,22 @@ PRODFLOAT virial(int grp,PRODFLOAT F,int flag)
 
   return r2;
 }
+
+
+#ifdef MOD_GRAV_FR
+/* scale-dependent functions for 2LPT term */
+
+double mu(double a, double k) {
+  double B1, B2, emme;
+  B1   = params.Omega0 / pow(a, 3.) + 4. * params.OmegaLambda;
+  B2   = params.Omega0 + 4. * params.OmegaLambda;
+  emme = 0.5 * H_over_c * H_over_c * pow(B1, 3.) / (B2 * B2 * FR0); 
+  return 1. + k * k / 3. / (k * k + a * a * emme);
+}
+
+#endif
+
+/*----------------------------------------------------------------------------------------------------------------------------*/
 
 /* ACCRETION AND MERGING */
 

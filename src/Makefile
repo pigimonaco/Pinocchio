@@ -36,19 +36,19 @@ EXEC = pinocchio.x
 # Compilation options #
 
 DEBUG = NO
-OMP   = 
+OMP   = NO
 
 ########## Preprocessor Definitions ########## 
 
 # Displacement LPT order # 
 
 OPTIONS += -DTWO_LPT
-# OPTIONS += -DTHREE_LPT
+OPTIONS += -DTHREE_LPT
 
 # Dynamics of triaxial collapse #
 
-OPTIONS += -DELL_CLASSIC
-# OPTIONS += -DELL_SNG
+# OPTIONS += -DELL_CLASSIC
+OPTIONS += -DELL_SNG
 
 # Building groups and fragmentation #
 
@@ -66,26 +66,26 @@ OPTIONS += -DCLASSIC_FRAGMENTATION
 # Output #
 
 # OPTIONS += -DPLC
-OPTIONS += -DSNAPSHOT
-OPTIONS += -DADD_RMAX_TO_SNAPSHOT
+# OPTIONS += -DSNAPSHOT
+# OPTIONS += -DADD_RMAX_TO_SNAPSHOT
 # OPTIONS += -DLIGHT_OUTPUT
 
 # Modified Gravity models #
 
-# OPTIONS += -DSCALE_DEPENDENT
-# OPTIONS += -DMOD_GRAV_FR
-# OPTIONS += -DFR0=1.e-4
+OPTIONS += -DSCALE_DEPENDENT
+OPTIONS += -DMOD_GRAV_FR
+OPTIONS += -DFR0=1.e-4
 
 # Other options # 
 
-# OPTIONS += -DRECOMPUTE_DISPLACEMENTS
+OPTIONS += -DRECOMPUTE_DISPLACEMENTS
 # OPTIONS += -DUSE_GPERFTOOLS
 # OPTIONS += -DLONGIDS
 # OPTIONS += -DWHITENOISE
 # OPTIONS += -DNO_RANDOM_MODULES
 # OPTIONS += -DDOUBLE_PRECISION_PRODUCTS
 # OPTIONS += -DVETTORIALIZZA
-OPTIONS += -DNORADIATION
+# OPTIONS += -DNORADIATION
 # OPTIONS += -DPRINTJUNK
 
 ########## Preprocessor Definitions end ########## 
@@ -137,16 +137,17 @@ GSL_LIBR    = -L/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/
 GSL_INCL    = -I/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/gsl-2.7.1-uehbowahpvubxundtx3cz4a4a5sdwzun/include
 endif
 
-###################### AMONRA ######################
+###################### BASE ######################
 
-ifeq ($(SYSTYPE),"amonra")
+ifeq ($(SYSTYPE),"base")
 CC          =  mpicc
 CDEBUG      = -ggdb3 -Wall $(OMP_FLAG)
 COPTIMIZED  = -O3 -Wno-unused-result $(OMP_FLAG)
 FFTW_LIBR   = -L$(FFTW_LIB) -lfftw3_mpi -lfftw3 $(OMP_FFTW)
 FFTW_INCL   = -I$(FFTW_INC)
-PFFT_LIBR   = -L/u/pmonaco/lib -lpfft
-PFFT_INCL   = -I/u/monaco/include
+PFFT_LIBR   = -L/u/mlepinzan/base/lib -lpfft
+PFFT_INCL   = -I/u/mlepinzan/base/include
+
 MPI_LIBR    =
 MPI_INCL    =
 GSL_LIBR    = -L$(GSL_LIB) -lgsl -lgslcblas -lm
