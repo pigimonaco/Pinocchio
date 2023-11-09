@@ -40,7 +40,7 @@ void set_fragment_parameters(int);
 #error Trying to compile with LIST_OF_FRAGMENT_PARAMETERS and READ_FRAGMENT_PARAMS_FROM_FILE
 #endif
 
-
+pos_data obj, obj1, obj2;
 int ngroups;
 
 #ifdef LIST_OF_FRAGMENT_PARAMETERS
