@@ -60,6 +60,11 @@ __attribute__((always_inline)) double interpolate_collapse_time (int, double, do
 
 #endif 
 
+#ifdef MOD_GRAV_FR
+
+__attribute__((always_inline)) double ForceModification (double, double ,double);
+
+#endif
 /* Order inverse collpase time */
 
 __attribute__((always_inline)) void ord                         (double *,double *,double *);
@@ -277,6 +282,26 @@ int sng_system(double t, const double y[], double f[], void *sng_par) {
     return GSL_SUCCESS;
 }
 
+/* --------------------------------------------------- Modified gravity model --------------------------------------------------------*/
+
+#ifdef MOD_GRAV_FR
+
+double ForceModification(double size, double a, double delta) {
+
+    double ff        = 4. * params.OmegaLambda / params.Omega0;
+    double thickness = FR0 / params.Omega0 / pow(H_over_c * size, 2.0) *
+                       pow(a, 7.) * pow((1. + delta), -1. / 3.) *
+                       (pow((1.0 + ff) / (1.0 + ff * pow(a, 3.)), 2.0) -
+                       pow((1.0 + ff) / (1.0 + delta + ff * pow(a, 3.)), 2.0));
+
+    double F3 = (thickness * (3. + thickness * (-3. + thickness)));
+    if (F3 < 0.) {
+        F3 = 0.;
+    }
+    return (F3 < 1. ? F3 / 3. : 1. / 3);
+}
+
+#endif
 
 /* Solving the ODE system for the ellipsoidal collapse following SNG */
 
@@ -366,28 +391,6 @@ inline double  ell_sng(int ismooth, double l1, double l2, double l3) {
     /* In this case the ellipsoid does not collapse */
     return 0;
 }
-
-/* --------------------------------------------------- Modified gravity model --------------------------------------------------------*/
-
-#ifdef MOD_GRAV_FR
-
-double ForceModification(double size, double a, double delta) {
-
-    double ff        = 4. * params.OmegaLambda / params.Omega0;
-    double thickness = FR0 / params.Omega0 / pow(H_over_c * size, 2.0) *
-                       pow(a, 7.) * pow((1. + delta), -1. / 3.) *
-                       (pow((1.0 + ff) / (1.0 + ff * pow(a, 3.)), 2.0) -
-                       pow((1.0 + ff) / (1.0 + delta + ff * pow(a, 3.)), 2.0));
-
-    double F3 = (thickness * (3. + thickness * (-3. + thickness)));
-    if (F3 < 0.) {
-        F3 = 0.;
-    }
-    return (F3 < 1. ? F3 / 3. : 1. / 3);
-}
-
-#endif
-
 
 /*---------------------------------------- Calculation of b_c == growing mode at collapse time ---------------------------------------*/
 

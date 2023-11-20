@@ -911,22 +911,52 @@ PRODFLOAT virial(int grp,PRODFLOAT F,int flag)
     /* accretion */
     r2 = pow( f_a * pow(rlag, espo) * (sigmaD>sigmaD0 ? 1.0+(sigmaD-sigmaD0)*f_ra : 1.0) , 2.0 ) + pow( f_200 * rlag, 2.0 );
 
-  return r2;
-}
-
+   /*---------------------------------------------------------------------------------------------------------*/
 
 #ifdef MOD_GRAV_FR
-/* scale-dependent functions for 2LPT term */
+	// FILE *output_file_rlag = fopen("output_rlag_values.txt", "w");
+        int interpolation_Done = 0;
 
-double mu(double a, double k) {
-  double B1, B2, emme;
-  B1   = params.Omega0 / pow(a, 3.) + 4. * params.OmegaLambda;
-  B2   = params.Omega0 + 4. * params.OmegaLambda;
-  emme = 0.5 * H_over_c * H_over_c * pow(B1, 3.) / (B2 * B2 * FR0); 
-  return 1. + k * k / 3. / (k * k + a * a * emme);
-}
+		for (int iradius = 0; iradius <= S  ; iradius++) {
+			if (rlag * params.InterPartDist >= Smoothing.Radius[iradius]) {
+
+				// Check if interpolation has already been done for this rlag
+                if (interpolation_Done == 0) { 
+
+            	// Perform reverse linear interpolation to find the k value
+				printf("your rlag is smaller than this smoothing radius: %.6f\n", Smoothing.Radius[iradius - 1]);
+            	double r_lower = Smoothing.Radius[iradius];
+            	double r_upper = Smoothing.Radius[iradius - 1];
+            	double k_lower = Smoothing.k_GM_dens[iradius];
+            	double k_upper = Smoothing.k_GM_dens[iradius - 1];
+
+            	// Reverse linear interpolation formula
+            	double k_reverse = k_lower + (k_upper - k_lower) * ((rlag * params.InterPartDist - r_lower) / (r_upper - r_lower));
+
+        		//Print data to the terminal for debugging in an organized layout
+        		printf("rlag: %.6f\t r_lower: %.6f\t r_upper: %.6f\t k_lower: %.6f\t k_upper: %.6f\t k_reverse: %.6f\n",
+            	       rlag * params.InterPartDist, r_lower, r_upper, k_lower, k_upper, k_reverse);
+                printf("\n");
+				// Set the flag to indicate that interpolation has been done for this rlag
+                interpolation_Done = 1;
+				}
+
+			}
+
+    	}
+	
+
+    // fclose(output_file_rlag);
 
 #endif
+
+	/*-----------------------------------------------------------------------------------------*/
+
+  	return r2;
+
+}
+
+
 
 /*----------------------------------------------------------------------------------------------------------------------------*/
 
