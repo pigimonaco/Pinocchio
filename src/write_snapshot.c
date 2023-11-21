@@ -887,11 +887,15 @@ int initialize_POS(Block_data *block)
   for (int i=0; i < MyGrids[0].total_local_size; i++)
     {
       INDEX_TO_COORD(i, ibox, jbox, kbox, MyGrids[0].GSlocal);
-      set_point_fftspace(ibox, jbox, kbox, i, outputs.F[myiout],&obj);
+      set_point_fftspace(ibox+MyGrids[0].GSstart[0], 
+			 jbox+MyGrids[0].GSstart[1],
+			 kbox+MyGrids[0].GSstart[2], i, outputs.F[myiout],&obj);
+
+      /* INITIAL CONDITIONS ARE NOW LIMITED TO SECOND ORDER */
       for (int j=0; j<3; j++)
 	{
 	  ((AuxStruct*)block->data)[i].axis[j]=
-	    (float)(q2x(j, &obj, 1, MyGrids[0].BoxSize, ORDER_FOR_CATALOG) * 
+	    (float)(q2x(j, &obj, 1, (double)MyGrids[0].GSglobal[j], 2) * 
 		    params.InterPartDist * params.Hubble100);
 #ifdef POS_IN_KPC
 	  ((AuxStruct*)block->data)[i].axis[j] *= 1000.;
