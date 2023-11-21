@@ -286,7 +286,7 @@ int sng_system(double t, const double y[], double f[], void *sng_par) {
 
 #ifdef MOD_GRAV_FR
 
-double ForceModification(double size, double a, double delta) {
+inline double ForceModification(double size, double a, double delta) {
 
     double ff        = 4. * params.OmegaLambda / params.Omega0;
     double thickness = FR0 / params.Omega0 / pow(H_over_c * size, 2.0) *
