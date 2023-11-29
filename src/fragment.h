@@ -54,7 +54,7 @@ typedef struct
 #endif
 #endif
 } pos_data;
-pos_data obj, obj1, obj2;
+extern pos_data obj, obj1, obj2;
 
 typedef struct
 {
@@ -69,7 +69,7 @@ typedef struct
   int n, mine;
   double z[MAXOUTPUTS];
 } Segment_data;
-Segment_data Segment;
+extern Segment_data Segment;
 #endif
 
 void condition_for_accretion(int, int, int, int, double, int, double *, double *);

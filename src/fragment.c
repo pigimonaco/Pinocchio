@@ -42,6 +42,9 @@ int recompute_group_velocities();
 
 int ngroups;
 
+pos_data obj, obj1, obj2;
+Segment_data Segment;
+
 void set_fragment_parameters(int order)
 {
 

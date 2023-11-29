@@ -49,6 +49,7 @@ int store_PLC(double);
 double find_brent(double, double);
 #endif
 
+
 int build_groups(int Npeaks, double zstop)
 {
 
@@ -1079,6 +1080,7 @@ void set_obj(int grp,double F,pos_data *myobj)
 #endif
 
 #ifdef KEEP_DENSITY
+  Segment_data Segment;
   if (!Segment.mine)
     myobj->w = 1.0;
   else
@@ -1156,7 +1158,7 @@ void set_point(int i,int j,int k,int ind,double F,pos_data *myobj)
 #endif
 
 #ifdef KEEP_DENSITY
-
+  Segment_data Segment;
   if (!Segment.mine)
     myobj->w = 1.0;
   else
