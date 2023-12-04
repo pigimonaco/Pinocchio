@@ -931,14 +931,27 @@ PRODFLOAT virial(int grp,PRODFLOAT F,int flag)
             	double k_upper = Smoothing.k_GM_dens[iradius - 1];
 
             	// Reverse linear interpolation formula
-            	double k_reverse = k_lower + (k_upper - k_lower) * ((rlag * params.InterPartDist - r_lower) / (r_upper - r_lower));
+				// Risultato identico all'interpolazione lineare di GSL. Si potrebbe usare per l'interpolazione nei tempi di collasso? Così si può portare su GPU senza GSL !
+            	// double k_interpolated = k_lower + (k_upper - k_lower) * ((rlag * params.InterPartDist - r_lower) / (r_upper - r_lower));
+				
+				 // Define arrays for r and k values
+                double r_values[2] = {r_lower, r_upper};
+                double k_values[2] = {k_lower, k_upper};
+
+				// Perform linear interpolation using GSL
+                gsl_interp *interp = gsl_interp_alloc(gsl_interp_linear, 2);
+                gsl_interp_init(interp, r_values, k_values, 2);
+                
+				double r_value = rlag * params.InterPartDist;
+                double k_interpolated = gsl_interp_eval(interp, r_values, k_values, r_value, NULL);
 
         		//Print data to the terminal for debugging in an organized layout
-        		printf("rlag: %.6f\t r_lower: %.6f\t r_upper: %.6f\t k_lower: %.6f\t k_upper: %.6f\t k_reverse: %.6f\n",
-            	       rlag * params.InterPartDist, r_lower, r_upper, k_lower, k_upper, k_reverse);
+        		printf("rlag: %.6f\t r_lower: %.6f\t r_upper: %.6f\t k_lower: %.6f\t k_upper: %.6f\t k_interpolated: %.6f\n",
+            	       rlag * params.InterPartDist, r_lower, r_upper, k_lower, k_upper, k_interpolated);
                 printf("\n");
 				// Set the flag to indicate that interpolation has been done for this rlag
                 interpolation_Done = 1;
+				// gsl_interp_free(interp);
 				}
 
 			}
