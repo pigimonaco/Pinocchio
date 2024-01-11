@@ -425,6 +425,8 @@ inline int compute_collapse_times(int ismooth) {
 
 	 /*---------------------DEBUG---------------------------------------*/
 
+#ifdef DEBUG
+
     // Open a file for writing collapse times
 
     FILE *collapseTimeFile = fopen("collapse_times.txt", "w");
@@ -432,6 +434,8 @@ inline int compute_collapse_times(int ismooth) {
         printf("Error opening file for writing.\n");
         return 1;
     }
+
+#endif
 
     /*----------------------------------------------------------------*/
 
@@ -551,7 +555,11 @@ inline int compute_collapse_times(int ismooth) {
 
 		/*---------------------------DEBUG----------------------------------*/
 
+#ifdef DEBUG
+		
 		fprintf(collapseTimeFile, "%d %d %f %f %f %g\n", index, ismooth, lambda1, lambda2, lambda3, Fnew);
+
+#endif
 
 		/*-----------------------------------------------------------------*/
 
