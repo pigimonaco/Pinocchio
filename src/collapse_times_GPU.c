@@ -44,6 +44,7 @@
 /*------------------------------------------------------- Functions definition -------------------------------------------------------*/
 
 
+
 /* Ellipsoidal solution at 3rd perturbative order in two different ways */
 
 __attribute__((always_inline)) double ell_classic               ( int, double, double, double);  
@@ -55,9 +56,8 @@ __attribute__((always_inline)) double ell                       ( int, double, d
 
 /* Calculation of inverse collpase time */
 
-__attribute__((always_inline)) double inverse_collapse_time             ( int, double *, double *, double *, double *, int *);
-__attribute__((always_inline)) void compute_partial_inverse_collapse_time    ( int, double *, double *, double *, double *, int *);
-__attribute__((always_inline)) double compute_inverse_collapse_time_CPU ( int, double , double , double);
+__attribute__((always_inline)) double inverse_collapse_time     ( int, double *, double *, double *, double *, int *);
+
 
 /* Interpolation of collpase time from a table containing collpase times */
 
@@ -67,6 +67,11 @@ __attribute__((always_inline)) double interpolate_collapse_time (int, double, do
 
 #endif 
 
+#ifdef MOD_GRAV_FR
+
+__attribute__((always_inline)) double ForceModification (double, double ,double);
+
+#endif
 /* Order inverse collpase time */
 
 __attribute__((always_inline)) void ord                         (double *,double *,double *);
@@ -80,31 +85,26 @@ __attribute__((always_inline)) void ord                         (double *,double
 
 #if defined( _OPENMP )
 
-// /* Cpu_time for elliptical collapse */
+/* Cpu_time for elliptical collapse */
 
 double cputime_ell;
-// #pragma omp threadprivate(cputime_ell) // threadprivate directive specifies that variables are replicated, with each thread having its own copy
+#pragma omp threadprivate(cputime_ell) // threadprivate directive specifies that variables are replicated, with each thread having its own copy
 
 
-// /* It will be use as a fail "flag" indicating that for some reason the calculation of collapse time failed */
+/* It will be use as a fail "flag" indicating that for some reason the calculation of collapse time failed */
 
-// int fails;
-// #pragma omp threadprivate(fails)
+int fails;
+#pragma omp threadprivate(fails)
 
-// /* If there's no _OPENMP macro then define cputime_ell */
+/* If there's no _OPENMP macro then define cputime_ell */
 
 #else
 #define cputime_ell            cputime.ell
 #endif
 
-// THIS PART IS NO NEEDED ANYMORE FOR THE GPU CALCULATION
-
-/*----------------------------------------------------------------------------------------------------------------------------------------------*/
-
 /* Declaring smoothing radius */
 
 int ismooth;
-
 
 /*------------------------------------------------------- Functions implementation --------------------------------------------------------*/
 
@@ -402,8 +402,8 @@ double ForceModification(double size, double a, double delta) {
 
 /*---------------------------------------- Calculation of b_c == growing mode at collapse time ---------------------------------------*/
 
-inline double ell(int ismooth, double l1, double l2, double l3) {
 
+inline double ell(int ismooth, double l1, double l2, double l3) {
 
 #ifdef ELL_CLASSIC
 
@@ -430,11 +430,14 @@ inline double ell(int ismooth, double l1, double l2, double l3) {
 
 /* ------------------------------------  Computation of collapse time i.e. F = 1 + z_collapse and variance ------------------------------------ */
 
-inline int compute_collapse_times(int ismooth) {    
 
-	/*--------------------- GPU CALCULATION OF COLLAPSE TIME ----------------------------*/
+inline int compute_collapse_times(int ismooth) {     
+
+/*--------------------- GPU CALCULATION OF COLLAPSE TIME ----------------------------*/
 
 	/*---------------------DEBUG---------------------------------------*/
+
+#ifdef DEBUG
 
 	// Open a file for writing collapse times
 	FILE *collapseTimeFile = fopen("collapse_times.txt", "w");
@@ -442,6 +445,8 @@ inline int compute_collapse_times(int ismooth) {
     	printf("Error opening file for writing.\n");
     	return 1;
 	}
+
+#endif
 
 	/*----------------------------------------------------------------*/
 
@@ -459,7 +464,6 @@ inline int compute_collapse_times(int ismooth) {
 	/* Transfering data to GPU before initializing it. In this way, the data will be already there when needed in the offloaded region */
 	#pragma omp target data map(tofrom: products[0:MyGrids[0].total_local_size])
 	{
-
     	#pragma omp target teams distribute parallel for
     	for (int i = 0; i < MyGrids[0].total_local_size; i++){
 
@@ -497,18 +501,26 @@ These variables are private to each thread and are not shared among threads, ens
 
 #if defined( _OPENMP )
 
-	/* Variables initialization for the offloading */
 	double invcoll_update = 0, ell_update = 0;
-	double  mylocal_average, mylocal_variance;
-	double  cputime_invcoll;
-	int all_fails=0;
-	int fails=0;
+	int num_teams, team_size;
 
+	#pragma omp target teams map(tofrom: local_average, local_variance, products[0:MyGrids[0].total_local_size]) map(to:second_derivatives[0][6][MyGrids[0].total_local_size]) map(from: num_teams, team_size)
+	{
 
-	mylocal_average     = 0;
-	mylocal_variance    = 0;
-	cputime_invcoll     = 0;
-	cputime_ell         = 0;
+		/* Thread-specific variables declaration */	
+		double  mylocal_average, mylocal_variance;
+    	double  cputime_invcoll;
+		
+		/* Support variables */	
+		int     fails = 0;
+
+		num_teams = omp_get_num_teams();
+
+		/* Initializitation */
+		mylocal_average     = 0;
+		mylocal_variance    = 0;
+		cputime_invcoll     = 0;
+		cputime_ell         = 0;
 
 #else
 
@@ -528,81 +540,99 @@ When OpenMP is disabled, the program uses the same variable names, but they refe
 
 	double tmp = omp_get_wtime();
 
-	#pragma omp target map(tofrom:local_average, local_variance, invcoll_update, ell_update, fails, all_fails) map(to:second_derivatives,mylocal_average,mylocal_variance)
-	{
-		#pragma omp teams distribute parallel for reduction(+:mylocal_average,mylocal_variance, invcoll_update)
-		for (int index = 0; index < MyGrids[0].total_local_size; index++){
+	for (int index = 0; index < MyGrids[0].total_local_size; index++){
 
-    		/* Computation of second derivatives of the potential i.e. the gravity Hessian */
-    		double diff_ten[6]; 
-    		for (int i = 0; i < 6; i++){
-       			diff_ten[i] = second_derivatives[0][i][index];
-    		}
+    	/* Computation of second derivatives of the potential i.e. the gravity Hessian */
+    	double diff_ten[6]; 
+    	for (int i = 0; i < 6; i++){
+       		diff_ten[i] = second_derivatives[0][i][index];
+    	}
 
-    		/* Computation of the variance of the linear density field */
-    		double delta      = diff_ten[0] + diff_ten[1] + diff_ten[2];
-    		mylocal_average  += delta;
-    		mylocal_variance += delta*delta;
+    	/* Computation of the variance of the linear density field */
+    	double delta      = diff_ten[0] + diff_ten[1] + diff_ten[2];
+    	mylocal_average  += delta;
+    	mylocal_variance += delta*delta;
 
-    		/* Computation of the collapse time */
-    		double lambda1,lambda2,lambda3;
-    		int    fail;
-    		double Fnew = inverse_collapse_time(ismooth, diff_ten, &lambda1, &lambda2, &lambda3, &fail); 
+    	/* Computation of the collapse time */
+    	double lambda1,lambda2,lambda3;
+    	int    fail;
+    	double Fnew = inverse_collapse_time(ismooth, diff_ten, &lambda1, &lambda2, &lambda3, &fail); 
 
-    		/*---------------------------DEBUG----------------------------------*/
+    	/*---------------------------DEBUG----------------------------------*/
 
-    		// fprintf(collapseTimeFile, "%d %d %f %f %f %g\n", index, ismooth, lambda1, lambda2, lambda3, Fnew);
+    	// fprintf(collapseTimeFile, "%d %d %f %f %f %g\n", index, ismooth, lambda1, lambda2, lambda3, Fnew);
 
-    		/*-----------------------------------------------------------------*/
+    	/*-----------------------------------------------------------------*/
 
-//     		/* Fail check during computation of the collapse time */
-//     		if (fail){
-//         		printf("ERROR on task %d: failure in inverse_collapse_time\n", ThisTask);
-//         		fflush(stdout);
-//         		all_fails=1;
+    	/* Fail check during computation of the collapse time */
+    	if (fail){
+        	printf("ERROR on task %d: failure in inverse_collapse_time\n", ThisTask);
+        	// fflush(stdout);
+  
 
-// /* Workflow control */
-// #if !defined( _OPENMP )		    		    
-//     			return 1;
-// #else
-//     			fails = 1;
-// #endif
+/* Workflow control */
+#if !defined( _OPENMP )		    		    
+    		return 1;
+#else
+    		fails = 1;
+#endif
 
-// 			}
+		}
 
-			/* Updating collapse time */
-			if (products[index].Fmax < Fnew){
-    			products[index].Fmax = Fnew;
-    			products[index].Rmax = ismooth;
-			} 
-		}	     
+		/* Updating collapse time */
+		if (products[index].Fmax < Fnew){
+    		products[index].Fmax = Fnew;
+    		products[index].Rmax = ismooth;
+		} 
+	}	     
 
 	/* CPU collapse time */	
 	cputime.invcoll += omp_get_wtime() - tmp;
 
 	/* Update CPU variables with GPU results */
 
-	#if defined( _OPENMP )
+#if defined( _OPENMP )
 
-	invcoll_update += cputime_invcoll;
+	#pragma omp atomic
 	local_variance += mylocal_variance;
-	local_average += mylocal_average;
-	ell_update += cputime_ell;
 
-#endif
+	#pragma omp atomic
+	local_average += mylocal_average;  
+
+	/* ------------------------------------ Updates total CPU collapse time -----------------------------------*/
+	/* cputime_invcoll and cputime_ell are local variables that are updated by each thread and then accumulated using atomic operations */
+
+	#pragma omp atomic
+	invcoll_update += cputime_invcoll;
+
+	#pragma omp atomic	
+	ell_update     += cputime_ell;
+
+#endif	
 
 #if defined( _OPENMP ) 
 	}
 #endif
 
+	int all_fails = 0; 
+
+	/* -------------------------- Updates cpu collapse time for a single threads -----------------------------*/
+
 #if defined (_OPENMP)
 
-	all_fails += fails;
-	cputime.invcoll += invcoll_update;
-	cputime.ell += ell_update;
+	#pragma omp atomic
+	cputime.invcoll += invcoll_update/num_teams; 
+
+	#pragma omp atomic	
+	cputime.ell     += ell_update/num_teams;
+
+	/* fails is a local variable that indicates the number of failures in the computation. 
+	Each thread updates fails, and then the values are accumulated using atomic operations */
+
+	#pragma omp atomic
+	all_fails       += fails;
 
 #endif
-
 
 /*-------------------- END OF GPU CALCULATION -----------------------------------------------*/
 
@@ -636,13 +666,13 @@ When OpenMP is disabled, the program uses the same variable names, but they refe
 	Smoothing.TrueVariance[ismooth] = global_variance;
 
 	return 0;
-}
 
+}
 
 /* ------------------------------------  Diagonalization of the potential Hessian ------------------------------------ */
 
-#pragma omp declare target
-inline void compute_partial_inverse_collapse_time(int ismooth, double * restrict deformation_tensor, double * restrict x1, double * restrict x2, double * restrict x3, int * restrict fail) {
+
+inline double inverse_collapse_time(int ismooth, double * restrict deformation_tensor, double * restrict x1, double * restrict x2, double * restrict x3, int * restrict fail) {
     
 	/* Local variables declaration */
 	/* mu1, mu2 and mu3 are the principal invariants of the 3x3 tensor of second derivatives */
@@ -713,45 +743,32 @@ inline void compute_partial_inverse_collapse_time(int ismooth, double * restrict
 
 	/* Ordering and inverse collapse time */
 	ord(x1, x2, x3);
-
-	// Set fail to 0 to indicate no failure
-    *fail = 0;
-}
-#pragma omp end declare target
-
-/* CPU function for computing the GSL-dependent part of inverse_collapse_time */
-inline double compute_inverse_collapse_time_CPU(int ismooth, double x1, double x2, double x3) {
+	
+	/* -------------------------------- Tabulated collapse time case -------------------------------- */
 
 #ifdef TABULATED_CT
-    double t = interpolate_collapse_time(ismooth, x1, x2, x3);
-    
+	double t = interpolate_collapse_time(ismooth,*x1,*x2,*x3);
+
 #ifdef DEBUG
-    double t2 = ell(ismooth, x1, x2, x3);
-    if (t2 > 0.9) {
-        ave_diff += t - t2;
-        var_diff += pow(t - t2, 2.0);
-        counter += 1;
+	double t2 = ell(ismooth,*x1,*x2,*x3);
+	if (t2 > 0.9){
+		ave_diff += t - t2;
+		var_diff += pow(t - t2, 2.0);
+		counter += 1;
 #ifdef PRINTJUNK
-        double ampl = sqrt(Smoothing.Variance[ismooth]);
-        fprintf(JUNK, "%d  %f %f %f   %f %f %f   %20g %20g %20g\n", ismooth, (x1 + x2 + x3) / ampl, (x1 - x2) / ampl, (x2 - x3) / ampl, x1, x2, x3, t, t2, t - t2);
+		double ampl = sqrt(Smoothing.Variance[ismooth]);
+		fprintf(JUNK,"%d  %f %f %f   %f %f %f   %20g %20g %20g\n",ismooth, (*x1 + *x2 + *x3)/ampl, (*x1 - *x2)/ampl, (*x2 - *x3)/ampl, *x1, *x2, *x3, t, t2, t - t2);
 #endif
-    }
+	}
 #endif
-    return t;
-#else
-    /* Final computation of collapse time */
-    return ell(ismooth, x1, x2, x3);
-#endif
-}
 
-/* Combined function that offloads part to GPU and calls CPU function for the rest */
-inline double inverse_collapse_time(int ismooth, double * restrict deformation_tensor, double * restrict x1, double * restrict x2, double * restrict x3, int * restrict fail) {
-    
-	// Offload part of the computation to the GPU (calculate x1, x2, x3)
-    compute_partial_inverse_collapse_time(ismooth, deformation_tensor, x1, x2, x3, fail);
+#else 
+	/* Final computation of collpse time*/
+	double t = ell(ismooth,*x1,*x2,*x3);
+	
+#endif
 
-    // Calculate the GSL-dependent part on the CPU
-    return compute_inverse_collapse_time_CPU(ismooth, *x1, *x2, *x3);
+	return t;
 }
 /* ------------------------------------ Tabluated collapse times case ------------------------------------ */
 

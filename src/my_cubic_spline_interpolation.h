@@ -1,40 +1,31 @@
 #ifndef MY_CUBIC_SPLINE_H
 #define MY_CUBIC_SPLINE_H
 
-// Data structure for holding spline coefficients
 typedef struct {
-    double a;
-    double b;
-    double c;
-    double d;
-} SplineCoefficients;
-
-typedef struct {
-    SplineCoefficients* coefficients;
     int size;
+    double *x_data;
+    double *y_data;
+    double *d2y_data;
+    double *coeff_a; 
+    double *coeff_b;  
+    double *coeff_c; 
+    double *coeff_d;  
 } CubicSpline;
 
-// #pragma omp declare target
-// void calculate_second_derivatives(double* x_data, double* y_data, double* d2y_data, int size);
-// #pragma omp end declare target
 
-// #pragma omp declare target
-// void cubic_spline_coefficients(double* x_data, double* y_data, double* d2y_data, SplineCoefficients* coefficients, int size);
-// #pragma omp end declare target
+void calculate_second_derivatives(CubicSpline spline);
+void cubic_spline_coefficients(CubicSpline spline);
 
-// #pragma omp declare target
-// double cubic_spline_interpolate(double x, double* x_data, SplineCoefficients* coefficients, int size);
-// #pragma omp end declare target
+// Custom names for cubic spline functions
 
-// #endif 
+CubicSpline* custom_cubic_spline_alloc(int size);
 
-#pragma acc routine
-void calculate_second_derivatives(double* x_data, double* y_data, double* d2y_data, int size);
+void custom_cubic_spline_init(CubicSpline* spline, double* x_data, double* y_data, int size);
 
-#pragma acc routine
-void cubic_spline_coefficients(double* x_data, double* y_data, double* d2y_data, SplineCoefficients* coefficients, int size);
+#pragma omp declare target
+double custom_cubic_spline_eval(CubicSpline spline, double x);
+#pragma omp end declare target
 
-#pragma acc routine
-double cubic_spline_interpolate(double x, double* x_data, SplineCoefficients* coefficients, int size);
+void custom_cubic_spline_free(CubicSpline spline);
 
 #endif

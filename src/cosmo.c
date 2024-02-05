@@ -26,6 +26,7 @@
 
 #include "pinocchio.h"
 #include "def_splines.h"
+#include "my_cubic_spline_interpolation.h"
 #include <gsl/gsl_interp2d.h>
 #include <gsl/gsl_spline2d.h>
 
@@ -1826,9 +1827,20 @@ double GrowingMode_3LPT_2(double z, double k)
 #ifdef ELL_CLASSIC
 double InverseGrowingMode(double D, int ismooth)
 {
+  /*----------------------------------------------------------*/
+  // Own spline and acceleration structures
+  typedef struct {
+    CubicSpline* spline;
+    double* x_data;
+    double* y_data;
+  } MySpline;
+
+  typedef struct {
+    double value;
+  } MyAccel;
+/*--------------------------------------------------------------*/
   /* redshift corresponding to a linear growing mode, interpolation on the grid
      DIMENSIONLESS */
-
 #ifdef SCALE_DEPENDENT
   return 1./pow(10.,my_spline_eval(SPLINE_INVGROW[ismooth], log10(D), ACCEL_INVGROW[ismooth])) -1.;
 #else
@@ -1836,7 +1848,6 @@ double InverseGrowingMode(double D, int ismooth)
 #endif
 }
 #endif
-
 double CosmicTime(double z)
 {
   /* cosmic time, interpolation on the grid
@@ -2028,20 +2039,23 @@ double AnalyticMassFunction(double mass, double z)
 
 }
 
-#pragma omp declare target
+
 double my_spline_eval(gsl_spline *spline, double x, gsl_interp_accel *accel)
 {
   /* this function performs linear extrapolation beyond the x-range limits,
-     and calls the spline evaluation in between */
-  if (x<spline->x[0])
-    return spline->y[0]+(x-spline->x[0])*(spline->y[1]-spline->y[0])/(spline->x[1]-spline->x[0]);
-  else if (x>spline->x[spline->size-1])
-    return spline->y[spline->size-1]+(x-spline->x[spline->size-1])*
-      (spline->y[spline->size-1]-spline->y[spline->size-2])/(spline->x[spline->size-1]-spline->x[spline->size-2]);
-  else
-   
-    return gsl_spline_eval(spline,x,accel);
+  and calls the spline evaluation in between */
+  if (x < spline->x[0])
+      return spline->y[0] + (x - spline->x[0]) * (spline->y[1] - spline->y[0]) / (spline->x[1] - spline->x[0]);
+  else if (x > spline->x[spline->size - 1])
+      return spline->y[spline->size - 1] + (x - spline->x[spline->size - 1]) *
+             (spline->y[spline->size - 1] - spline->y[spline->size - 2]) / (spline->x[spline->size - 1] - spline->x[spline->size - 2]);
+  else{
 
+#ifdef GPU_INTERPOLATION
+  return custom_cubic_spline_eval(*(CubicSpline *)spline, x);
+
+#else
+  return gsl_spline_eval(spline, x, accel);
+#endif
+  }
 }
-#pragma omp end declare target
-

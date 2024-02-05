@@ -22,6 +22,7 @@
 #ifdef USE_GPERFTOOLS
 #include <gperftools/profiler.h>
 #endif
+#include "my_cubic_spline_interpolation.h"
 
 /* this library is used to vectorize the computation of collapse times */
 /* #if !(defined(__aarch64__) || defined(__arm__)) */
@@ -401,7 +402,6 @@ typedef struct
 } mf_data;
 extern mf_data mf;
 
-/* splines for interpolations */
 extern gsl_spline **SPLINE;
 extern gsl_interp_accel **ACCEL;
 #if defined(SCALE_DEPENDENT) && defined(ELL_CLASSIC)
@@ -546,9 +546,8 @@ double GrowingMode(double,double);
 double GrowingMode_2LPT(double,double);
 double GrowingMode_3LPT_1(double,double);
 double GrowingMode_3LPT_2(double,double);
-#pragma omp declare target
 double InverseGrowingMode(double,int);
-#pragma omp end declare target
+#pragma omp declare target (InverseGrowingMode)
 double ComovingDistance(double);
 double InverseComovingDistance(double);
 double dComovingDistance_dz(double);
@@ -562,7 +561,8 @@ double MassForSize(double);
 double dOmega_dVariance(double, double);
 double AnalyticMassFunction(double, double);
 double WindowFunction(double);
-double my_spline_eval(gsl_spline *, double, gsl_interp_accel *);
+// double my_spline_eval(gsl_spline *, double, gsl_interp_accel *);
+// #pragma omp declare target (my_spline_eval)
 int jac(double, const double [], double *, double [], void *);
 
 /* prototypes for functions defined in ReadParamFile.c */

@@ -88,6 +88,8 @@ OPTIONS += -DCLASSIC_FRAGMENTATION
 OPTIONS += -DNORADIATION
 # OPTIONS += -DPRINTJUNK
 
+OPTIONS += -DGPU_INTERPOLATION
+
 ########## Preprocessor Definitions end ########## 
 
 # OpenMP Configuration #
@@ -125,9 +127,9 @@ endif
 
 ifeq ($(SYSTYPE),"LEONARDO")
 CC          =  nvc
-CDEBUG      = -ggdb3 -Wall $(OMP_FLAG)
+CDEBUG      = -ggdb3 -Wall 
+# COPTIMIZED  = -acc -gpu=ccnative -Minfo=accel
 COPTIMIZED  = -mp=gpu -gpu=cc80  -gpu=managed -Minfo=mp $(OMP_FLAG)
-# COPTIMIZED  = -O3 -Wno-unused-result -foffload=-lm -fno-fast-math -fno-associative-math $(OMP_FLAG)
 FFTW_LIBR   = -L/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/fftw-3.3.10-aqomamymhcna6zjrd6nlrync7oag4fkg/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
 FFTW_INCL   = -I/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/fftw-3.3.10-aqomamymhcna6zjrd6nlrync7oag4fkg/include
 PFFT_LIBR   = -L$(HOME)/lib -lpfft
@@ -207,9 +209,9 @@ endif
 
 # Source files #
 
-OBJECTS = fmax.o  variables.o initialization.o collapse_times_GPU.o fmax-pfft.o GenIC.o \
+OBJECTS = fmax.o  variables.o  my_cubic_spline_interpolation.o  cosmo.o initialization.o collapse_times_GPU.o fmax-pfft.o GenIC.o \
 	ReadParamfile.o allocations.o LPT.o distribute.o \
-	fragment.o build_groups.o write_halos.o write_snapshot.o cosmo.o 
+	fragment.o build_groups.o write_halos.o write_snapshot.o
 
 # Main targets and rules
 
