@@ -43,6 +43,7 @@
 #define SHAPE_EFST ((double)0.21)
 
 //#define FOMEGA_GAMMA 0.554
+//TUTTE LE CONDIZIONI SULLE DIRETTIVE DEVONO ESSERE MESSE INSIEME
 #if defined(FOMEGA_GAMMA) && defined(SCALE_DEPENDENT)
 #error Do not use FOMEGA_GAMMA with SCALE_DEPENDENT
 #endif
@@ -560,6 +561,29 @@ int initialize_cosmology()
 #endif
 
     }
+
+#ifdef RECOMPUTE_DISPLACEMENTS
+  /* here the segmentation of the fragmentation process is defined */
+  /* for now, segmentation is taken from the outputs file */
+  ScaleDep.nseg=outputs.n;
+  for (int i=0; i<outputs.n; i++) // servono i growth rate? a che scala?
+    {
+      ScaleDep.z[i]  =outputs.z[i];
+      ScaleDep.D[i]  =GrowingMode(ScaleDep.z[i],0.0);
+      ScaleDep.D2[i] =GrowingMode_2LPT(ScaleDep.z[i],0.0);
+      ScaleDep.D31[i]=GrowingMode_3LPT_1(ScaleDep.z[i],0.0);
+      ScaleDep.D32[i]=GrowingMode_3LPT_2(ScaleDep.z[i],0.0);
+    }      
+#else
+  /* in case the displacements are not to be recomputed,
+     there is only one segment that gets to the end*/
+  ScaleDep.nseg=1;
+  ScaleDep.z[0]  =outputs.zlast;
+  ScaleDep.D[0]  =GrowingMode(ScaleDep.z[0],0.0);
+  ScaleDep.D2[0] =GrowingMode_2LPT(ScaleDep.z[0],0.0);
+  ScaleDep.D31[0]=GrowingMode_3LPT_1(ScaleDep.z[0],0.0);
+  ScaleDep.D32[0]=GrowingMode_3LPT_2(ScaleDep.z[0],0.0);
+#endif
 
   return 0;
 }

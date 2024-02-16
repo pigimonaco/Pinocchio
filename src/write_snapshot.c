@@ -6,22 +6,27 @@
 //#define POS_IN_KPC   /* with this directive on, positions will be in kpc/h */
 
 
-// Possibili snapshot:
-//   - timeless snapshot
-//   - LPT snapshot
-//   - density
-//
-
+/* This file contains functions to handle gadget-like snapshots
+   (format 2 with INFO block) with information on all particles 
+   Possible snapshots are:
+   - timeless snapshot -- gives ID and LPT fields for all particles, plus Fmax, Rmax (if required) 
+     and the ZACC time at which the particle enters a halo
+   - LPT snapshot -- gives ID, position and velocity of each particle, according
+     to LPT at a given order
+   - density -- it writes the ID and the linear density field
+*/
+  
 
 #ifdef SNAPSHOT
 
-
+// QUESTO ANDREBBE AUTOMATIZZATO
 #ifdef LONGIDS
 #define MYIDTYPE unsigned long long int
 #else
 #define MYIDTYPE unsigned int
 #endif
 
+/* gadget header */
 typedef struct
 {
   unsigned NPart[6];
@@ -46,6 +51,7 @@ typedef struct
   char     fill[52];  /* filling to 256 Bytes */
 } SnapshotHeader_data;
 
+/* information for the INFO block */
 typedef struct
 {
   char name[4], type[8];
@@ -57,6 +63,7 @@ typedef struct
 Block_data *InfoBlock;
 int NBlocks, NextBlock;
 
+/* for vector blocks */
 typedef struct
 {
   float axis[3];
@@ -87,23 +94,32 @@ int initialize_GRUP(Block_data*);
 int initialize_POS(Block_data*);
 int initialize_VEL(Block_data*);
 int initialize_density(int, Block_data*);
-void set_point_fftspace(int, int, int, int, PRODFLOAT, pos_data *);
+void set_point_timedep(double);
 
 char filename[LBLENGTH];
 FILE *file;
 int NTasksPerFile,collector,ThisFile,NPartInFile,myNpart,myiout;
 int *Npart_array;
 
-int write_LPT_snapshot(double myiout)
+/* this is the redshift at which an LPT snapshot is written */
+int myiout;
+
+/* this is used to shift particles to the final position */
+//pos_data myobj;
+
+double redshift;
+
+int write_LPT_snapshot()
 {
-  /* writes positions of all particles obtained with LPT */
+  /* write positions of all particles obtained with LPT */
 
   Block_data block;
+  //myiout=0;
+  //set_point_timedep(outputs.z[myiout]);
+  redshift = outputs.z[0];
 
   /* Snapshot filename */
-  sprintf(filename,"pinocchio.%s.LPT_snapshot.out",params.RunFlag);
-
-  myiout=outputs.n-1;
+  sprintf(filename,"pinocchio.%6.4f.%s.LPT_snapshot.out",outputs.z[myiout],params.RunFlag);
 
   /* allocates structure to handle the INFO block */
   NBlocks=4;
@@ -135,7 +151,7 @@ int write_LPT_snapshot(double myiout)
     return 1;
   free_block(block);
 
-  /* writing of ZEL */
+  /* writing of VEL */
   if (initialize_VEL(&block))
     return 1;
   if (add_to_info(block))
@@ -143,15 +159,6 @@ int write_LPT_snapshot(double myiout)
   if (write_block(block))
     return 1;
   free_block(block);
-
-  // /* writing of particle GROUP_ID */
-  // if (initialize_GRUP(&block))
-  //   return 1;
-  // if (add_to_info(block))
-  //   return 1;
-  // if (write_block(block))
-  //   return 1;
-  // free_block(block);
 
   /* writing of INFO block */
   if (write_info_block())
@@ -177,10 +184,10 @@ int write_timeless_snapshot()
 
   Block_data block;
 
-  myiout=outputs.n-1;
-
   /* Snapshot filename */
   sprintf(filename,"pinocchio.%s.t_snapshot.out",params.RunFlag);
+
+  myiout=outputs.n-1;
 
   /* allocates structure to handle the INFO block */
 #ifdef TWO_LPT
@@ -408,9 +415,9 @@ int write_header()
   MPI_Bcast(Npart_array, params.NumFiles, MPI_INT, 0, MPI_COMM_WORLD);
   free(tmp_array);
 
-  /* if (!ThisTask) */
-  /*   printf("[%s] The snapshot will contain a total of %Ld particles (true total number: %Ld, duplication factor: %f percent)\n", */
-  /* 	   fdate(), myNtotal, MyGrids[0].Ntotal, 100.*(double)(myNtotal-MyGrids[0].Ntotal)/(double)MyGrids[0].Ntotal); */
+  // if (!ThisTask)
+  //   printf("[%s] The snapshot will contain a total of %Ld particles (true total number: %Ld, duplication factor: %f percent)\n",
+  // 	   fdate(), myNtotal, MyGrids[0].Ntotal, 100.*(double)(myNtotal-MyGrids[0].Ntotal)/(double)MyGrids[0].Ntotal);
 
   /* The collector task opens the file and writes the header */
   if (ThisTask==collector)
@@ -887,19 +894,26 @@ int initialize_POS(Block_data *block)
   for (int i=0; i < MyGrids[0].total_local_size; i++)
     {
       INDEX_TO_COORD(i, ibox, jbox, kbox, MyGrids[0].GSlocal);
-      set_point_fftspace(ibox+MyGrids[0].GSstart[0], 
-			 jbox+MyGrids[0].GSstart[1],
-			 kbox+MyGrids[0].GSstart[2], i, outputs.F[myiout],&obj);
+      int q[3]={ibox+MyGrids[0].GSstart[0],jbox+MyGrids[0].GSstart[1],kbox+MyGrids[0].GSstart[2]};
 
-      /* INITIAL CONDITIONS ARE NOW LIMITED TO SECOND ORDER */
       for (int j=0; j<3; j++)
 	{
-	  ((AuxStruct*)block->data)[i].axis[j]=
-	    (float)(q2x(j, &obj, 1, (double)MyGrids[0].GSglobal[j], 2) * 
-		    params.InterPartDist * params.Hubble100);
-#ifdef POS_IN_KPC
-	  ((AuxStruct*)block->data)[i].axis[j] *= 1000.;
+	  PRODFLOAT pos = q[j] + SHIFT + products[i].Vel[j]; // * myobj.D;
+#ifdef TWO_LPT
+	  pos += products[i].Vel_2LPT[j]; //  * myobj.D2;
+#ifdef THREE_LPT
+	  pos += products[i].Vel_3LPT_1[j] // * myobj.D31 
+	    + products[i].Vel_3LPT_2[j]; // * myobj.D32;
 #endif
+#endif
+	  if (pos>=MyGrids[0].GSglobal[j]) pos-=MyGrids[0].GSglobal[j];
+	  if (pos< 0.0)                    pos+=MyGrids[0].GSglobal[j];
+
+	  ((AuxStruct*)block->data)[i].axis[j] = (float)(pos * params.InterPartDist * params.Hubble100)
+#ifdef POS_IN_KPC
+	    * 1000.
+#endif
+	    ;
 	}
     }
 
@@ -912,7 +926,6 @@ int initialize_VEL(Block_data *block)
 {
 
   /* initializes the VEL block by moving all particles with LPT */
-  int ibox, jbox, kbox;
 
   my_strcpy(block->name,"VEL ",4);
   my_strcpy(block->type,"FLOATN  ",8);
@@ -927,17 +940,23 @@ int initialize_VEL(Block_data *block)
       return 1;
     }
 
-  double vfact=sqrt(1.+outputs.z[myiout]);
+  /* Warning: the scale for fomega should be set somehow... (very little impact) */
+  double vfact=Hubble(redshift)/(1.+redshift)*params.InterPartDist * (1+redshift) * fomega(redshift, params.k_for_GM); //* sqrt(1.+outputs.z[myiout]);
 
   /* loop on all particles */
   for (int i=0; i < MyGrids[0].total_local_size; i++)
     {
-      INDEX_TO_COORD(i, ibox, jbox, kbox, MyGrids[0].GSlocal);
-      set_point_fftspace(ibox, jbox, kbox, i, outputs.F[myiout],&obj);
       for (int j=0; j<3; j++)
 	{
-	  ((AuxStruct*)block->data)[i].axis[j]=
-	    (float)(vel(j, &obj) * vfact);
+	    PRODFLOAT vv = products[i].Vel[j]; //* myobj.Dv;
+#ifdef TWO_LPT
+	    vv += products[i].Vel_2LPT[j];// * myobj.D2v;
+#ifdef THREE_LPT
+	    vv += products[i].Vel_3LPT_1[j]  // * myobj.D31v
+	      +   products[i].Vel_3LPT_1[j]; // * myobj.D32v;
+#endif
+#endif
+	  ((AuxStruct*)block->data)[i].axis[j]=(float)(vv * vfact);
 	}
     }
 
@@ -947,15 +966,15 @@ int initialize_VEL(Block_data *block)
 
 void WriteBlockName(FILE *fd,int dummy, char* LABEL)
 {
-int dummy2;
+  int dummy2;
 
- dummy2=8;
- fwrite(&dummy2,sizeof(dummy2),1,fd);
- fwrite(LABEL,4,1,fd);
- dummy2=dummy+8;
- fwrite(&dummy2,sizeof(dummy2),1,fd);
- dummy2=8;
- fwrite(&dummy2,sizeof(dummy2),1,fd);
+  dummy2=8;
+  fwrite(&dummy2,sizeof(dummy2),1,fd);
+  fwrite(LABEL,4,1,fd);
+  dummy2=dummy+8;
+  fwrite(&dummy2,sizeof(dummy2),1,fd);
+  dummy2=8;
+  fwrite(&dummy2,sizeof(dummy2),1,fd);
 } 
 
 
@@ -967,59 +986,80 @@ void my_strcpy(char *to, char *from, int n)
 }
 
 
-void set_point_fftspace(int i,int j,int k,int ind, PRODFLOAT F, pos_data *myobj)
-{
 
-  myobj->z=F-1.0;
+/* void set_point_timedep(double z) */
+/* { */
 
-#ifdef SCALE_DEPENDENT
+/*   /\* this is equivalent to set_point in build_groups.c for the time-dependent quantities *\/ */
 
-  int S=Smoothing.Nsmooth-1;
-  double myk=Smoothing.k_GM_displ[S];
-  myobj->D=GrowingMode(myobj->z,myk) / GrowingMode(0.0,myk);
-#ifdef TWO_LPT
-  myobj->D2=GrowingMode_2LPT(myobj->z,myk) * GrowingMode_2LPT(0.0,0.0) / GrowingMode_2LPT(0.0,myk);
-#ifdef THREE_LPT
-  myobj->D31=GrowingMode_3LPT_1(myobj->z,myk) * GrowingMode_3LPT_1(0.0,0.0) / GrowingMode_3LPT_1(0.0,myk);
-  myobj->D32=GrowingMode_3LPT_2(myobj->z,myk) * GrowingMode_3LPT_2(0.0,0.0) / GrowingMode_3LPT_2(0.0,myk);
-#endif
-#endif
+/*   myobj.z=z; */
 
-#else
+/* #ifdef SCALE_DEPENDENT */
 
-  double myk=params.k_for_GM;
-  myobj->D=GrowingMode(myobj->z,myk);
-#ifdef TWO_LPT
-  myobj->D2=GrowingMode_2LPT(myobj->z,myk);
-#ifdef THREE_LPT
-  myobj->D31=GrowingMode_3LPT_1(myobj->z,myk);
-  myobj->D32=GrowingMode_3LPT_2(myobj->z,myk);
-#endif
-#endif
+/*   /\* this sets the growth rates *\/ */
 
-#endif
+/*   int S=Smoothing.Nsmooth-1; */
+/*   double myk=Smoothing.k_GM_displ[S]; */
+/*   myobj.D=GrowingMode(myobj.z,myk) / GrowingMode(0.0,myk); */
+/* #ifdef TWO_LPT */
+/*   myobj.D2=GrowingMode_2LPT(myobj.z,myk) * GrowingMode_2LPT(0.0,0.0) / GrowingMode_2LPT(0.0,myk); */
+/* #ifdef THREE_LPT */
+/*   myobj.D31=GrowingMode_3LPT_1(myobj.z,myk) * GrowingMode_3LPT_1(0.0,0.0) / GrowingMode_3LPT_1(0.0,myk); */
+/*   myobj.D32=GrowingMode_3LPT_2(myobj.z,myk) * GrowingMode_3LPT_2(0.0,0.0) / GrowingMode_3LPT_2(0.0,myk); */
+/* #endif */
+/* #endif */
 
-  myobj->M=1;
-  myobj->q[0]=i+SHIFT;
-  myobj->q[1]=j+SHIFT;
-  myobj->q[2]=k+SHIFT;
-  myobj->v[0]=products[ind].Vel[0];
-  myobj->v[1]=products[ind].Vel[1];
-  myobj->v[2]=products[ind].Vel[2];
-#ifdef TWO_LPT
-  myobj->v2[0]=products[ind].Vel_2LPT[0];
-  myobj->v2[1]=products[ind].Vel_2LPT[1];
-  myobj->v2[2]=products[ind].Vel_2LPT[2];
-#ifdef THREE_LPT
-  myobj->v31[0]=products[ind].Vel_3LPT_1[0];
-  myobj->v31[1]=products[ind].Vel_3LPT_1[1];
-  myobj->v31[2]=products[ind].Vel_3LPT_1[2];
-  myobj->v32[0]=products[ind].Vel_3LPT_2[0];
-  myobj->v32[1]=products[ind].Vel_3LPT_2[1];
-  myobj->v32[2]=products[ind].Vel_3LPT_2[2];
-#endif
-#endif
+/*   // PROBABILMENTE INUTILE */
+/*   /\* this sets the growth rates for peculiar velocities *\/ */
 
-}
+/*   double interp=(1.-myobj.R/Smoothing.Rad_GM[0])*(double)(Smoothing.Nsmooth-1); */
+/*   interp=(interp<0.?0.:interp); */
+/*   int indx=(int)interp; */
+/*   double w=interp-(double)indx; */
+
+/*   /\* linear interpolation of log k *\/ */
+/*   myk=pow(10., log10(Smoothing.k_GM_vel[indx])*(1.-w) + log10(Smoothing.k_GM_vel[indx+1])*w); */
+/*   myobj.Dv = fomega(myobj.z,myk) * GrowingMode(myobj.z,myk) * GrowingMode(0.0,0.0) / GrowingMode(0.0,myk); */
+/*     //\* (Smoothing.norm_GM1_vel[indx+1]*(1.-w) + Smoothing.norm_GM1_vel[indx+1]*w); */
+/* #ifdef TWO_LPT */
+/*   myobj.D2v = fomega_2LPT(myobj.z,myk) * GrowingMode_2LPT(myobj.z,myk) * GrowingMode_2LPT(0.0,0.0) / GrowingMode_2LPT(0.0,myk); */
+/*     //\* (Smoothing.norm_GM2_vel[indx+1]*(1.-w) + Smoothing.norm_GM2_vel[indx+1]*w); */
+/* #ifdef THREE_LPT */
+/*   myobj.D31v = fomega_3LPT_1(myobj.z,myk) * GrowingMode_3LPT_1(myobj.z,myk) * GrowingMode_3LPT_1(0.0,0.0) / GrowingMode_3LPT_1(0.0,myk);  */
+/*     //\* (Smoothing.norm_GM31_vel[indx+1]*(1.-w) + Smoothing.norm_GM31_vel[indx+1]*w); */
+/*   myobj.D32v = fomega_3LPT_2(myobj.z,myk) * GrowingMode_3LPT_2(myobj.z,myk) * GrowingMode_3LPT_2(0.0,0.0) /  GrowingMode_3LPT_2(0.0,myk); */
+/*     //\* (Smoothing.norm_GM32_vel[indx+1]*(1.-w) + Smoothing.norm_GM32_vel[indx+1]*w); */
+/* #endif */
+/* #endif */
+
+/* #else */
+
+/*   double myk=params.k_for_GM; */
+
+/*   /\* this sets the growth rates *\/ */
+/*   myobj.D=GrowingMode(myobj.z,myk); */
+/* #ifdef TWO_LPT */
+/*   myobj.D2=GrowingMode_2LPT(myobj.z,myk); */
+/* #ifdef THREE_LPT */
+/*   myobj.D31=GrowingMode_3LPT_1(myobj.z,myk); */
+/*   myobj.D32=GrowingMode_3LPT_2(myobj.z,myk); */
+/* #endif */
+/* #endif */
+
+/*   /\* this sets the growth rates for peculiar velocities *\/ */
+/*   myobj.Dv = fomega(myobj.z,myk) * myobj.D; */
+/* #ifdef TWO_LPT */
+/*   myobj.D2v = fomega_2LPT(myobj.z,myk) * myobj.D2; */
+/* #ifdef THREE_LPT */
+/*   myobj.D31v = fomega_3LPT_1(myobj.z,myk) * myobj.D31; */
+/*   myobj.D32v = fomega_3LPT_2(myobj.z,myk) * myobj.D32; */
+/* #endif */
+/* #endif */
+
+/* #endif */
+
+/*   myobj.M=1; */
+
+/* } */
 
 #endif

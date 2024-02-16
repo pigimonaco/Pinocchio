@@ -31,11 +31,33 @@ RUNDIR = ./
 
 # Executable name #
 
-EXEC = pinocchio.x
+# EXEC = pinocchio_rec.x
+# OPTIONS += -DRECOMPUTE_DISPLACEMENTS
+
+#EXEC = pinocchio_std.x
+
+# EXEC = pinocchio_sca.x
+# OPTIONS += -DRECOMPUTE_DISPLACEMENTS
+# OPTIONS += -DSCALE_DEPENDENT
+
+# EXEC = pinocchio_fRs.x
+# OPTIONS += -DRECOMPUTE_DISPLACEMENTS
+# OPTIONS += -DSCALE_DEPENDENT
+# OPTIONS += -DMOD_GRAV_FR
+# OPTIONS += -DFR0=1.e-4
+
+EXEC = pinocchio_fRnorec.x
+##OPTIONS += -DRECOMPUTE_DISPLACEMENTS
+OPTIONS += -DSCALE_DEPENDENT
+OPTIONS += -DMOD_GRAV_FR
+OPTIONS += -DFR0=1.e-8
+OPTIONS += -DELL_SNG
+OPTIONS += -DTABULATED_CT
+
 
 # Compilation options #
 
-DEBUG = NO
+DEBUG = YES
 OMP   = NO
 
 ########## Preprocessor Definitions ########## 
@@ -43,22 +65,23 @@ OMP   = NO
 # Displacement LPT order # 
 
 OPTIONS += -DTWO_LPT
-OPTIONS += -DTHREE_LPT
+#OPTIONS += -DTHREE_LPT
+
+#OPTIONS += -DSCALE_DEPENDENT
 
 # Dynamics of triaxial collapse #
 
-OPTIONS += -DELL_CLASSIC
-# OPTIONS += -DELL_SNG
+# OPTIONS += -DELL_CLASSIC
+# OPTIONS += -DREAD_PK_TABLE
 
 # Building groups and fragmentation #
 
-OPTIONS += -DCLASSIC_FRAGMENTATION
+#OPTIONS += -DCLASSIC_FRAGMENTATION
 
 # Interpolation of collapse time from a TABLE #
 
-# OPTIONS += -DTABULATED_CT
 # OPTIONS += -DTRILINEAR
-# OPTIONS += -DBILINEAR_SPLINE
+OPTIONS += -DBILINEAR_SPLINE
 # OPTIONS += -DALL_SPLINE
 # OPTIONS += -DASCII
 # OPTIONS += -DHISTO
@@ -66,23 +89,20 @@ OPTIONS += -DCLASSIC_FRAGMENTATION
 # Output #
 
 # OPTIONS += -DPLC
-OPTIONS += -DSNAPSHOT
+# OPTIONS += -DSNAPSHOT
 # OPTIONS += -DADD_RMAX_TO_SNAPSHOT
 # OPTIONS += -DLIGHT_OUTPUT
 
 # Modified Gravity models #
 
-# OPTIONS += -DSCALE_DEPENDENT
-# OPTIONS += -DMOD_GRAV_FR
-# OPTIONS += -DFR0=1.e-4
 
 # Other options # 
 
-# OPTIONS += -DRECOMPUTE_DISPLACEMENTS
+
 # OPTIONS += -DUSE_GPERFTOOLS
 # OPTIONS += -DLONGIDS
 # OPTIONS += -DWHITENOISE
-OPTIONS += -DNO_RANDOM_MODULES
+# OPTIONS += -DNO_RANDOM_MODULES
 # OPTIONS += -DDOUBLE_PRECISION_PRODUCTS
 # OPTIONS += -DVETTORIALIZZA
 OPTIONS += -DNORADIATION
@@ -103,7 +123,7 @@ endif
 
 ########## System-specific Configuration ############
 
-SYSTYPE="pleiadi"
+SYSTYPE="base"
 
 ###################### MARCONI ######################
 
@@ -144,14 +164,14 @@ CC          =  mpicc
 CDEBUG      = -ggdb3 -Wall $(OMP_FLAG)
 COPTIMIZED  = -O3 -Wno-unused-result $(OMP_FLAG)
 FFTW_LIBR   = -L$(FFTW_LIB) -lfftw3_mpi -lfftw3 $(OMP_FFTW)
-FFTW_INCL   = -I$(FFTW_INC)
-PFFT_LIBR   = -L/u/mlepinzan/base/lib -lpfft
-PFFT_INCL   = -I/u/mlepinzan/base/include
+FFTW_INCL   = -I$(HOME)/include
+PFFT_LIBR   = -L$(HOME)/lib -lpfft
+PFFT_INCL   = -I$(HOME)/include
 
 MPI_LIBR    =
 MPI_INCL    =
-GSL_LIBR    = -L$(GSL_LIB) -lgsl -lgslcblas -lm
-GSL_INCL    = -I$(GSL_INC)
+GSL_LIBR    = -L$(HOME)/lib -lgsl -lgslcblas -lm
+GSL_INCL    = -I$(HOME)/include/gsl
 endif
 
 ###################### MY_MACHINE ####################

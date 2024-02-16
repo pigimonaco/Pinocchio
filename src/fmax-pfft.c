@@ -210,8 +210,8 @@ double reverse_transform(int ThisGrid)
 
   pfft_execute(GRID.reverse_plan);
 
-  dvec         NORM   = {GRID.norm, GRID.norm, GRID.norm, GRID.norm};
-  unsigned int mysize = GRID.total_local_size_fft / 4;
+//  dvec         NORM   = {GRID.norm, GRID.norm, GRID.norm, GRID.norm};
+//  unsigned int mysize = GRID.total_local_size_fft / 4;
 
 // #pragma GCC ivdep  
 //   for (i = 0; i < mysize; i++)
@@ -256,9 +256,6 @@ int compute_derivative(int ThisGrid, int first_derivative, int second_derivative
 {
   int    swap, local[3], start[3], C[3], N[3], Nhalf[3];
   double knorm[3];
-#ifdef SCALE_DEPENDENT
-  double k_module;
-#endif
   
 #ifdef DEBUG
   sprintf(filename,"results.%d-%d.%d",first_derivative,second_derivative,ThisTask);
@@ -340,8 +337,6 @@ int compute_derivative(int ThisGrid, int first_derivative, int second_derivative
 	      double k_z  = knorm[_z_] * ii[_z_];
 
               double k_squared  = k2_1 + k_z * k_z;
-
-#ifdef SCALE_DEPENDENT
 	      double k_module = sqrt(k_squared);
 
 	      /* In the scale-dependent case the delta(k) must be multiplied 
@@ -367,7 +362,6 @@ int compute_derivative(int ThisGrid, int first_derivative, int second_derivative
 		  growth_rate = 1.0;
 		  break;
 		}
-#endif
 
 	      int index = 2*(( idx * local[_y_] + idy ) * local[_z_] + idz);
 	      
@@ -566,16 +560,74 @@ void write_from_rvector(int ThisGrid, double * restrict vector)
 }
 
 
-int store_velocities()
+void write_from_rvector_to_products(int ThisGrid, int ia, int order)
 {
-  /* LUCA: vettorializziamo e ompizziamo? */
+  /* writes the results of a (first) derivative to the corresponding products */
+  switch (order)
+    {
+    case 1:
+#ifdef _OPENMP
+#pragma omp parallel
+      {
+#pragma omp for nowait
+#endif
+	for (int index = 0; index < MyGrids[ThisGrid].total_local_size; index++)
+	  products[index].Vel[ia]=*((double*)rvector_fft[ThisGrid] + index);
+#ifdef _OPENMP
+      }
+#endif
+      break;
 
-  /* loop on all particles */
-  for (int index = 0; index < MyGrids[0].total_local_size; index++)
-    for (int i = 0; i < 3; i++)
-      products[index].Vel[i]=first_derivatives[0][i][index];
+#ifdef TWO_LPT
 
-  return 0;
+    case 2:
+#ifdef _OPENMP
+#pragma omp parallel
+      {
+#pragma omp for nowait
+#endif
+	for (int index = 0; index < MyGrids[ThisGrid].total_local_size; index++)
+	  products[index].Vel_2LPT[ia]=*((double*)rvector_fft[ThisGrid] + index);
+	break;
+#ifdef _OPENMP
+      }
+#endif
+
+#ifdef THREE_LPT
+
+    case 3:
+#ifdef _OPENMP
+#pragma omp parallel
+      {
+#pragma omp for nowait
+#endif
+	for (int index = 0; index < MyGrids[ThisGrid].total_local_size; index++)
+	  products[index].Vel_3LPT_1[ia]=*((double*)rvector_fft[ThisGrid] + index);
+	break;
+#ifdef _OPENMP
+      }
+#endif
+
+    case 4:
+#ifdef _OPENMP
+#pragma omp parallel
+      {
+#pragma omp for nowait
+#endif
+	for (int index = 0; index < MyGrids[ThisGrid].total_local_size; index++)
+	  products[index].Vel_3LPT_2[ia]=*((double*)rvector_fft[ThisGrid] + index);
+	break;
+#ifdef _OPENMP
+      }
+#endif
+
+#endif
+#endif
+
+    default:
+      break;
+    }
+
 }
 
 

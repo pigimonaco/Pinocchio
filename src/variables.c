@@ -16,12 +16,9 @@ double **kdensity;
 double **density;
 double ***first_derivatives;
 double ***second_derivatives;
-double **VEL_for_displ;
-
 #ifdef TWO_LPT
 double *kvector_2LPT;
 double *source_2LPT;
-double **VEL2_for_displ;
 #ifdef THREE_LPT
 double *kvector_3LPT_1,*kvector_3LPT_2;
 double *source_3LPT_1,*source_3LPT_2;
@@ -55,11 +52,8 @@ char date_string[25];
 
 int *frag_pos,*indices,*indicesY,*sorted_pos,*group_ID,*linking_list;
 unsigned int *frag_map, *frag_map_update;
+int map_to_be_used;
 double f_m, f_rm, espo, f_a, f_ra, f_200, sigmaD0;
-
-#ifdef SCALE_DEPENDENT
-ScaleDep_data ScaleDep;
-#endif
 
 gsl_integration_workspace * workspace;
 gsl_rng *random_generator;
@@ -81,4 +75,4 @@ memory_data memory;
 
 int ngroups;
 pos_data obj, obj1, obj2;
-Segment_data Segment;
+ScaleDep_data ScaleDep;

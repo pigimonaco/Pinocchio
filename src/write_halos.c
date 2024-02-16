@@ -146,6 +146,23 @@ int compute_mf(int iout)
       fclose(file);
     }
 
+
+  // LEVARE
+/*   if (iout==1) */
+/*     { */
+/*       FILE *ff=fopen("mydump","w"); */
+/*       for (int u=0; u<subbox.Nstored; u++) */
+/* #ifdef RECOMPUTE_DISPLACEMENTS */
+/* 	fprintf(ff," %d %d %d   %f %f %f\n", */
+/* 		u,frag_pos[u],sorted_pos[u],frag[u].Fmax,frag[u].Vel[0],frag[u].Vel_prev[0]); */
+/* #else */
+/* 	fprintf(ff," %d %d %d   %f %f %f\n", */
+/* 		u,frag_pos[u],sorted_pos[u],frag[u].Fmax,frag[u].Vel[0],0.0); */
+/* #endif	 */
+/*       fclose(ff); */
+/*     } */
+
+
   /* Bye! */
   return 0;
 }
@@ -197,6 +214,7 @@ int write_catalog(int iout)
   FILE *file;
   MPI_Status status;
   int idummy;
+  pos_data obj1;
 
   /* ordering of coordinates to accomodate for rotation caused by fft ordering */
 

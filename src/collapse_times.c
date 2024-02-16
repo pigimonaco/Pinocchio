@@ -348,20 +348,20 @@ inline double  ell_sng(int ismooth, double l1, double l2, double l3) {
 #endif
 
 	double y[9] = {l1*D_in, l2*D_in, l3*D_in,
-		          l1*D_in/(l1*D_in - 1.), l2*D_in/(l2*D_in - 1.), l3*D_in/(l3*D_in - 1.),
-		          l1*D_in, l2*D_in, l3*D_in};
+		       l1*D_in/(l1*D_in - 1.), l2*D_in/(l2*D_in - 1.), l3*D_in/(l3*D_in - 1.),
+		       l1*D_in, l2*D_in, l3*D_in};
     
 /* Assignment of ode_param in two different cases */
 #ifdef MOD_GRAV_FR
 
 	if (ismooth<Smoothing.Nsmooth-1)
-		{
-		ode_param = Smoothing.Radius[ismooth];
-		}
+	  {
+	    ode_param = Smoothing.Radius[ismooth];
+	  }
 	else
-		{
-		ode_param = Smoothing.Radius[ismooth-1];
-		}
+	  {
+	    ode_param = Smoothing.Radius[ismooth-1];
+	  }
 #endif
 
     /*---------------- Integration step --------------- */
@@ -454,7 +454,7 @@ inline int compute_collapse_times(int ismooth) {
 	if (!ismooth)
 
 		/* Loop on all particles */ 
-		#pragma omp parallel for 
+		#pragma omp parallel for
 		for (int i = 0; i < MyGrids[0].total_local_size; i++){
 
 			/*----------- Common initialization ----------- */		
@@ -823,7 +823,7 @@ int initialize_collapse_times(int ismooth, int onlycompute){
 
 	/* The bin size for delta varies like (delta - CT_DELTA0)^CT_EXPO, 
 	so it is smallest around CT_DELTA0 if CT_EXPO>1. The bin size 
-	is never smaller than CT_MIN_INTERVAL.
+	is never smaller than CT_MIN_INTERVAL. */
 
 	/*-------------------------- FIRST SMOOTHING RADIUS CASE --------------------------*/ 
 	

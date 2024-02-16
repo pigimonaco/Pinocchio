@@ -458,10 +458,7 @@ int set_grids()
   density=(double**)malloc(Ngrids * sizeof(double*));
   first_derivatives=(double***)malloc(Ngrids * sizeof(double**));
   second_derivatives=(double***)malloc(Ngrids * sizeof(double**));
-  VEL_for_displ=(double**)malloc(3 * sizeof(double*));
-#ifdef TWO_LPT
-  VEL2_for_displ=(double**)malloc(3 * sizeof(double*));
-#endif
+
   for (igrid=0; igrid<Ngrids; igrid++)
     {
       first_derivatives[igrid]=(double**)malloc(3 * sizeof(double*));
@@ -2059,7 +2056,7 @@ void greetings(void)
 #endif
 
 #ifdef SCALE_DEPENDENT
-      printf("This version of the code works with scale-dependent growing modes;\n");
+      printf("This version of the code works with scale-dependent growing modes\n");
 #ifdef MOD_GRAV_FR
       printf("Scales will range from %10g to %10g 1/Mpc, in %d steps\n",
 	     0.0, pow(10.,LOGKMIN+(NkBINS-1)*DELTALOGK), NkBINS);
