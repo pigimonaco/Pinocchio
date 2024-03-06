@@ -74,5 +74,5 @@ double H_over_c;
 memory_data memory;
 
 int ngroups;
-pos_data obj, obj1, obj2;
+extern pos_data obj, obj1, obj2;
 ScaleDep_data ScaleDep;

@@ -31,33 +31,11 @@ RUNDIR = ./
 
 # Executable name #
 
-# EXEC = pinocchio_rec.x
-# OPTIONS += -DRECOMPUTE_DISPLACEMENTS
-
-#EXEC = pinocchio_std.x
-
-# EXEC = pinocchio_sca.x
-# OPTIONS += -DRECOMPUTE_DISPLACEMENTS
-# OPTIONS += -DSCALE_DEPENDENT
-
-# EXEC = pinocchio_fRs.x
-# OPTIONS += -DRECOMPUTE_DISPLACEMENTS
-# OPTIONS += -DSCALE_DEPENDENT
-# OPTIONS += -DMOD_GRAV_FR
-# OPTIONS += -DFR0=1.e-4
-
-EXEC = pinocchio_fRnorec.x
-##OPTIONS += -DRECOMPUTE_DISPLACEMENTS
-OPTIONS += -DSCALE_DEPENDENT
-OPTIONS += -DMOD_GRAV_FR
-OPTIONS += -DFR0=1.e-8
-OPTIONS += -DELL_SNG
-OPTIONS += -DTABULATED_CT
-
+EXEC = pinocchio.x
 
 # Compilation options #
 
-DEBUG = YES
+DEBUG = NO
 OMP   = NO
 
 ########## Preprocessor Definitions ########## 
@@ -65,23 +43,22 @@ OMP   = NO
 # Displacement LPT order # 
 
 OPTIONS += -DTWO_LPT
-#OPTIONS += -DTHREE_LPT
-
-#OPTIONS += -DSCALE_DEPENDENT
+OPTIONS += -DTHREE_LPT
 
 # Dynamics of triaxial collapse #
 
-# OPTIONS += -DELL_CLASSIC
-# OPTIONS += -DREAD_PK_TABLE
+OPTIONS += -DELL_CLASSIC
+# OPTIONS += -DELL_SNG
 
 # Building groups and fragmentation #
 
-#OPTIONS += -DCLASSIC_FRAGMENTATION
+# OPTIONS += -DCLASSIC_FRAGMENTATION
 
 # Interpolation of collapse time from a TABLE #
 
+# OPTIONS += -DTABULATED_CT
 # OPTIONS += -DTRILINEAR
-OPTIONS += -DBILINEAR_SPLINE
+# OPTIONS += -DBILINEAR_SPLINE
 # OPTIONS += -DALL_SPLINE
 # OPTIONS += -DASCII
 # OPTIONS += -DHISTO
@@ -89,24 +66,28 @@ OPTIONS += -DBILINEAR_SPLINE
 # Output #
 
 # OPTIONS += -DPLC
-# OPTIONS += -DSNAPSHOT
+OPTIONS += -DSNAPSHOT
 # OPTIONS += -DADD_RMAX_TO_SNAPSHOT
 # OPTIONS += -DLIGHT_OUTPUT
 
 # Modified Gravity models #
 
+# OPTIONS += -DSCALE_DEPENDENT
+# OPTIONS += -DMOD_GRAV_FR
+# OPTIONS += -DFR0=1.e-4
 
 # Other options # 
 
-
+# OPTIONS += -DRECOMPUTE_DISPLACEMENTS
 # OPTIONS += -DUSE_GPERFTOOLS
 # OPTIONS += -DLONGIDS
 # OPTIONS += -DWHITENOISE
-# OPTIONS += -DNO_RANDOM_MODULES
+OPTIONS += -DNO_RANDOM_MODULES
 # OPTIONS += -DDOUBLE_PRECISION_PRODUCTS
 # OPTIONS += -DVETTORIALIZZA
 OPTIONS += -DNORADIATION
 # OPTIONS += -DPRINTJUNK
+
 
 ########## Preprocessor Definitions end ########## 
 
@@ -123,7 +104,7 @@ endif
 
 ########## System-specific Configuration ############
 
-SYSTYPE="base"
+SYSTYPE="pleiadi"
 
 ###################### MARCONI ######################
 

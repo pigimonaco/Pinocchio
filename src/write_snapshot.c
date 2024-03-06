@@ -941,7 +941,7 @@ int initialize_VEL(Block_data *block)
     }
 
   /* Warning: the scale for fomega should be set somehow... (very little impact) */
-  double vfact=Hubble(redshift)/(1.+redshift)*params.InterPartDist * (1+redshift) * fomega(redshift, params.k_for_GM); //* sqrt(1.+outputs.z[myiout]);
+  double vfact=Hubble(redshift)/(1.+redshift)*params.InterPartDist * (1+redshift) * fomega(redshift, params.k_for_GM)/sqrt(1.+outputs.z[myiout]);
 
   /* loop on all particles */
   for (int i=0; i < MyGrids[0].total_local_size; i++)
