@@ -61,7 +61,7 @@ int organize_main_memory()
      name                sizeof                    N            
 
      products (2LPT):    7 float + 1 int = 32      MyGrids[0].total_local_size
-     products (3LPT)    13 float + 1 int = 56     MyGrids[0].total_local_size
+     products (3LPT)    13 float + 1 int = 56      MyGrids[0].total_local_size
      kdensity            1 double = 8              MyGrids[*].total_local_size_fft
      second_derivatives  6 double = 48             MyGrids[*].total_local_size
      kvector_2LPT        1 double = 8              MyGrids[0].total_local_size_fft

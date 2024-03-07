@@ -22,7 +22,6 @@
 #ifdef USE_GPERFTOOLS
 #include <gperftools/profiler.h>
 #endif
-#include "my_cubic_spline_interpolation.h"
 
 /* this library is used to vectorize the computation of collapse times */
 /* #if !(defined(__aarch64__) || defined(__arm__)) */
@@ -187,6 +186,8 @@ extern char *main_memory, *wheretoplace_mycat;
 
 extern product_data *products, *frag;
 
+#pragma omp declare target(products)
+
 extern unsigned int *cubes_ordering;
 
 extern unsigned int **seedtable;
@@ -195,6 +196,8 @@ extern double **kdensity;
 extern double **density;
 extern double ***first_derivatives;
 extern double ***second_derivatives;
+
+// #pragma omp declare target(second_derivatives)
 
 extern double **VEL_for_displ;
 
@@ -234,6 +237,7 @@ typedef struct
   unsigned long long Ntotal;
 } grid_data;
 extern grid_data *MyGrids;
+
 
 extern pfft_complex **cvector_fft;
 extern double **rvector_fft;
@@ -402,12 +406,20 @@ typedef struct
 } mf_data;
 extern mf_data mf;
 
+#ifdef GPU_INTERPOLATION
+#include "my_cubic_spline_interpolation.h"
+CubicSpline **my_spline;
+#pragma omp declare target(my_spline)
+#endif
+
+// Declarations for the variables
 extern gsl_spline **SPLINE;
 extern gsl_interp_accel **ACCEL;
 #if defined(SCALE_DEPENDENT) && defined(ELL_CLASSIC)
 extern gsl_spline **SPLINE_INVGROW;
 extern gsl_interp_accel **ACCEL_INVGROW;
 #endif
+
 
 #ifdef MOD_GRAV_FR
 extern double H_over_c;
@@ -561,8 +573,9 @@ double MassForSize(double);
 double dOmega_dVariance(double, double);
 double AnalyticMassFunction(double, double);
 double WindowFunction(double);
-// double my_spline_eval(gsl_spline *, double, gsl_interp_accel *);
-// #pragma omp declare target (my_spline_eval)
+double my_spline_eval(gsl_spline *, double, gsl_interp_accel *);
+double my_custom_spline_eval(CubicSpline *my_spline, double x);
+#pragma omp declare target(my_custom_spline_eval)
 int jac(double, const double [], double *, double [], void *);
 
 /* prototypes for functions defined in ReadParamFile.c */

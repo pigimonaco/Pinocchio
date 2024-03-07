@@ -1,4 +1,4 @@
-#include "my_cubic_spline_interpolation.h"
+#include "interpolation.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>

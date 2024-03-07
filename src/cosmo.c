@@ -117,13 +117,14 @@ int initialize_cosmology()
 
   /* allocation of (most) splines */
   SPLINE = (gsl_spline **)calloc(NSPLINES, sizeof(gsl_spline *));
-  for (i=0; i<NSPLINES-3; i++)
-    if (i!=SP_COMVDIST && i!=SP_DIAMDIST)
-      SPLINE[i] = gsl_spline_alloc (gsl_interp_cspline, NBINS);
+  for (i = 0; i < NSPLINES - 3; i++)
+    if (i != SP_COMVDIST && i != SP_DIAMDIST)
+        SPLINE[i] = gsl_spline_alloc(gsl_interp_cspline, NBINS);
     else
-      SPLINE[i] = gsl_spline_alloc (gsl_interp_cspline, NBINS-NBB);
+        SPLINE[i] = gsl_spline_alloc(gsl_interp_cspline, NBINS - NBB);
+
   ACCEL = (gsl_interp_accel **)calloc(NSPLINES, sizeof(gsl_interp_accel *));
-  for (i=0; i<NSPLINES; i++)
+  for (i = 0; i < NSPLINES; i++)
     ACCEL[i] = gsl_interp_accel_alloc();
 
   /* if needed, read the tabulated Equation of State of the dark energy 
@@ -387,7 +388,31 @@ int initialize_cosmology()
 	grow32[i+j*NBINS] = log10(grow32[i+j*NBINS]);
       }
 
-  /* initialization of spline interpolations of time-dependent quantities */
+  my_spline = (CubicSpline**)calloc(NSPLINES, sizeof(CubicSpline*));
+
+  for (int i = 0; i < NSPLINES - 3; i++) {
+      if (i != SP_COMVDIST && i != SP_DIAMDIST) {
+          my_spline[i] = custom_cubic_spline_alloc(NBINS);
+      } else {
+          my_spline[i] = custom_cubic_spline_alloc(NBINS - NBB);
+      }
+  }
+
+  custom_cubic_spline_init(my_spline[SP_INVGROW], grow1, scalef, NBINS);
+
+  // Allocate memory on the GPU for my_spline and its components
+  #pragma omp target enter data map(alloc: my_spline[0:NSPLINES])
+  for (int i = 0; i < NSPLINES - 3; i++) {
+      #pragma omp target enter data map(alloc: my_spline[i]->x[0:my_spline[i]->size], \
+                                          my_spline[i]->y[0:my_spline[i]->size], \
+                                          my_spline[i]->d2y_data[0:(my_spline[i]->size - 1)], \
+                                          my_spline[i]->coeff_a[0:(my_spline[i]->size - 1)], \
+                                          my_spline[i]->coeff_b[0:(my_spline[i]->size - 1)], \
+                                          my_spline[i]->coeff_c[0:(my_spline[i]->size - 1)], \
+                                          my_spline[i]->coeff_d[0:(my_spline[i]->size - 1)])
+    }
+
+  /* initialization of spline interpolations of time-dependent quantities using GSL */
   gsl_spline_init(SPLINE[SP_TIME], scalef, cosmtime, NBINS);
   gsl_spline_init(SPLINE[SP_INVTIME], cosmtime, scalef, NBINS);
   gsl_spline_init(SPLINE[SP_COMVDIST], scalef, comvdist, NBINS-NBB);
@@ -395,18 +420,18 @@ int initialize_cosmology()
   /* inverse grow is always defined on the first growth rate */
   gsl_spline_init(SPLINE[SP_INVGROW], grow1, scalef, NBINS);
 
-  for (j=0; j<NkBINS; j++)
-    {
-      gsl_spline_init(SPLINE[SP_GROW1+j],  scalef, grow1+j*NBINS,  NBINS);
-      gsl_spline_init(SPLINE[SP_GROW2+j],  scalef, grow2+j*NBINS,  NBINS);
-      gsl_spline_init(SPLINE[SP_GROW31+j], scalef, grow31+j*NBINS, NBINS);
-      gsl_spline_init(SPLINE[SP_GROW32+j], scalef, grow32+j*NBINS, NBINS);
+  for (j = 0; j < NkBINS; j++) {
+    gsl_spline_init(SPLINE[SP_GROW1+j],  scalef, grow1+j*NBINS,  NBINS);
+    gsl_spline_init(SPLINE[SP_GROW2+j],  scalef, grow2+j*NBINS,  NBINS);
+    gsl_spline_init(SPLINE[SP_GROW31+j], scalef, grow31+j*NBINS, NBINS);
+    gsl_spline_init(SPLINE[SP_GROW32+j], scalef, grow32+j*NBINS, NBINS);
 
-      gsl_spline_init(SPLINE[SP_FOMEGA1+j],  scalef, fomega1+j*NBINS,  NBINS);
-      gsl_spline_init(SPLINE[SP_FOMEGA2+j],  scalef, fomega2+j*NBINS,  NBINS);
-      gsl_spline_init(SPLINE[SP_FOMEGA31+j], scalef, fomega31+j*NBINS, NBINS);
-      gsl_spline_init(SPLINE[SP_FOMEGA32+j], scalef, fomega32+j*NBINS, NBINS);
-    }
+    gsl_spline_init(SPLINE[SP_FOMEGA1+j],  scalef, fomega1+j*NBINS,  NBINS);
+    gsl_spline_init(SPLINE[SP_FOMEGA2+j],  scalef, fomega2+j*NBINS,  NBINS);
+    gsl_spline_init(SPLINE[SP_FOMEGA31+j], scalef, fomega31+j*NBINS, NBINS);
+    gsl_spline_init(SPLINE[SP_FOMEGA32+j], scalef, fomega32+j*NBINS, NBINS);
+  }
+
 
   /* deallocation of vectors for interpolation */
   free(fomega32);
@@ -1749,9 +1774,9 @@ double InterpolateGrowth(double z, double k, int pointer)
     }
 #else
   /* scale-independent case, just return the interpolation */
-
   return my_spline_eval(SPLINE[pointer], -log10(1.+z), ACCEL[pointer]);
 #endif
+
 
 }
 
@@ -1827,27 +1852,20 @@ double GrowingMode_3LPT_2(double z, double k)
 #ifdef ELL_CLASSIC
 double InverseGrowingMode(double D, int ismooth)
 {
-  /*----------------------------------------------------------*/
-  // Own spline and acceleration structures
-  typedef struct {
-    CubicSpline* spline;
-    double* x_data;
-    double* y_data;
-  } MySpline;
-
-  typedef struct {
-    double value;
-  } MyAccel;
-/*--------------------------------------------------------------*/
   /* redshift corresponding to a linear growing mode, interpolation on the grid
      DIMENSIONLESS */
 #ifdef SCALE_DEPENDENT
   return 1./pow(10.,my_spline_eval(SPLINE_INVGROW[ismooth], log10(D), ACCEL_INVGROW[ismooth])) -1.;
 #else
+#ifdef GPU_INTERPOLATION
+  return 1./pow(10.,custom_cubic_spline_eval(my_spline[SP_INVGROW], log10(D))) -1;
+#else
   return 1./pow(10.,my_spline_eval(SPLINE[SP_INVGROW], log10(D), ACCEL[SP_INVGROW])) -1.;
+#endif
 #endif
 }
 #endif
+
 double CosmicTime(double z)
 {
   /* cosmic time, interpolation on the grid
@@ -2050,12 +2068,21 @@ double my_spline_eval(gsl_spline *spline, double x, gsl_interp_accel *accel)
       return spline->y[spline->size - 1] + (x - spline->x[spline->size - 1]) *
              (spline->y[spline->size - 1] - spline->y[spline->size - 2]) / (spline->x[spline->size - 1] - spline->x[spline->size - 2]);
   else{
-
-#ifdef GPU_INTERPOLATION
-  return custom_cubic_spline_eval(*(CubicSpline *)spline, x);
-
-#else
   return gsl_spline_eval(spline, x, accel);
-#endif
   }
 }
+
+#ifdef GPU_INTERPOLATION
+double custom_spline_eval(CubicSpline *my_spline, double x) {
+    // Perform linear extrapolation beyond the x-range limits
+    if (x < my_spline->x[0])
+        return my_spline->y[0] + (x - my_spline->x[0]) * (my_spline->y[1] - my_spline->y[0]) / (my_spline->x[1] - my_spline->x[0]);
+    else if (x > my_spline->x[my_spline->size - 1])
+        return my_spline->y[my_spline->size - 1] + (x - my_spline->x[my_spline->size - 1]) *
+               (my_spline->y[my_spline->size - 1] - my_spline->y[my_spline->size - 2]) /
+               (my_spline->x[my_spline->size - 1] - my_spline->x[my_spline->size - 2]);
+    else {
+        return custom_cubic_spline_eval(my_spline, x);
+    }
+}
+#endif

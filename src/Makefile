@@ -36,7 +36,7 @@ EXEC = pinocchio_GPU.x
 # Compilation options #
 
 DEBUG = NO
-OMP   = YES
+OMP   = NO
 
 ########## Preprocessor Definitions ########## 
 
@@ -52,7 +52,7 @@ OPTIONS += -DELL_CLASSIC
 
 # Building groups and fragmentation #
 
-OPTIONS += -DCLASSIC_FRAGMENTATION
+# OPTIONS += -DCLASSIC_FRAGMENTATION
 
 # Interpolation of collapse time from a TABLE #
 
@@ -129,7 +129,7 @@ ifeq ($(SYSTYPE),"LEONARDO")
 CC          =  nvc
 CDEBUG      = -ggdb3 -Wall 
 # COPTIMIZED  = -acc -gpu=ccnative -Minfo=accel
-COPTIMIZED  = -mp=gpu -gpu=cc80  -gpu=managed -Minfo=mp $(OMP_FLAG)
+COPTIMIZED  = -mp=gpu -gpu=cc80 -target=gpu -gpu=managed -Minfo=mp $(OMP_FLAG)
 FFTW_LIBR   = -L/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/fftw-3.3.10-aqomamymhcna6zjrd6nlrync7oag4fkg/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
 FFTW_INCL   = -I/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/fftw-3.3.10-aqomamymhcna6zjrd6nlrync7oag4fkg/include
 PFFT_LIBR   = -L$(HOME)/lib -lpfft

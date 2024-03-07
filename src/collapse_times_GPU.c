@@ -35,6 +35,7 @@
 #include <time.h> // For timing
 
 
+
 /*------------------------------------------------------- Macros declaration --------------------------------------------------------*/
 
 
@@ -461,14 +462,16 @@ inline int compute_collapse_times(int ismooth) {
 	if (!ismooth)
 
     /* OpenMP target directive to offload the initialization part to the GPU */
-	/* Transfering data to GPU before initializing it. In this way, the data will be already there when needed in the offloaded region */
-	#pragma omp target data map(tofrom: products[0:MyGrids[0].total_local_size])
-	{
-    	#pragma omp target teams distribute parallel for
+	/* Transfering data to GPU before initializing it. In this way, the data will be already there when needed in the offloaded region */	
+	// #pragma omp target enter data map(alloc: products[0:MyGrids[0].total_local_size])
+	// for (int i = 0; MyGrids[0].total_local_size; i++){
+		// #pragma omp target enter data map(alloc: products[i].Fmax[0:MyGrids[0].total_local_size])
+		// #pragma omp target teams distribute parallel for map(tofrom: products[0:MyGrids[0].total_local_size])
     	for (int i = 0; i < MyGrids[0].total_local_size; i++){
 
         	/*----------- Common initialization ----------- */       
         	products[i].Fmax   = -10.0;
+			// printf("%lf\n", products[i].Fmax);
         	products[i].Rmax   = -1;
 
         	/*----------- Zel'dovich case ----------- */
@@ -493,8 +496,7 @@ inline int compute_collapse_times(int ismooth) {
 #endif
 #endif
     	}
-	}
-
+	// }
 /* Declaration and initialization of variables when the OpenMP option is ON
 Inside the parallel region, each thread initializes its own local variables, i.e., mylocal_average, mylocal_variance, cputime_invcoll, and cputime_ell
 These variables are private to each thread and are not shared among threads, ensuring data consistency. */
@@ -503,8 +505,8 @@ These variables are private to each thread and are not shared among threads, ens
 
 	double invcoll_update = 0, ell_update = 0;
 	int num_teams, team_size;
-
-	#pragma omp target teams map(tofrom: local_average, local_variance, products[0:MyGrids[0].total_local_size]) map(to:second_derivatives[0][6][MyGrids[0].total_local_size]) map(from: num_teams, team_size)
+	
+	// #pragma omp target teams map(tofrom: local_average, local_variance, products[0:MyGrids[0].total_local_size]) map(to:second_derivatives[0][6][MyGrids[0].total_local_size]) map(from: num_teams, team_size)
 	{
 
 		/* Thread-specific variables declaration */	

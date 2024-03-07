@@ -1,5 +1,6 @@
-[Tue Jan 23 2024 17:29:37] This is pinocchio V5.0, running on 1 MPI tasks
+[Mon Feb 19 2024 11:03:02] This is pinocchio V5.0, running on 4 MPI tasks
 
+Using 4 OpenMP threads
 This version uses 3LPT displacements
 Radiation is not included in the Friedmann equations
 Ellipsoidal collapse will be computed as Monaco (1995)
@@ -19,17 +20,17 @@ RandomSeed                  486604
 OutputList                  outputs
 Number of outputs           1
 Output redshifts            0.000000 
-GridSize                    100 100 100
+GridSize                    32 32 32
 BoxSize (true Mpc)          714.285714
 BoxSize (Mpc/h)             500.000000
-Particle Mass (true Msun)   1.23906e+13
-Particle Mass (Msun/h)      8.67344e+12
-Inter-part dist (true Mpc)  7.142857
-Inter-part dist (Mpc/h)     5.000000
+Particle Mass (true Msun)   3.78132e+14
+Particle Mass (Msun/h)      2.64692e+14
+Inter-part dist (true Mpc)  22.321429
+Inter-part dist (Mpc/h)     15.625000
 MinHaloMass (particles)     10
-MinHaloMass (Msun/h)        8.67344e+13
+MinHaloMass (Msun/h)        2.64692e+15
 BoundaryLayerFactor         3.000000
-MaxMem per task (Mb)        3600
+MaxMem per task (Mb)        1024
 MaxMem per particle (b)     250.000000
 CatalogInAscii              1
 NumFiles                    1
@@ -49,79 +50,3 @@ InputSpectrum_UnitLength_in_cm 0.000000
 FileWithInputSpectrum          no
 WDM_PartMass_in_kev            0.000000
 
-Power spectrum will be given by the Einsenstein & Hu fit
-Normalization constant for the power spectrum: 2.03146e+07
-cube subdivision [1 dim]: 1 x 1 x 1 = 1 processes
-
-SMOOTHING RADII
-Min variance: 0.07896112.6, max variance: 3.16890212.6, number of smoothing radii: 7
-            1)  Radius= 20.642043, Variance=  0.078961
-            2)  Radius= 14.004063, Variance=  0.157548
-            3)  Radius=  9.028290, Variance=  0.314349
-            4)  Radius=  5.469053, Variance=  0.627210
-            5)  Radius=  3.059132, Variance=  1.251448
-            6)  Radius=  1.548840, Variance=  2.496966
-            7)  Radius=  0.000000, Variance=  3.168902
-PLC flag at compilation was not set, no Past Light Cone output will be given
-
-
-FRAGMENTATION:
-Reference number of particles:         1000000
-Requested bytes per particle:          250
-Number of sub-boxes per dimension:     1 1 1
-Periodic boundary conditions:          1 1 1
-Core 0 will work on a grid:            100 100 100
-The resolved box will be:              100 100 100
-Boundary layer:                        0 0 0
-Boundary layer factor:                 3.000000
-Number of total particles for core 0:  1000000
-Number of good particles for core 0:   1000000
-Particles that core 0 will allocate:   2155200
-Allowed overhead for boundary layer:   2.155200
-Largest halo expected in this box at z=0.000000: 4.264918e+15 Msun
-   its Lagrangian size: 31.053812 Mpc (  4.35 grid points)
-   this requires a boundary layer of  13.04 grid points 
-
-The mass function will be computed from Log M=14.093043 to Log M=15.779911 (34 bins)
-
-
-Map of memory usage for all MPI tasks
-Task N.   FFT domain      mem(MB) overhead   products   fields     ffts     fmax  frag pr.  groups fragment  total bytes per particle
-     0   100- 100- 100       238     2.2         56.0     80.6     16.3    153.0    120.7     73.3    250.0    250.0
-
-[Tue Jan 23 2024 17:29:38] Memory has been successfully allocated
-
-[Tue Jan 23 2024 17:29:38] Computing fft plans
-[Tue Jan 23 2024 17:29:38] fft plans done
-[Tue Jan 23 2024 17:29:38] Generating density in Fourier space
-[Tue Jan 23 2024 17:29:39] Done generating density in Fourier space, cputime = 0.346023 s
-[Tue Jan 23 2024 17:29:39] initialization done, initialization cpu time =       1.540973
-		 set subboxes time =       0.000000
-		 set plc time =       0.000000
-		 memory allocation time =       0.000000
-		 fft initialization time =       0.000000
-		 density generation time =       0.346023
-[Tue Jan 23 2024 17:29:39] First part: computation of collapse times
-
-[Tue Jan 23 2024 17:29:39] Starting smoothing radius 1 of 7 (R= 20.64204, sigma=  0.28100)
-[Tue Jan 23 2024 17:29:39] Computing second derivatives
-[Tue Jan 23 2024 17:29:39] Computing 2nd derivative: 1
-[Tue Jan 23 2024 17:29:39] compute_derivative: starting fft
-[Tue Jan 23 2024 17:29:39] compute_derivative: done fft, cpu time = 0.006905
-[Tue Jan 23 2024 17:29:39] Computing 2nd derivative: 4
-[Tue Jan 23 2024 17:29:39] compute_derivative: starting fft
-[Tue Jan 23 2024 17:29:39] compute_derivative: done fft, cpu time = 0.006316
-[Tue Jan 23 2024 17:29:39] Computing 2nd derivative: 5
-[Tue Jan 23 2024 17:29:39] compute_derivative: starting fft
-[Tue Jan 23 2024 17:29:39] compute_derivative: done fft, cpu time = 0.007129
-[Tue Jan 23 2024 17:29:39] Computing 2nd derivative: 2
-[Tue Jan 23 2024 17:29:39] compute_derivative: starting fft
-[Tue Jan 23 2024 17:29:39] compute_derivative: done fft, cpu time = 0.006397
-[Tue Jan 23 2024 17:29:39] Computing 2nd derivative: 6
-[Tue Jan 23 2024 17:29:39] compute_derivative: starting fft
-[Tue Jan 23 2024 17:29:39] compute_derivative: done fft, cpu time = 0.006320
-[Tue Jan 23 2024 17:29:39] Computing 2nd derivative: 3
-[Tue Jan 23 2024 17:29:39] compute_derivative: starting fft
-[Tue Jan 23 2024 17:29:39] compute_derivative: done fft, cpu time = 0.006338
-[Tue Jan 23 2024 17:29:39] Done second derivatives, cpu time = 0.108351 s
-[Tue Jan 23 2024 17:29:39] Computing collapse times
