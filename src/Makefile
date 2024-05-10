@@ -27,19 +27,25 @@
 
 # Directory settings #
 
-RUNDIR = ./
+#RUNDIR = ./
 
-# Executable name #
+########## System-specific Configuration ############
 
-EXEC = pinocchio.x
+SYSTYPE="pleiadi"
 
-# Compilation options #
+##########################################################################
+# The following variables should be passed from command line to make
+# Executable name
+EXEC     ?= Pinocchio
+# Compilation options
+COMPILER ?= gcc
+DEBUG    ?= NO
+OMP      ?= NO
+SCOREP   ?= NO
+#########################################################################
 
-DEBUG = NO
-OMP   = NO
 
 ########## Preprocessor Definitions ########## 
-
 # Displacement LPT order # 
 
 OPTIONS += -DTWO_LPT
@@ -66,7 +72,7 @@ OPTIONS += -DCLASSIC_FRAGMENTATION
 # Output #
 
 # OPTIONS += -DPLC
-OPTIONS += -DSNAPSHOT
+# OPTIONS += -DSNAPSHOT
 # OPTIONS += -DADD_RMAX_TO_SNAPSHOT
 # OPTIONS += -DLIGHT_OUTPUT
 
@@ -82,10 +88,10 @@ OPTIONS += -DSNAPSHOT
 # OPTIONS += -DUSE_GPERFTOOLS
 # OPTIONS += -DLONGIDS
 # OPTIONS += -DWHITENOISE
-OPTIONS += -DNO_RANDOM_MODULES
+# OPTIONS += -DNO_RANDOM_MODULES
 # OPTIONS += -DDOUBLE_PRECISION_PRODUCTS
 # OPTIONS += -DVETTORIALIZZA
-OPTIONS += -DNORADIATION
+# OPTIONS += -DNORADIATION
 # OPTIONS += -DPRINTJUNK
 
 ########## Preprocessor Definitions end ########## 
@@ -101,46 +107,44 @@ OMP_FLAG =
 OMP_FFTW =
 endif
 
-########## System-specific Configuration ############
-
-SYSTYPE="pleiadi"
-
-###################### MARCONI ######################
-
-ifeq ($(SYSTYPE),"Marconi100")
-CC          =  mpicc
-CDEBUG      = -ggdb3 -Wall $(OMP_FLAG)
-COPTIMIZED  = -O2 -Wno-unused-result  $(OMP_FLAG)
-FFTW_LIBR   = -L$(HOME)/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
-FFTW_INCL   = -I$(HOME)/include
-PFFT_LIBR   = -lpfft
-PFFT_INCL   = 
-MPI_LIBR    = -L$(SMPI_ROOT)/lib -lmpi_ibm
-MPI_INCL    = -I$(SMPI_ROOT)/include
-GSL_LIBR    = -L$(GSL_LIB) -lgsl -lgslcblas -lm
-GSL_INCL    = -I$(GSL_INC)
+# Scorep configuration #
+ifeq ($(SCOREP), YES)
+SCOREP_FLAG = scorep --user
+OPTIONS += -D_SCOREP
+else
+SCOREP_FLAG = 
 endif
 
-###################### PLEIADI ######################
+CC = $(SCOREP_FLAG) $(COMPILER)
+
 
 ifeq ($(SYSTYPE),"pleiadi")
-CC          =  mpicc
-CDEBUG      = -ggdb3 -Wall $(OMP_FLAG)
-COPTIMIZED  = -O3 -Wno-unused-result $(OMP_FLAG)
-FFTW_LIBR   = -L/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/fftw-3.3.10-bap3ootbcmiypnmo7rouk57jbdhfjuty/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
-FFTW_INCL   = -I/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/fftw-3.3.10-bap3ootbcmiypnmo7rouk57jbdhfjuty/include
-PFFT_LIBR   = -L/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/pfft-1.0.8-alpha-qy6lqerctfrhjzaoamzjhbpga2ofejqf/lib -lpfft
-PFFT_INCL   = -I/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/pfft-1.0.8-alpha-qy6lqerctfrhjzaoamzjhbpga2ofejqf/include
-MPI_LIBR    =
-MPI_INCL    =
-GSL_LIBR    = -L/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/gsl-2.7.1-uehbowahpvubxundtx3cz4a4a5sdwzun/lib -lgsl -lgslcblas -lm
-GSL_INCL    = -I/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/gsl-2.7.1-uehbowahpvubxundtx3cz4a4a5sdwzun/include
+CDEBUG      = -g -Wall -Wextra $(OMP_FLAG)
+COPTIMIZED  = -O3 -Wall -Wextra -Wno-unused-result $(OMP_FLAG)
+
+MPI         = /opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/openmpi-4.1.3-djxjqlmzbqwq76bhh3wvgxaefnoczleg
+MPI_LIBR    = -L$(MPI)/lib -lmpi
+MPI_INCL    = -I$(MPI)/include
+
+LIBDIR      = /u/dgoz/lib
+
+FFTW        = $(LIBDIR)/fftw-3.3.10_pleiadi
+FFTW_LIBR   = -L$(FFTW)/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
+FFTW_INCL   = -I$(FFTW)/include
+
+PFFT        = $(LIBDIR)/pfft-1.0.8-alpha_pleiadi
+PFFT_LIBR   = -L$(PFFT)/lib -lpfft
+PFFT_INCL   = -I$(PFFT)/include
+
+GSL         = $(LIBDIR)/gsl-2.7.1_pleiadi
+GSL_LIBR    = -L$(GSL)/lib -lgsl -lgslcblas -lm
+GSL_INCL    = -I$(GSL)/include
+
 endif
 
 ###################### BASE ######################
 
 ifeq ($(SYSTYPE),"base")
-CC          =  mpicc
 CDEBUG      = -ggdb3 -Wall $(OMP_FLAG)
 COPTIMIZED  = -O3 -Wno-unused-result $(OMP_FLAG)
 FFTW_LIBR   = -L$(FFTW_LIB) -lfftw3_mpi -lfftw3 $(OMP_FFTW)
@@ -157,7 +161,6 @@ endif
 ###################### MY_MACHINE ####################
 
 ifeq ($(SYSTYPE),"my_machine")
-CC          =  mpicc 
 CDEBUG      =  -ggdb3 -Wall $(OMP_FLAG)
 COPTIMIZED  =  -g -O3 -Wno-unused-result -march=native $(OMP_FLAG)
 FFTW_LIBR   = -L/usr/local/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
@@ -174,11 +177,11 @@ endif
 
 # Include paths for libraries #
 
-INC =  $(PFFT_INCL) $(FFTW_INCL) $(MPI_INCL) $(GSL_INCL)
+INC = $(MPI_INCL) $(GSL_INCL) $(FFTW_INCL) $(PFFT_INCL)
 
 # Library flags #
 
-LIB =  -lm $(PFFT_LIBR) $(FFTW_LIBR) $(MPI_LIBR) $(GSL_LIBR)
+LIB = $(MPI_LIBR) $(GSL_LIBR) $(FFTW_LIBR) $(PFFT_LIBR) -lm
 
 # Compiler options : choose from CDEBUG or COPTIMIZED #
 
@@ -192,12 +195,12 @@ endif
 
 OBJECTS = fmax.o variables.o initialization.o collapse_times.o fmax-pfft.o GenIC.o \
 	ReadParamfile.o allocations.o LPT.o distribute.o \
-	fragment.o build_groups.o write_halos.o write_snapshot.o cosmo.o
+	fragment.o build_groups.o write_halos.o write_snapshot.o cosmo.o pinocchio.o
 
 # Main targets and rules
 
-pinocchio: $(OBJECTS) pinocchio.o Makefile
-	$(CC) $(INC) $(COPTS) -o $(RUNDIR)$(EXEC) pinocchio.o $(OBJECTS) $(LIB)
+$(EXEC): $(OBJECTS) Makefile
+	$(CC) $(INC) $(COPTS) -o $(EXEC) $(OBJECTS) $(LIB)
 
 run_planner: $(OBJECTS) run_planner.o Makefile
 	$(CC) $(INC) $(COPTS) -o run_planner run_planner.o $(OBJECTS) $(LIB)	
@@ -206,6 +209,9 @@ run_planner: $(OBJECTS) run_planner.o Makefile
 
 %.o: %.c Makefile pinocchio.h def_splines.h
 	$(CC) $(INC) $(COPTS) $(OPTIONS) -c $<
+
+memorytest: $(OBJECTS) memorytest.o Makefile
+	$(CC) $(INC) $(COPTS) -o memorytest memorytest.o $(OBJECTS) $(LIB)
 
 # Clean target #
 

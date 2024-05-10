@@ -41,33 +41,33 @@
 
 /* Ellipsoidal solution at 3rd perturbative order in two different ways */
 
-__attribute__((always_inline)) double ell_classic               ( int, double, double, double);  
-__attribute__((always_inline)) double ell_sng                   ( int, double, double, double);  
+FORCE_INLINE double ell_classic               ( int, double, double, double);  
+FORCE_INLINE double ell_sng                   ( int, double, double, double);  
 
 /* Collapase time calculation */
 
-__attribute__((always_inline)) double ell                       ( int, double, double, double); 
+FORCE_INLINE double ell                       ( int, double, double, double); 
 
 /* Calculation of inverse collpase time */
 
-__attribute__((always_inline)) double inverse_collapse_time     ( int, double *, double *, double *, double *, int *);
+FORCE_INLINE double inverse_collapse_time     ( int, double *, double *, double *, double *, int *);
 
 /* Interpolation of collpase time from a table containing collpase times */
 
 #ifdef TABULATED_CT
 
-__attribute__((always_inline)) double interpolate_collapse_time (int, double, double, double);
+FORCE_INLINE double interpolate_collapse_time (int, double, double, double);
 
 #endif 
 
 #ifdef MOD_GRAV_FR
 
-__attribute__((always_inline)) double ForceModification (double, double ,double);
+FORCE_INLINE double ForceModification (double, double ,double);
 
 #endif
 /* Order inverse collpase time */
 
-__attribute__((always_inline)) void ord                         (double *,double *,double *);
+FORCE_INLINE void ord                         (double *,double *,double *);
 
 
 /*------------------------------------------------------- Global Variables declaration ----------------------------------------------------*/
@@ -104,7 +104,7 @@ int ismooth;
 
 /* Classical ellipsoidal collapse solution */
 
-inline double ell_classic(int ismooth, double l1, double l2, double l3) {
+FORCE_INLINE double ell_classic(int ismooth, double l1, double l2, double l3) {
 
     /*
     This routine computes the smallest non-negative solution of the 3rd
@@ -286,7 +286,7 @@ int sng_system(double t, const double y[], double f[], void *sng_par) {
 
 #ifdef MOD_GRAV_FR
 
-inline double ForceModification(double size, double a, double delta) {
+FORCE_INLINE double ForceModification(double size, double a, double delta) {
 
     double ff        = 4. * params.OmegaLambda / params.Omega0;
     double thickness = FR0 / params.Omega0 / pow(H_over_c * size, 2.0) *
@@ -305,7 +305,7 @@ inline double ForceModification(double size, double a, double delta) {
 
 /* Solving the ODE system for the ellipsoidal collapse following SNG */
 
-inline double  ell_sng(int ismooth, double l1, double l2, double l3) {
+FORCE_INLINE double  ell_sng(int ismooth, double l1, double l2, double l3) {
 
 	/* Needed variables for the integrations step */
 	double ode_param, hh = 1.e-6;  // hh = initial step-size, ode_param = arbitrary parameters of the system == Smoothing_radius in our case
@@ -394,7 +394,7 @@ inline double  ell_sng(int ismooth, double l1, double l2, double l3) {
 
 /*---------------------------------------- Calculation of b_c == growing mode at collapse time ---------------------------------------*/
 
-inline double ell(int ismooth, double l1, double l2, double l3) {
+FORCE_INLINE double ell(int ismooth, double l1, double l2, double l3) {
 
 #ifdef ELL_CLASSIC
 
@@ -421,7 +421,7 @@ inline double ell(int ismooth, double l1, double l2, double l3) {
 
 /* ------------------------------------  Computation of collapse time i.e. F = 1 + z_collapse and variance ------------------------------------ */
 
-inline int compute_collapse_times(int ismooth) {    
+FORCE_INLINE int compute_collapse_times(int ismooth) {    
 
 	 /*---------------------DEBUG---------------------------------------*/
 
@@ -669,7 +669,7 @@ inline int compute_collapse_times(int ismooth) {
 /* ------------------------------------  Diagonalization of the potential Hessian ------------------------------------ */
 
 
-inline double inverse_collapse_time(int ismooth, double * restrict deformation_tensor, double * restrict x1, double * restrict x2, double * restrict x3, int * restrict fail) {
+FORCE_INLINE double inverse_collapse_time(int ismooth, double * restrict deformation_tensor, double * restrict x1, double * restrict x2, double * restrict x3, int * restrict fail) {
     
 	/* Local variables declaration */
 	/* mu1, mu2 and mu3 are the principal invariants of the 3x3 tensor of second derivatives */
@@ -1129,7 +1129,7 @@ int compare_search(const void *A, const void *B){
 
 /* ------------------------------------- Interpolation of collapse times ------------------------------------- */
 
-inline double interpolate_collapse_time(int ismooth, double l1, double l2, double l3){
+FORCE_INLINE double interpolate_collapse_time(int ismooth, double l1, double l2, double l3){
 	
 	/* Variable declarations and assignment */
 	double ampl = sqrt(Smoothing.Variance[ismooth]);
@@ -1344,7 +1344,7 @@ void write_CTtable_header(){
 #define max(a,b) ((a)>(b)?(a):(b))
 
 /* Orders a,b,c in decreasing order a>b>c */
-inline void ord(double * restrict a, double * restrict b, double * restrict c){
+FORCE_INLINE void ord(double * restrict a, double * restrict b, double * restrict c){
 
 	double lo , hi;
 	hi = max( max(*a, *b), *c );

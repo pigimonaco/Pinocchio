@@ -629,3 +629,11 @@ int find_location(int, int, int);
 int write_PLC();
 void coord_transformation_cartesian_polar(PRODFLOAT *, double *, double *, double *);
 #endif
+
+/* SCOREP */
+#if defined (_SCOREP)
+   /* remove inlining */
+   #define FORCE_INLINE
+#else
+   #define FORCE_INLINE inline
+#endif /* _SCOREP */
