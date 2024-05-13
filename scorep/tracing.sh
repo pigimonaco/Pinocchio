@@ -1,9 +1,7 @@
 #!/bin/bash
 
-DIR_BEGIN=${PWD}
-
 # get the executable
-cd example
+cd ${WORKDIR}/example
 EXEC=($(find $(realpath ./) -maxdepth 1 -name "*Scorep" -executable -type f -print))
 if [ ${#EXEC[@]} -lt 1 ]
 then
@@ -109,7 +107,7 @@ do
 		    printf "\n\t                       $((NT * OMP)) processors used\n\n"          |& tee -a ${OUT}
 		    printf "\n\t mpirun -n ${NT} --map-by ppr:${PPR}:${MAP}:PE=${OMP} --bind-to core --report-bindings ${EXE} parameter_file \n" |& tee -a ${OUT}
 		    
-		    mpirun -n ${NT} --map-by ppr:${PPR}:${MAP}:PE=${OMP} --bind-to core --report-bindings ${EXE} parameter_file |& tee -a ${OUT}
+		    mpirun -n ${NT} --map-by ppr:${PPR}:${MAP}:PE=${OMP} --bind-to core --report-bindings ${EXE} parameter_file_scorep |& tee -a ${OUT}
 
 		    # change directory name
 		    mv ${PFOLDER[0]} ${MOVE_TO}
@@ -126,4 +124,6 @@ do
     fi # profiling folder
 done
 
-cd ${DIR_BEGIN}
+cd ${WORKDIR}
+
+printf "\n\t Tracing done \n"

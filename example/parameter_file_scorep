@@ -2,7 +2,7 @@
 
 # run properties
 RunFlag                example      % name of the run
-OutputList             outputs      % name of file with required output redshifts
+OutputList             outputs_scorep      % name of file with required output redshifts
 BoxSize                256.0        % physical size of the box in Mpc
 BoxInH100                           % specify that the box is in Mpc/h
 GridSize               256          % number of grid points per side

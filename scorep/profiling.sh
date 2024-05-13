@@ -1,7 +1,6 @@
 #!/bin/bash
 
-DIR_BEGIN=${PWD}
-cd example
+cd ${WORKDIR}/example
 EXEC=($(find . -name "*Scorep" -maxdepth 1 -executable -type f -print))
 if [ ${#EXEC[@]} -lt 1 ]
 then
@@ -17,9 +16,6 @@ export SCOREP_EXPERIMENT_DIRECTORY=profiling
 
 export OMP_WAIT_POLICY=ACTIVE
 
-# get the actual topology
-source ${SCRIPT_PATH}/topology.sh ${NODES}
-
 # store the output files
 FILE=
 
@@ -27,10 +23,9 @@ for EXE in ${EXEC[@]}
 do
     printf "\n\t Running ${EXE}... \n"
 
-    cd ${DIR_BEGIN}/example
     EXE=${PWD}/$(basename ${EXE})
-    PARAMFILE=${PWD}/parameter_file
-    OUTPUT=${PWD}/outputs
+    PARAMFILE=${PWD}/parameter_file_scorep
+    OUTPUT=${PWD}/outputs_scorep
 
     # create one directory for each executable
     DIR_NAME=${PWD}/$(basename ${EXE})_${SCOREP_EXPERIMENT_DIRECTORY}
@@ -89,7 +84,7 @@ do
     		# timer
     		SECONDS=0
 
-		mpirun -n ${NT} --map-by ppr:${PPR}:${MAP}:PE=${OMP} --bind-to core --report-bindings ${EXE} parameter_file |& tee -a ${OUT}
+		mpirun -n ${NT} --map-by ppr:${PPR}:${MAP}:PE=${OMP} --bind-to core --report-bindings ${EXE} parameter_file_scorep |& tee -a ${OUT}
 
     		# get execution time
     		TIME=$(($SECONDS))
@@ -138,7 +133,7 @@ do
 	done # MAP in MAP_BY
     done # NT in NTASKS
 
-    cd ${DIR_BEGIN}/example
+    cd ${WORKDIR}/example
 done # EXE in EXEC
 
 for TXT in ${FILE[@]}
@@ -147,5 +142,6 @@ do
     printf "\n\t ${TXT}: ${RET}"
 done
 
-cd ${DIR_BEGIN}
-printf "\n\t Execution done \n"
+cd ${WORKDIR}
+
+printf "\n\t Profiling done \n"

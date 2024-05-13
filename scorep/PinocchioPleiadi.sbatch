@@ -20,44 +20,65 @@ OTF2=/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/otf2-2.3-ws
 CUB4W=/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/cubew-4.6-5cfpxt7b3lma5faqiwyep5phk75vqikg/lib/
 export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${OTF2}:${CUB4W}
 
-###### set the working dir
+############################################## TO EDIT ###########################################################
+##################################################################################################################
+
+#------- set the working dir
 export WORKDIR=/u/dgoz/beegfs/Pinocchio
 
-export SCRIPT_PATH=${WORKDIR}/script
-###### edit the parameters
-source ${SCRIPT_PATH}/run.sh
+#------ edit the parameters in /script/run.sh
 
-###### switch profiling
+#------ switch on/off profiling
 PROFILING=0
 
+#------ switch on/off tracing
 # Tracing is meant to be run after the profiling
-###### swith tracing
 TRACING=1
-export SCOREP_TOTAL_MEMORY=7MB # set this value according to estimated memory requirements during profiling analysis
-####################################################################################################################
 
-printf "\n\t Running on ${SLURM_NNODES} nodes \n"
+#------ set the scorep memory if tracing is enable
+export SCOREP_TOTAL_MEMORY=7MB # set this value according to estimated memory requirements during profiling analysis
+
+####################################################################################################################
+####################################################################################################################
+#
+#
+#
+#
+#
+
+if [ ! -d ${WORKDIR} ]
+then
+    printf "\n\t ${WORKDIR} does not exist... aborting... \n\n"
+    exit 1
+fi
+
+export SCOREP_PATH=${WORKDIR}/scorep
+
+# load the run configuration
+source ${SCOREP_PATH}/run.sh
+
+printf "\n\t Running on ${NODES} nodes \n"
 printf "\n\t Running Pinocchio on hosts: ${SLURM_NODELIST}"
 
 # get the actual topology
-source ${SCRIPT_PATH}/topology.sh ${NODES}
+source ${SCOREP_PATH}/topology.sh ${NODES}
 
 if [ ${PROFILING} -eq 1 ]
 then
     printf "\n\t Performing the profiling of Pinocchio \n\n"
 
     # compile the code with score-p support
-    source ${SCRIPT_PATH}/compile.sh ${COMPILER}
+    source ${SCOREP_PATH}/compile.sh ${COMPILER}
 
     # perform the profiling
-    source ${SCRIPT_PATH}/profiling.sh
+    source ${SCOREP_PATH}/profiling.sh
 fi
 
 if [ ${TRACING} -eq 1 ]
 then
     printf "\n\t Performing the tracing of Pinocchio \n\n"
     
-    source ${SCRIPT_PATH}/tracing.sh
+    source ${SCOREP_PATH}/tracing.sh
 fi
 
 printf "\n\t END OF GAME!!! \n\n"
