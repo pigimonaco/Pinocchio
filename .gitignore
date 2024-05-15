@@ -5,3 +5,4 @@
 *.err
 *.out
 *_profiling/
+*Scorep*
