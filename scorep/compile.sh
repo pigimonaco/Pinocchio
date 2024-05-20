@@ -53,7 +53,7 @@ do
     EXE_SCOREP=${EXE}Scorep
     printf "\n\t Compiling ${EXE}... \n"
     COMPILE=compile_${EXE}.txt
-    make clean && make EXEC=${EXE_SCOREP} COMPILER=${CC} DEBUG=${DEBUG_SWITCH} OMP=${OMP_SWITCH} SCOREP=YES |& tee ${COMPILE}
+    make clean && make EXEC=${EXE_SCOREP} COMPILER=${CC} DEBUG=${DEBUG_SWITCH} OMP=${OMP_SWITCH} SYSTYPE=${SYSTEM} SCOREP=YES |& tee ${COMPILE}
     file ${EXE_SCOREP} |& tee -a ${COMPILE}
     ldd ${EXE_SCOREP} |& tee -a ${COMPILE}
     mv ${EXE_SCOREP} ${COMPILE} ${WORKDIR}/example

@@ -156,7 +156,7 @@ int compute_LPT_displacements()
 #ifdef _OPENMP
 #pragma omp parallel
 	{
-#pragma omp nowait
+#pragma omp for nowait
 #endif
 	  for (int index=0; index<MyGrids[0].total_local_size; index++)
 	    /* the first 2 factor is needed because nabla2phi is half the theoretical one */

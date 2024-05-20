@@ -31,7 +31,7 @@
 
 ########## System-specific Configuration ############
 
-SYSTYPE="pleiadi"
+SYSTYPE ?= "base"
 
 ##########################################################################
 # The following variables should be passed from command line to make
@@ -141,6 +141,37 @@ GSL_LIBR    = -L$(GSL)/lib -lgsl -lgslcblas -lm
 GSL_INCL    = -I$(GSL)/include
 
 endif
+
+
+###################### LeonardoBoost ######################
+
+ifeq ($(SYSTYPE), LeonardoBoost)
+
+CDEBUG      = -g -O0 -Wall -Wextra $(OMP_FLAG)
+#COPTIMIZED  = -O3 -Wall -Wextra -Wno-unused-result $(OMP_FLAG)
+COPTIMIZED  = -O3 $(OMP_FLAG)
+
+MPI_LIBR    = -lmpi
+MPI_INCL    =
+
+LIBDIR      = /leonardo/home/userexternal/dgoz0000/lib/nvhpc-23.11
+
+FFTW        = $(LIBDIR)/fftw/fftw-3.3.10
+FFTW_LIBR   = -L$(FFTW)/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
+FFTW_INCL   = -I$(FFTW)/include
+
+GSL         = $(LIBDIR)/gsl/gsl-2.7.1
+GSL_LIBR    = -L$(GSL)/lib -lgsl -lgslcblas -lm
+GSL_INCL    = -I$(GSL)/include
+
+PFFT        = $(LIBDIR)/pfft/pfft
+PFFT_LIBR   = -L$(PFFT)/lib -lpfft
+PFFT_INCL   = -I$(PFFT)/include
+
+endif
+
+###########################################################################
+
 
 ###################### BASE ######################
 

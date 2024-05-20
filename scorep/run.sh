@@ -5,15 +5,19 @@
 # tracing using Score-p tool
 
 # set the compiler
-COMPILER=gcc
+COMPILER=mpicc
+
+# set the machine name on the src/Makefile (SYSTYPE)
+SYSTEM=LeonardoBoost
 
 # executable basename
-BASE=PinocchioPleiadi
+BASE=Pinocchio
 # executable with/without OMP or Debug support
 EXEC=( "${BASE}" "${BASE}OMP" )
 
 # Select the PAPI metrics (empty means do not use PAPI counters)
-PAPI_METRIC=PAPI_DP_OPS,PAPI_L3_TCM
+# PAPI_METRIC=PAPI_DP_OPS,PAPI_L3_TCM
+PAPI_METRIC=
 
 # Number of MPI tasks (array)
 NTASKS=( 16 )
