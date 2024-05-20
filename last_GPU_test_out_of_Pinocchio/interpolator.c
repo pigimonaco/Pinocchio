@@ -7,13 +7,17 @@
 #include <gsl/gsl_spline.h>
 #include <sys/time.h>
 
-#define N 10
+#define N 15
 
 double dummy_function(double x) {
     // Replace this with your actual function
     return pow(x, 2);
     // return sin(x);
 }
+
+CubicSpline **my_spline;
+gsl_spline **SPLINE;
+gsl_interp_accel **ACCEL;
 
 
 double init_spline() {
@@ -73,16 +77,16 @@ double init_spline() {
     custom_cubic_spline_init(my_spline[SP_INVGROW], a, b, NBINS);
 
     // Allocate memory on the GPU for my_spline and its components
-    #pragma omp target enter data map(alloc: my_spline[0:NSPLINES])
-    for (int i = 0; i < NSPLINES - 3; i++) {
-        #pragma omp target enter data map(alloc: my_spline[i]->x[0:my_spline[i]->size], \
-                                           my_spline[i]->y[0:my_spline[i]->size], \
-                                           my_spline[i]->d2y_data[0:(my_spline[i]->size - 1)], \
-                                           my_spline[i]->coeff_a[0:(my_spline[i]->size - 1)], \
-                                           my_spline[i]->coeff_b[0:(my_spline[i]->size - 1)], \
-                                           my_spline[i]->coeff_c[0:(my_spline[i]->size - 1)], \
-                                           my_spline[i]->coeff_d[0:(my_spline[i]->size - 1)])
-    }
+    // #pragma omp target enter data map(alloc: my_spline[0:NSPLINES])
+    // for (int i = 0; i < NSPLINES - 3; i++) {
+    //     #pragma omp target enter data map(alloc: my_spline[i]->x[0:my_spline[i]->size], \
+    //                                        my_spline[i]->y[0:my_spline[i]->size], \
+    //                                        my_spline[i]->d2y_data[0:(my_spline[i]->size - 1)], \
+    //                                        my_spline[i]->coeff_a[0:(my_spline[i]->size - 1)], \
+    //                                        my_spline[i]->coeff_b[0:(my_spline[i]->size - 1)], \
+    //                                        my_spline[i]->coeff_c[0:(my_spline[i]->size - 1)], \
+    //                                        my_spline[i]->coeff_d[0:(my_spline[i]->size - 1)])
+    // }
 
 #ifdef SI_GSL
     gsl_spline_init(SPLINE[SP_INVGROW], a, b, NBINS);
@@ -141,14 +145,14 @@ int main() {
     double start_time, end_time, cpu_time_used;
 
     // Measure start time
-    start_time = omp_get_wtime();
+    // start_time = omp_get_wtime();
 
     // Evaluation values
     double x_data[N];
 
     // Generate non-equally spaced x values
     for (int i = 0; i < N; ++i) {
-        x_data[i] = ((double)rand() / RAND_MAX) * 30.0;  // Example: Random values between 0 and 10
+        x_data[i] = ((double)rand() / RAND_MAX) * 50.0;  // Example: Random values between 0 and 10
     }
     
     // Calculate actual function values at random x values
@@ -179,13 +183,13 @@ int main() {
 
 
     // Measure end time
-    end_time = omp_get_wtime();
-    cpu_time_used = end_time - start_time;
+    // end_time = omp_get_wtime();
+    // cpu_time_used = end_time - start_time;
 
     // gsl_sort(x_data, 1, N);
     // gsl_sort(interpolated_cubic_spline, 1, N);
     // gsl_sort(interpolated_gsl_spline, 1, N);
-    printf("Time for custom interpolation: %e seconds\n", cpu_time_used);
+    // printf("Time for custom interpolation: %e seconds\n", cpu_time_used);
 
     // Save data to a file
     FILE* file = fopen("interpolation_data.txt", "w");

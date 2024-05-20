@@ -53,7 +53,7 @@ static int WhichSpectrum, NPowerTable=0, NtabEoS=0;
 static double PkNorm, MatterDensity, OmegaK, OmegaRad;
 
 /* declaration of gsl quantities */
-
+CubicSpline **my_spline;
 
 #ifdef SCALE_DEPENDENT
 static double kmin,kmax;
@@ -387,6 +387,9 @@ int initialize_cosmology()
 	grow31[i+j*NBINS] = log10(grow31[i+j*NBINS]);
 	grow32[i+j*NBINS] = log10(grow32[i+j*NBINS]);
       }
+  
+#ifdef CUSTOM_INTERPOLATION
+  
 
   my_spline = (CubicSpline**)calloc(NSPLINES, sizeof(CubicSpline*));
 
@@ -399,18 +402,18 @@ int initialize_cosmology()
   }
 
   custom_cubic_spline_init(my_spline[SP_INVGROW], grow1, scalef, NBINS);
-
+#endif
   // Allocate memory on the GPU for my_spline and its components
-  #pragma omp target enter data map(alloc: my_spline[0:NSPLINES])
-  for (int i = 0; i < NSPLINES - 3; i++) {
-      #pragma omp target enter data map(alloc: my_spline[i]->x[0:my_spline[i]->size], \
-                                          my_spline[i]->y[0:my_spline[i]->size], \
-                                          my_spline[i]->d2y_data[0:(my_spline[i]->size - 1)], \
-                                          my_spline[i]->coeff_a[0:(my_spline[i]->size - 1)], \
-                                          my_spline[i]->coeff_b[0:(my_spline[i]->size - 1)], \
-                                          my_spline[i]->coeff_c[0:(my_spline[i]->size - 1)], \
-                                          my_spline[i]->coeff_d[0:(my_spline[i]->size - 1)])
-    }
+  // #pragma omp target enter data map(alloc: my_spline[0:NSPLINES])
+  // for (int i = 0; i < NSPLINES - 3; i++) {
+  //     #pragma omp target enter data map(alloc: my_spline[i]->x[0:my_spline[i]->size], \
+  //                                         my_spline[i]->y[0:my_spline[i]->size], \
+  //                                         my_spline[i]->d2y_data[0:(my_spline[i]->size - 1)], \
+  //                                         my_spline[i]->coeff_a[0:(my_spline[i]->size - 1)], \
+  //                                         my_spline[i]->coeff_b[0:(my_spline[i]->size - 1)], \
+  //                                         my_spline[i]->coeff_c[0:(my_spline[i]->size - 1)], \
+  //                                         my_spline[i]->coeff_d[0:(my_spline[i]->size - 1)])
+  //   }
 
   /* initialization of spline interpolations of time-dependent quantities using GSL */
   gsl_spline_init(SPLINE[SP_TIME], scalef, cosmtime, NBINS);
@@ -1857,7 +1860,8 @@ double InverseGrowingMode(double D, int ismooth)
 #ifdef SCALE_DEPENDENT
   return 1./pow(10.,my_spline_eval(SPLINE_INVGROW[ismooth], log10(D), ACCEL_INVGROW[ismooth])) -1.;
 #else
-#ifdef GPU_INTERPOLATION
+// #ifdef GPU_INTERPOLATION
+#ifdef CUSTOM_INTERPOLATION
   return 1./pow(10.,custom_cubic_spline_eval(my_spline[SP_INVGROW], log10(D))) -1;
 #else
   return 1./pow(10.,my_spline_eval(SPLINE[SP_INVGROW], log10(D), ACCEL[SP_INVGROW])) -1.;
@@ -2072,7 +2076,8 @@ double my_spline_eval(gsl_spline *spline, double x, gsl_interp_accel *accel)
   }
 }
 
-#ifdef GPU_INTERPOLATION
+// #ifdef GPU_INTERPOLATION
+#ifdef CUSTOM_INTERPOLATION
 double custom_spline_eval(CubicSpline *my_spline, double x) {
     // Perform linear extrapolation beyond the x-range limits
     if (x < my_spline->x[0])

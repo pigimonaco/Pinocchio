@@ -466,7 +466,7 @@ inline int compute_collapse_times(int ismooth) {
 	// #pragma omp target enter data map(alloc: products[0:MyGrids[0].total_local_size])
 	// for (int i = 0; MyGrids[0].total_local_size; i++){
 		// #pragma omp target enter data map(alloc: products[i].Fmax[0:MyGrids[0].total_local_size])
-		#pragma omp target teams distribute parallel for map(tofrom: products[0:MyGrids[0].total_local_size])
+		// #pragma omp target teams distribute parallel for map(tofrom: products[0:MyGrids[0].total_local_size])
     	for (int i = 0; i < MyGrids[0].total_local_size; i++){
 
         	/*----------- Common initialization ----------- */       
@@ -505,7 +505,7 @@ These variables are private to each thread and are not shared among threads, ens
 	double invcoll_update = 0, ell_update = 0;
 	int num_teams, team_size;
 	
-	#pragma omp target teams map(tofrom: local_average, local_variance, products[0:MyGrids[0].total_local_size]) map(to:second_derivatives[0][6][MyGrids[0].total_local_size]) map(from: num_teams, team_size)
+	// #pragma omp target teams map(tofrom: local_average, local_variance, products[0:MyGrids[0].total_local_size]) map(to:second_derivatives[0][0:6][MyGrids[0].total_local_size]) map(from: num_teams, team_size)
 	{
 
 		/* Thread-specific variables declaration */	

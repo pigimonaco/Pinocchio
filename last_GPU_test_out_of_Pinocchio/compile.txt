@@ -1,0 +1,1 @@
+mpicc -o test interpolation.c interpolator.c -lm -lgsl -lgslcblas -DSI_GSL

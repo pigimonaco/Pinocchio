@@ -14,9 +14,9 @@ typedef struct {
 } CubicSpline;
 
 
-CubicSpline **my_spline;
-gsl_spline **SPLINE;
-gsl_interp_accel **ACCEL;
+extern CubicSpline **my_spline;
+extern gsl_spline **SPLINE;
+extern gsl_interp_accel **ACCEL;
 
 void calculate_second_derivatives(CubicSpline* spline);
 void cubic_spline_coefficients(CubicSpline* spline);
@@ -55,7 +55,7 @@ void custom_cubic_spline_free(CubicSpline* spline);
 #define SP_RADIUS   7
 #define SP_DVARDR   8
 #define NSPLINES (9+8*NkBINS+3)
-#define NBINS 1000
+#define NBINS 210
 #define NBB 10
 
 #endif

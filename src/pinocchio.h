@@ -406,10 +406,11 @@ typedef struct
 } mf_data;
 extern mf_data mf;
 
-#ifdef GPU_INTERPOLATION
+// #ifdef GPU_INTERPOLATION
+#ifdef CUSTOM_INTERPOLATION
 #include "my_cubic_spline_interpolation.h"
-CubicSpline **my_spline;
-#pragma omp declare target(my_spline)
+// extern CubicSpline **my_spline;
+// #pragma omp declare target(my_spline)
 #endif
 
 // Declarations for the variables
@@ -559,7 +560,10 @@ double GrowingMode_2LPT(double,double);
 double GrowingMode_3LPT_1(double,double);
 double GrowingMode_3LPT_2(double,double);
 double InverseGrowingMode(double,int);
+// #ifdef GPU_INTERPOLATION
+#ifdef CUSTOM_INTERPOLATION
 #pragma omp declare target (InverseGrowingMode)
+#endif
 double ComovingDistance(double);
 double InverseComovingDistance(double);
 double dComovingDistance_dz(double);
@@ -574,8 +578,11 @@ double dOmega_dVariance(double, double);
 double AnalyticMassFunction(double, double);
 double WindowFunction(double);
 double my_spline_eval(gsl_spline *, double, gsl_interp_accel *);
-double my_custom_spline_eval(CubicSpline *my_spline, double x);
-#pragma omp declare target(my_custom_spline_eval)
+// #ifdef GPU_INTERPOLATION
+#ifdef CUSTOM_INTERPOLATION
+double my_custom_spline_eval(CubicSpline *, double x);
+// #pragma omp declare target(my_custom_spline_eval)
+#endif
 int jac(double, const double [], double *, double [], void *);
 
 /* prototypes for functions defined in ReadParamFile.c */

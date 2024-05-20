@@ -70,21 +70,36 @@ CubicSpline* custom_cubic_spline_alloc(int size) {
     return spline;
 }
 
+
 double custom_cubic_spline_eval(CubicSpline *spline, double x) {
+    if (x < spline->x[0]) {
+        // Linear extrapolation at the lower bound
+        double dx = x - spline->x[0];
+        double a = spline->coeff_a[0];
+        double b = spline->coeff_b[0];
+        return a + b * dx; // Linear extrapolation using the slope at the first interval
+    } else if (x > spline->x[spline->size - 1]) {
+        // Linear extrapolation at the upper bound
+        int k = spline->size - 2;
+        double dx = x - spline->x[spline->size - 1];
+        double a = spline->coeff_a[k];
+        double b = spline->coeff_b[k];
+        return a + b * dx; // Linear extrapolation using the slope at the last interval
+    } else {
+        // Find the interval [x_k, x_{k+1}] containing x
+        int k = 0;
+        while (k < spline->size - 1 && x > spline->x[k + 1]) {
+            k++;
+        }
+        // Evaluate the cubic spline at the point x using local coefficients
+        double dx = x - spline->x[k];
+        double a = spline->coeff_a[k];
+        double b = spline->coeff_b[k];
+        double c = spline->coeff_c[k];
+        double d = spline->coeff_d[k];
 
-    // Find the interval [x_k, x_{k+1}] containing x
-    int k = 0;
-    while (k < spline->size - 1 && x > spline->x[k + 1]) {
-        k++;
+        return a + b * dx + c * pow(dx, 2) + d * pow(dx, 3);
     }
-     // Evaluate the cubic spline at the point x using local coefficients
-    double dx = x - spline->x[k];
-    double a = spline->coeff_a[k];
-    double b = spline->coeff_b[k];
-    double c = spline->coeff_c[k];
-    double d = spline->coeff_d[k];
-
-    return a + b * dx + c * pow(dx, 2) + d * pow(dx, 3);
 }
 
 void custom_cubic_spline_free(CubicSpline* spline) {
