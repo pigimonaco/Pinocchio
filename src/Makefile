@@ -31,7 +31,7 @@
 
 ########## System-specific Configuration ############
 
-SYSTYPE ?= "base"
+SYSTYPE ?= base
 
 ##########################################################################
 # The following variables should be passed from command line to make
@@ -118,7 +118,7 @@ endif
 CC = $(SCOREP_FLAG) $(COMPILER)
 
 
-ifeq ($(SYSTYPE),"pleiadi")
+ifeq ($(SYSTYPE), pleiadi)
 CDEBUG      = -g -Wall -Wextra $(OMP_FLAG)
 COPTIMIZED  = -O3 -Wall -Wextra -Wno-unused-result $(OMP_FLAG)
 
@@ -175,7 +175,7 @@ endif
 
 ###################### BASE ######################
 
-ifeq ($(SYSTYPE),"base")
+ifeq ($(SYSTYPE), base)
 CDEBUG      = -ggdb3 -Wall $(OMP_FLAG)
 COPTIMIZED  = -O3 -Wno-unused-result $(OMP_FLAG)
 FFTW_LIBR   = -L$(FFTW_LIB) -lfftw3_mpi -lfftw3 $(OMP_FFTW)
@@ -191,7 +191,7 @@ endif
 
 ###################### MY_MACHINE ####################
 
-ifeq ($(SYSTYPE),"my_machine")
+ifeq ($(SYSTYPE), my_machine)
 CDEBUG      =  -ggdb3 -Wall $(OMP_FLAG)
 COPTIMIZED  =  -g -O3 -Wno-unused-result -march=native $(OMP_FLAG)
 FFTW_LIBR   = -L/usr/local/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)

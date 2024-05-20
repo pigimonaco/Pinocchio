@@ -29,11 +29,11 @@ export WORKDIR=/u/dgoz/beegfs/Pinocchio
 #------ edit the parameters in /script/run.sh
 
 #------ switch on/off profiling
-PROFILING=1
+PROFILING=0
 
 #------ switch on/off tracing
 # Tracing is meant to be run after the profiling
-TRACING=0
+TRACING=1
 
 #------ set the scorep memory if tracing is enable
 export SCOREP_TOTAL_MEMORY=7MB # set this value according to estimated memory requirements during profiling analysis

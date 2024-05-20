@@ -7,8 +7,8 @@
 # set the compiler
 COMPILER=mpicc
 
-# set the machine name on the src/Makefile (SYSTYPE)
-SYSTEM=LeonardoBoost
+# set the machine name on the src/Makefile accordingly
+SYSTEM=pleiadi
 
 # executable basename
 BASE=Pinocchio
