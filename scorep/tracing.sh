@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # get the executable
-cd ${WORKDIR}/example
+cd ${OUT_DIR}
 EXEC=($(find $(realpath ./) -maxdepth 1 -name "*Scorep" -executable -type f -print))
 if [ ${#EXEC[@]} -lt 1 ]
 then
@@ -105,9 +105,9 @@ do
 		    printf "\n\t                       MPI processes mapped by ${MAP}"             |& tee -a ${OUT}
 		    printf "\n\t                       each MPI process spawns ${OMP} OMP threads" |& tee -a ${OUT}
 		    printf "\n\t                       $((NT * OMP)) processors used\n\n"          |& tee -a ${OUT}
-		    printf "\n\t mpirun -n ${NT} --map-by ppr:${PPR}:${MAP}:PE=${OMP} --bind-to core --report-bindings ${EXE} parameter_file \n" |& tee -a ${OUT}
+		    printf "\n\t mpirun -n ${NT} --map-by ppr:${PPR}:${MAP}:PE=${OMP} --bind-to core --report-bindings ${EXE} ${PARAMFILE} \n" |& tee -a ${OUT}
 		    
-		    mpirun -n ${NT} --map-by ppr:${PPR}:${MAP}:PE=${OMP} --bind-to core --report-bindings ${EXE} parameter_file_scorep |& tee -a ${OUT}
+		    mpirun -n ${NT} --map-by ppr:${PPR}:${MAP}:PE=${OMP} --bind-to core --report-bindings ${EXE} ${PARAMFILE} |& tee -a ${OUT}
 
 		    # change directory name
 		    mv ${PFOLDER[0]} ${MOVE_TO}

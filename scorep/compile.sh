@@ -56,7 +56,7 @@ do
     make clean && make EXEC=${EXE_SCOREP} COMPILER=${CC} DEBUG=${DEBUG_SWITCH} OMP=${OMP_SWITCH} SYSTYPE=${SYSTEM} SCOREP=YES |& tee ${COMPILE}
     file ${EXE_SCOREP} |& tee -a ${COMPILE}
     ldd ${EXE_SCOREP} |& tee -a ${COMPILE}
-    mv ${EXE_SCOREP} ${COMPILE} ${WORKDIR}/example
+    mv ${EXE_SCOREP} ${COMPILE} ${OUT_DIR}
 
 done
 

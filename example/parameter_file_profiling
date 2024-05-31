@@ -1,0 +1,59 @@
+# This is an example parameter file for the Pinocchio 4.0 code
+
+# run properties
+RunFlag                scorep              % name of the run
+OutputList             outputs_scorep      % name of file with required output redshifts
+BoxSize                512                 % physical size of the box in Mpc
+BoxInH100                                  % specify that the box is in Mpc/h
+GridSize               512                 % number of grid points per side
+RandomSeed             486604              % random seed for initial conditions
+
+# cosmology
+Omega0                 0.315        % Omega_0 (total matter)
+OmegaLambda            0.685        % Omega_Lambda
+OmegaBaryon            0.022        % Omega_b (baryonic matter)
+Hubble100              0.678        % little h
+Sigma8                 0.829        % sigma8; if 0, it is computed from the provided P(k)
+PrimordialIndex        0.966        % n_s
+DEw0                   -1.0         % w0 of parametric dark energy equation of state
+DEwa                   0.0          % wa of parametric dark energy equation of state
+TabulatedEoSfile       no           % equation of state of dark energy tabulated in a file
+FileWithInputSpectrum  no           % P(k) tabulated in a file
+
+
+# from N-GenIC
+InputSpectrum_UnitLength_in_cm 0    % units of tabulated P(k), or 0 if it is in h/Mpc
+WDM_PartMass_in_kev    0.0          % WDM cut following Bode, Ostriker & Turok (2001)
+
+# control of memory requirements
+BoundaryLayerFactor    2.0          % width of the boundary layer for fragmentation
+MaxMem                 60000        % max available memory to an MPI task in Mbyte
+MaxMemPerParticle      400          % max available memory in bytes per particle
+PredPeakFactor         0.83         % guess for the number of peaks in the subvolume
+
+# output
+% CatalogInAscii                    % catalogs are written in ascii and not in binary format
+OutputInH100                        % units are in H=100 instead of the true H value
+NumFiles               1            % number of files in which each catalog is written
+MinHaloMass            100          % smallest halo that is given in output
+AnalyticMassFunction   9            % form of analytic mass function given in the .mf.out files
+
+# output options:
+% WriteTimelessSnapshot               % writes a Gadget2 snapshot as an output
+% DoNotWriteCatalogs                % skips the writing of full catalogs (including PLC)
+% DoNotWriteHistories               % skips the writing of merger histories
+
+# for debugging or development purposes:
+% WriteFmax                         % writes the values of the Fmax field, particle by particle
+% WriteVmax                         % writes the values of the Vmax field, particle by particle
+% WriteRmax                         % writes the values of the Rmax field, particle by particle
+% WriteDensity                      % writes the linear density, particle by particle
+
+# past light cone
+StartingzForPLC        0.3          % starting (highest) redshift for the past light cone
+LastzForPLC            0.0          % final (lowest) redshift for the past light cone
+PLCAperture            30           % cone aperture for the past light cone
+% PLCProvideConeData                % read vertex and direction of cone from paramter file
+% PLCCenter 0. 0. 0.                % cone vertex in the same coordinates as the BoxSize
+% PLCAxis   1. 1. 0.                % un-normalized direction of the cone axis
+% CTtableFile none

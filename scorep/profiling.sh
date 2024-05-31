@@ -1,6 +1,6 @@
 #!/bin/bash
 
-cd ${WORKDIR}/example
+cd ${OUT_DIR}
 EXEC=($(find . -name "*Scorep" -maxdepth 1 -executable -type f -print))
 if [ ${#EXEC[@]} -lt 1 ]
 then
@@ -24,8 +24,6 @@ do
     printf "\n\t Running ${EXE}... \n"
 
     EXE=${PWD}/$(basename ${EXE})
-    PARAMFILE=${PWD}/parameter_file_scorep
-    OUTPUT=${PWD}/outputs_scorep
 
     # create one directory for each executable
     DIR_NAME=${PWD}/$(basename ${EXE})_${SCOREP_EXPERIMENT_DIRECTORY}
@@ -67,7 +65,7 @@ do
 
     		# create a subdirectory for each MAP/MPI/OMP configuration
 		SUB_DIR=${PWD}/nodes_${NODES}_map_${MAP}_MPI_${NT}_OMP_${OMP}
-		mkdir -p ${SUB_DIR} && cd ${SUB_DIR} && rm -rf * && cp ${OUTPUT} ${PARAMFILE} .
+		mkdir -p ${SUB_DIR} && cd ${SUB_DIR} && rm -rf * && cp ${OUTPUTS} ${PARAMFILE} .
 
     		OUT=${PWD}/$(basename ${EXE})_nodes_${NODES}_map_${MAP}_MPI_${NT}_OMP_${OMP}_profiling_output.txt
     		FILE+=("${OUT}")
@@ -79,12 +77,12 @@ do
 		printf "\n\t                       MPI processes mapped by ${MAP}"             |& tee -a ${OUT}
 		printf "\n\t                       each MPI process spawns ${OMP} OMP threads" |& tee -a ${OUT}
 		printf "\n\t                       $((NT * OMP)) processors used\n\n"          |& tee -a ${OUT}
-		printf "\n\t mpirun -n ${NT} --map-by ppr:${PPR}:${MAP}:PE=${OMP} --bind-to core --report-bindings ${EXE} parameter_file \n" |& tee -a ${OUT}
+		printf "\n\t mpirun -n ${NT} --map-by ppr:${PPR}:${MAP}:PE=${OMP} --bind-to core --report-bindings ${EXE} ${PARAMFILE} \n" |& tee -a ${OUT}
 		
     		# timer
     		SECONDS=0
 
-		mpirun -n ${NT} --map-by ppr:${PPR}:${MAP}:PE=${OMP} --bind-to core --report-bindings ${EXE} parameter_file_scorep |& tee -a ${OUT}
+		mpirun -n ${NT} --map-by ppr:${PPR}:${MAP}:PE=${OMP} --bind-to core --report-bindings ${EXE} ${PARAMFILE} |& tee -a ${OUT}
 
     		# get execution time
     		TIME=$(($SECONDS))
@@ -133,7 +131,7 @@ do
 	done # MAP in MAP_BY
     done # NT in NTASKS
 
-    cd ${WORKDIR}/example
+    cd ${OUT_DIR}
 done # EXE in EXEC
 
 for TXT in ${FILE[@]}

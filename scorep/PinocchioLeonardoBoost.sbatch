@@ -21,8 +21,8 @@ GSL_LIB=${LIB}/gsl/gsl-2.7.1/lib
 PFFT_LIB=${LIB}/pfft/pfft/lib
 export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${FTTW_LIB}:${GSL_LIB}:${PFFT_LIB}:/leonardo/prod/spack/5.2/install/0.21/linux-rhel8-icelake/gcc-8.5.0/binutils-2.41-gzwp3ai6qpc44qi4ajukobnetdxqd6za/lib/
 
-############################################## TO EDIT ###########################################################
-##################################################################################################################
+############################################## TO EDIT #############################################################
+####################################################################################################################
 
 #------- set the working dir
 export WORKDIR=/leonardo/home/userexternal/dgoz0000/FAST_IscrC_SCGPCT/Pinocchio
@@ -37,7 +37,7 @@ PROFILING=0
 TRACING=1
 
 #------ set the scorep memory if tracing is enable
-export SCOREP_TOTAL_MEMORY=7MB # set this value according to estimated memory requirements during profiling analysis
+export SCOREP_TOTAL_MEMORY=4097kB # set this value according to estimated memory requirements during profiling analysis
 
 ####################################################################################################################
 ####################################################################################################################
