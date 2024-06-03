@@ -27,8 +27,6 @@ export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${FTTW_LIB}:${GSL_LIB}:${PFFT_LIB}:/le
 #------- set the working dir
 export WORKDIR=/leonardo/home/userexternal/dgoz0000/FAST_IscrC_SCGPCT/Pinocchio
 
-#------ edit the parameters in /script/run.sh
-
 #------ switch on/off profiling
 PROFILING=1
 
@@ -38,24 +36,6 @@ TRACING=0
 
 #------ set the scorep memory if tracing is enable
 export SCOREP_TOTAL_MEMORY=4097kB # set this value according to estimated memory requirements during profiling analysis
-
-############################################## TO EDIT ###########################################################
-##################################################################################################################
-
-#------- set the working dir
-export WORKDIR=/u/dgoz/beegfs/Pinocchio
-
-#------ edit the parameters in /script/run.sh
-
-#------ switch on/off profiling
-PROFILING=1
-
-#------ switch on/off tracing
-# Tracing is meant to be run after the profiling
-TRACING=0
-
-#------ set the scorep memory if tracing is enable
-export SCOREP_TOTAL_MEMORY=11MB # set this value according to estimated memory requirements during profiling analysis
 
 # set the compiler
 COMPILER=mpicc

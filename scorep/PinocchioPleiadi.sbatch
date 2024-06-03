@@ -28,8 +28,6 @@ export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${OTF2}:${CUB4W}
 #------- set the working dir
 export WORKDIR=/u/dgoz/beegfs/Pinocchio
 
-#------ edit the parameters in /script/run.sh
-
 #------ switch on/off profiling
 PROFILING=1
 
