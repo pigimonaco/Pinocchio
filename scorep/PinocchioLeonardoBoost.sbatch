@@ -30,30 +30,83 @@ export WORKDIR=/leonardo/home/userexternal/dgoz0000/FAST_IscrC_SCGPCT/Pinocchio
 #------ edit the parameters in /script/run.sh
 
 #------ switch on/off profiling
-PROFILING=0
+PROFILING=1
 
 #------ switch on/off tracing
 # Tracing is meant to be run after the profiling
-TRACING=1
+TRACING=0
 
 #------ set the scorep memory if tracing is enable
 export SCOREP_TOTAL_MEMORY=4097kB # set this value according to estimated memory requirements during profiling analysis
 
-####################################################################################################################
-####################################################################################################################
-#
-#
-#
-#
-#
+############################################## TO EDIT ###########################################################
+##################################################################################################################
 
-if [ ! -d ${WORKDIR} ]
+#------- set the working dir
+export WORKDIR=/u/dgoz/beegfs/Pinocchio
+
+#------ edit the parameters in /script/run.sh
+
+#------ switch on/off profiling
+PROFILING=1
+
+#------ switch on/off tracing
+# Tracing is meant to be run after the profiling
+TRACING=0
+
+#------ set the scorep memory if tracing is enable
+export SCOREP_TOTAL_MEMORY=11MB # set this value according to estimated memory requirements during profiling analysis
+
+# set the compiler
+COMPILER=mpicc
+
+# set the machine name on the src/Makefile accordingly
+SYSTEM=LeonardoBoost
+
+# executable basename
+BASE=Pinocchio
+
+# executable with/without OMP or Debug support
+# EXEC=( "${BASE}" "${BASE}OMP" )
+EXEC=( "${BASE}OMP" )
+
+# Select the PAPI metrics (empty means do not use PAPI counters)
+# PAPI_METRIC=PAPI_DP_OPS,PAPI_L3_TCM
+PAPI_METRIC=
+
+# Number of MPI tasks (array)
+NTASKS=( 8 )
+
+# MPI mapping list (e.g. socket, numa, core)
+MPI_MAP_BY=( numa )
+
+# Number of OMP threads per MPI task (array)
+OMP_THR=( 2 4 )
+
+# Parameter file
+PARAMFILE=${WORKDIR}/example/parameter_file_profiling
+
+# Outputs (name of file with required output redshifts)
+OUTPUTS=${WORKDIR}/example/outputs_scorep
+
+# Profiling/tracing directory (output directory)
+OUT_DIR=${WORKDIR}/profiling_256_par_256_box
+
+
+####################################################################################################################
+####################################################################################################################
+#
+#
+#
+#
+#
+export SCOREP_PATH=${WORKDIR}/scorep
+
+if [ ! -d ${SCOREP_PATH} ]
 then
-    printf "\n\t ${WORKDIR} does not exist... aborting... \n\n"
+    printf "\n\t ${SCOREP_PATH} does not exist... aborting... \n\n"
     exit 1
 fi
-
-export SCOREP_PATH=${WORKDIR}/scorep
 
 # load the run configuration
 source ${SCOREP_PATH}/run.sh
@@ -85,3 +138,4 @@ fi
 printf "\n\t END OF GAME!!! \n\n"
 
 exit 0
+
