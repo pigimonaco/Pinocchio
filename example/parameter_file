@@ -1,7 +1,7 @@
 # This is an example parameter file for the Pinocchio 4.0 code
 
 # run properties
-RunFlag                test_original_interpolation      % name of the run
+RunFlag                test_cpu      % name of the run
 OutputList             outputs      % name of file with required output redshifts
 BoxSize                500.0        % physical size of the box in Mpc
 BoxInH100                           % specify that the box is in Mpc/h
@@ -43,7 +43,7 @@ AnalyticMassFunction   9            % form of analytic mass function given in th
 % DoNotWriteCatalogs                % skips the writing of full catalogs (including PLC)
 % DoNotWriteHistories               % skips the writing of merger histories
 
-# for debugging or development purposes:
+# for debugging or development purposes: si possono togliere del tutto 
 % WriteFmax                         % writes the values of the Fmax field, particle by particle
 % WriteVmax                         % writes the values of the Vmax field, particle by particle
 % WriteRmax                         % writes the values of the Rmax field, particle by particle

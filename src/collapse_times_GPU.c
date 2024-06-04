@@ -58,7 +58,7 @@ __attribute__((always_inline)) double ell                       ( int, double, d
 /* Calculation of inverse collpase time */
 
 __attribute__((always_inline)) double inverse_collapse_time     ( int, double *, double *, double *, double *, int *);
-
+#pragma omp declare target(inverse_collapse_time)
 
 /* Interpolation of collpase time from a table containing collpase times */
 
@@ -76,7 +76,7 @@ __attribute__((always_inline)) double ForceModification (double, double ,double)
 /* Order inverse collpase time */
 
 __attribute__((always_inline)) void ord                         (double *,double *,double *);
-
+#pragma omp declare target(ord)
 
 /*------------------------------------------------------- Global Variables declaration ----------------------------------------------------*/
 
@@ -432,7 +432,7 @@ inline double ell(int ismooth, double l1, double l2, double l3) {
 /* ------------------------------------  Computation of collapse time i.e. F = 1 + z_collapse and variance ------------------------------------ */
 
 
-inline int compute_collapse_times(int ismooth) {     
+ int compute_collapse_times(int ismooth) {     
 
 /*--------------------- GPU CALCULATION OF COLLAPSE TIME ----------------------------*/
 
@@ -457,7 +457,13 @@ inline int compute_collapse_times(int ismooth) {
 	/* Initialization */
 	local_variance = 0.0;
 	local_average = 0.0;
+    
+	// Size of the products array
+    int total_size = MyGrids[0].total_local_size;
 
+	// Declare and allocate new arrays with the same size as products
+	double* Fmax_array = (double*) malloc(total_size * sizeof(double));
+	int*    Rmax_array = (int*) malloc(total_size * sizeof(int));
 
 	if (!ismooth)
 
@@ -472,6 +478,10 @@ inline int compute_collapse_times(int ismooth) {
         	/*----------- Common initialization ----------- */       
         	products[i].Fmax   = -10.0;
         	products[i].Rmax   = -1;
+            
+			/* Initialize the new arrays */
+    		Fmax_array[i] = products[i].Fmax;
+    		Rmax_array[i] = products[i].Rmax;
 
         	/*----------- Zel'dovich case ----------- */
         	products[i].Vel[0] = 0.0;
@@ -503,17 +513,25 @@ These variables are private to each thread and are not shared among threads, ens
 #if defined( _OPENMP )
 
 	double invcoll_update = 0, ell_update = 0;
-	int num_teams, team_size;
-	
-	// #pragma omp target teams map(tofrom: local_average, local_variance, products[0:MyGrids[0].total_local_size]) map(to:second_derivatives[0][0:6][MyGrids[0].total_local_size]) map(from: num_teams, team_size)
+	int num_teams;
+	int fails = 0;
+
+	// #pragma omp target teams map(tofrom: local_average, local_variance, Fmax_array[0:MyGrids[0].total_local_size], Rmax_array[0:MyGrids[0].total_local_size], invcoll_update, ell_update, num_teams, fails) map(to:second_derivatives[0][0:6][0:MyGrids[0].total_local_size], ismooth, MyGrids[0].total_local_size) num_teams(_NUM_TEAMS_)
+	// #pragma omp target map(tofrom: local_average, local_variance, Fmax_array[0:MyGrids[0].total_local_size], Rmax_array[0:MyGrids[0].total_local_size], invcoll_update, ell_update, num_teams, fails) map(to:second_derivatives[0][0:6][0:MyGrids[0].total_local_size], ismooth, MyGrids[0].total_local_size)
+	#pragma omp target map(tofrom: local_average, local_variance, Fmax_array[0:MyGrids[0].total_local_size], Rmax_array[0:MyGrids[0].total_local_size], invcoll_update, ell_update, num_teams, fails, second_derivatives[0][0:6][0:MyGrids[0].total_local_size], ismooth, MyGrids[0].total_local_size)
 	{
+
+		if (!omp_is_initial_device())
+        printf("\n\t GPU is working \n");
+		else
+		printf("\n\t CPU is working \n");
 
 		/* Thread-specific variables declaration */	
 		double  mylocal_average, mylocal_variance;
     	double  cputime_invcoll;
 		
 		/* Support variables */	
-		int     fails = 0;
+		// fails = 0;
 
 		num_teams = omp_get_num_teams();
 
@@ -538,9 +556,10 @@ When OpenMP is disabled, the program uses the same variable names, but they refe
 #endif
 
 	/*----------------- Calculation of variance, average, and collapse time ----------------*/
-
+    
 	double tmp = omp_get_wtime();
 
+	// #pragma omp parallel for reduction(+:mylocal_average, mylocal_variance) num_threads(_NUM_THREADS_)
 	for (int index = 0; index < MyGrids[0].total_local_size; index++){
 
     	/* Computation of second derivatives of the potential i.e. the gravity Hessian */
@@ -548,7 +567,7 @@ When OpenMP is disabled, the program uses the same variable names, but they refe
     	for (int i = 0; i < 6; i++){
        		diff_ten[i] = second_derivatives[0][i][index];
     	}
-
+        
     	/* Computation of the variance of the linear density field */
     	double delta      = diff_ten[0] + diff_ten[1] + diff_ten[2];
     	mylocal_average  += delta;
@@ -558,10 +577,10 @@ When OpenMP is disabled, the program uses the same variable names, but they refe
     	double lambda1,lambda2,lambda3;
     	int    fail;
     	double Fnew = inverse_collapse_time(ismooth, diff_ten, &lambda1, &lambda2, &lambda3, &fail); 
-
+       
     	/*---------------------------DEBUG----------------------------------*/
 
-    	// fprintf(collapseTimeFile, "%d %d %f %f %f %g\n", index, ismooth, lambda1, lambda2, lambda3, Fnew);
+    	// printf("%d %d %f %f %f %g\n", index, ismooth, lambda1, lambda2, lambda3, Fnew);
 
     	/*-----------------------------------------------------------------*/
 
@@ -581,12 +600,20 @@ When OpenMP is disabled, the program uses the same variable names, but they refe
 		}
 
 		/* Updating collapse time */
-		if (products[index].Fmax < Fnew){
-    		products[index].Fmax = Fnew;
-    		products[index].Rmax = ismooth;
-		} 
-	}	     
+		if (Fmax_array[index] < Fnew){
+			
+			// #pragma omp atomic write
+    		Fmax_array[index] = Fnew;
 
+			// #pragma omp atomic write
+    		Rmax_array[index] = ismooth;
+		} 
+
+		// printf("Fnew: %lf\n", Fnew);
+		// printf("Rmax: %d\n", ismooth);
+
+	}	     
+	
 	/* CPU collapse time */	
 	cputime.invcoll += omp_get_wtime() - tmp;
 
@@ -615,12 +642,19 @@ When OpenMP is disabled, the program uses the same variable names, but they refe
 	}
 #endif
 
+// #pragma omp barrier // Ensure all threads have finished
+
+/* Transfer results to products array */
+for (int i = 0; i < MyGrids[0].total_local_size; i++) {     
+    products[i].Fmax = Fmax_array[i];
+    products[i].Rmax = Rmax_array[i];
+}
 	int all_fails = 0; 
 
 	/* -------------------------- Updates cpu collapse time for a single threads -----------------------------*/
 
 #if defined (_OPENMP)
-
+	
 	#pragma omp atomic
 	cputime.invcoll += invcoll_update/num_teams; 
 
@@ -634,9 +668,10 @@ When OpenMP is disabled, the program uses the same variable names, but they refe
 	all_fails       += fails;
 
 #endif
-
+   
+   
 /*-------------------- END OF GPU CALCULATION -----------------------------------------------*/
-
+    
 	/* Fail check during computation of the inverse collapse time */
 	/* If there were failures, an error message is printed and the function returns 1 */
 	if (all_fails){
