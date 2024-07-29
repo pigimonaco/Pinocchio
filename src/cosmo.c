@@ -390,29 +390,30 @@ int initialize_cosmology()
   
 #ifdef GPU_INTERPOLATION
   
-  my_spline = (CubicSpline**)calloc(NSPLINES, sizeof(CubicSpline*));
+  my_spline = (CubicSpline**)calloc(SP_INVGROW, sizeof(CubicSpline*));
 
-  for (int i = 0; i < NSPLINES - 3; i++) {
-      if (i != SP_COMVDIST && i != SP_DIAMDIST) {
-          my_spline[i] = custom_cubic_spline_alloc(NBINS);
-      } else {
-          my_spline[i] = custom_cubic_spline_alloc(NBINS - NBB);
-      }
-  }
+  // for (int i = 0; i < NSPLINES - 3; i++) {
+  //     if (i != SP_COMVDIST && i != SP_DIAMDIST) {
+  //         my_spline[i] = custom_cubic_spline_alloc(NBINS);
+  //     } else {
+  //         my_spline[i] = custom_cubic_spline_alloc(NBINS - NBB);
+  //     }
+  // }
 
+  my_spline[SP_INVGROW] = custom_cubic_spline_alloc(NBINS);
   custom_cubic_spline_init(my_spline[SP_INVGROW], grow1, scalef, NBINS);
 
   // Allocate memory on the GPU for my_spline and its components
-  #pragma omp target enter data map(alloc: my_spline[0:NSPLINES])
-  for (int i = 0; i < NSPLINES - 3; i++) {
-      #pragma omp target enter data map(alloc: my_spline[i]->x[0:my_spline[i]->size], \
-                                          my_spline[i]->y[0:my_spline[i]->size], \
-                                          my_spline[i]->d2y_data[0:(my_spline[i]->size - 1)], \
-                                          my_spline[i]->coeff_a[0:(my_spline[i]->size - 1)], \
-                                          my_spline[i]->coeff_b[0:(my_spline[i]->size - 1)], \
-                                          my_spline[i]->coeff_c[0:(my_spline[i]->size - 1)], \
-                                          my_spline[i]->coeff_d[0:(my_spline[i]->size - 1)])
-    }
+  #pragma omp target enter data map(alloc: my_spline[0:SP_INVGROW])
+  // for (int i = 0; i < NSPLINES - 3; i++) {
+  #pragma omp target enter data map(alloc: my_spline[SP_INVGROW]->x[0:my_spline[SP_INVGROW]->size], \
+                                           my_spline[SP_INVGROW]->y[0:my_spline[SP_INVGROW]->size], \
+                                           my_spline[SP_INVGROW]->d2y_data[0:(my_spline[SP_INVGROW]->size - 1)], \
+                                           my_spline[SP_INVGROW]->coeff_a[0:(my_spline[SP_INVGROW]->size - 1)], \
+                                           my_spline[SP_INVGROW]->coeff_b[0:(my_spline[SP_INVGROW]->size - 1)], \
+                                           my_spline[SP_INVGROW]->coeff_c[0:(my_spline[SP_INVGROW]->size - 1)], \
+                                           my_spline[SP_INVGROW]->coeff_d[0:(my_spline[SP_INVGROW]->size - 1)])
+    // }
 
 #endif
   /* initialization of spline interpolations of time-dependent quantities using GSL */

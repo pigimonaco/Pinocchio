@@ -1,4 +1,4 @@
-[Wed May 29 2024 17:44:05] This is pinocchio V5.0, running on 1 MPI tasks
+[Fri Jul  5 2024 11:46:04] This is pinocchio V5.0, running on 1 MPI tasks
 
 Using 1 OpenMP threads
 This version uses 3LPT displacements
@@ -6,7 +6,7 @@ Radiation is not included in the Friedmann equations
 Ellipsoidal collapse will be computed as Monaco (1995)
 
 Reading parameters from file parameter_file
-Flag for this run: test_gpu
+Flag for this run: test_GPU
 
 PARAMETER VALUES from file parameter_file:
 Omega0                      0.250000
@@ -89,294 +89,294 @@ Map of memory usage for all MPI tasks
 Task N.   FFT domain      mem(MB) overhead   products   fields     ffts     fmax  frag pr.  groups fragment  total bytes per particle
      0    64-  64-  64        62     2.2         56.0     81.0     16.5    153.5    120.7     73.3    250.0    250.0
 
-[Wed May 29 2024 17:44:05] Memory has been successfully allocated
+[Fri Jul  5 2024 11:46:05] Memory has been successfully allocated
 
-[Wed May 29 2024 17:44:05] Computing fft plans
-[Wed May 29 2024 17:44:06] fft plans done
-[Wed May 29 2024 17:44:06] Generating density in Fourier space
-[Wed May 29 2024 17:44:06] Done generating density in Fourier space, cputime = 0.105225 s
-[Wed May 29 2024 17:44:06] initialization done, initialization cpu time =       0.692518
+[Fri Jul  5 2024 11:46:05] Computing fft plans
+[Fri Jul  5 2024 11:46:05] fft plans done
+[Fri Jul  5 2024 11:46:05] Generating density in Fourier space
+[Fri Jul  5 2024 11:46:05] Done generating density in Fourier space, cputime = 0.106017 s
+[Fri Jul  5 2024 11:46:05] initialization done, initialization cpu time =       0.695008
 		 set subboxes time =       0.000000
 		 set plc time =       0.000000
 		 memory allocation time =       0.000000
 		 fft initialization time =       0.000000
-		 density generation time =       0.105225
-[Wed May 29 2024 17:44:06] First part: computation of collapse times
+		 density generation time =       0.106017
+[Fri Jul  5 2024 11:46:05] First part: computation of collapse times
 
-[Wed May 29 2024 17:44:06] Starting smoothing radius 1 of 6 (R= 20.63592, sigma=  0.28100)
-[Wed May 29 2024 17:44:06] Computing second derivatives
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 1
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.002074
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 4
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001900
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 5
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001874
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 2
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001879
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 6
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001881
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 3
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001862
-[Wed May 29 2024 17:44:06] Done second derivatives, cpu time = 0.030496 s
-[Wed May 29 2024 17:44:06] Computing collapse times
-
-	 GPU is working 
-[Wed May 29 2024 17:44:06] Done computing collapse times, cpu time = 0.018768 s
-[Wed May 29 2024 17:44:06] Completed, R=20.636, expected sigma:  0.2810, computed sigma:  0.0000, cpu time = 0.049327 s
-
-[Wed May 29 2024 17:44:06] Starting smoothing radius 2 of 6 (R= 13.99606, sigma=  0.39692)
-[Wed May 29 2024 17:44:06] Computing second derivatives
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 1
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001989
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 4
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001731
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 5
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001684
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 2
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001682
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 6
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001675
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 3
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001689
-[Wed May 29 2024 17:44:06] Done second derivatives, cpu time = 0.029046 s
-[Wed May 29 2024 17:44:06] Computing collapse times
+[Fri Jul  5 2024 11:46:05] Starting smoothing radius 1 of 6 (R= 20.63592, sigma=  0.28100)
+[Fri Jul  5 2024 11:46:05] Computing second derivatives
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 1
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001600
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 4
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001585
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 5
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001561
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 2
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001589
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 6
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001570
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 3
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001568
+[Fri Jul  5 2024 11:46:05] Done second derivatives, cpu time = 0.027343 s
+[Fri Jul  5 2024 11:46:05] Computing collapse times
 
 	 GPU is working 
-[Wed May 29 2024 17:44:06] Done computing collapse times, cpu time = 0.010637 s
-[Wed May 29 2024 17:44:06] Completed, R=13.996, expected sigma:  0.3969, computed sigma:  0.0000, cpu time = 0.039738 s
+[Fri Jul  5 2024 11:46:05] Done computing collapse times, cpu time = 0.017349 s
+[Fri Jul  5 2024 11:46:05] Completed, R=20.636, expected sigma:  0.2810, computed sigma:  0.2761, cpu time = 0.044747 s
 
-[Wed May 29 2024 17:44:06] Starting smoothing radius 3 of 6 (R=  9.02610, sigma=  0.56067)
-[Wed May 29 2024 17:44:06] Computing second derivatives
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 1
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001760
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 4
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001708
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 5
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001694
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 2
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001689
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 6
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001700
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 3
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001679
-[Wed May 29 2024 17:44:06] Done second derivatives, cpu time = 0.028404 s
-[Wed May 29 2024 17:44:06] Computing collapse times
-
-	 GPU is working 
-[Wed May 29 2024 17:44:06] Done computing collapse times, cpu time = 0.013981 s
-[Wed May 29 2024 17:44:06] Completed, R= 9.026, expected sigma:  0.5607, computed sigma:  0.0000, cpu time = 0.042447 s
-
-[Wed May 29 2024 17:44:06] Starting smoothing radius 4 of 6 (R=  5.46594, sigma=  0.79197)
-[Wed May 29 2024 17:44:06] Computing second derivatives
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 1
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001963
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 4
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001722
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 5
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001712
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 2
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001722
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 6
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001715
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 3
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001714
-[Wed May 29 2024 17:44:06] Done second derivatives, cpu time = 0.029136 s
-[Wed May 29 2024 17:44:06] Computing collapse times
+[Fri Jul  5 2024 11:46:05] Starting smoothing radius 2 of 6 (R= 13.99606, sigma=  0.39692)
+[Fri Jul  5 2024 11:46:05] Computing second derivatives
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 1
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001716
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 4
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001567
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 5
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001560
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 2
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001561
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 6
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001557
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 3
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001552
+[Fri Jul  5 2024 11:46:05] Done second derivatives, cpu time = 0.027355 s
+[Fri Jul  5 2024 11:46:05] Computing collapse times
 
 	 GPU is working 
-[Wed May 29 2024 17:44:06] Done computing collapse times, cpu time = 0.021784 s
-[Wed May 29 2024 17:44:06] Completed, R= 5.466, expected sigma:  0.7920, computed sigma:  0.0000, cpu time = 0.050974 s
+[Fri Jul  5 2024 11:46:05] Done computing collapse times, cpu time = 0.009319 s
+[Fri Jul  5 2024 11:46:05] Completed, R=13.996, expected sigma:  0.3969, computed sigma:  0.3919, cpu time = 0.036718 s
 
-[Wed May 29 2024 17:44:06] Starting smoothing radius 5 of 6 (R=  3.05835, sigma=  1.11868)
-[Wed May 29 2024 17:44:06] Computing second derivatives
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 1
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001816
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 4
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001727
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 5
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001718
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 2
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001720
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 6
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001858
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 3
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.002035
-[Wed May 29 2024 17:44:06] Done second derivatives, cpu time = 0.029365 s
-[Wed May 29 2024 17:44:06] Computing collapse times
-
-	 GPU is working 
-[Wed May 29 2024 17:44:06] Done computing collapse times, cpu time = 0.022686 s
-[Wed May 29 2024 17:44:06] Completed, R= 3.058, expected sigma:  1.1187, computed sigma:  0.0000, cpu time = 0.052099 s
-
-[Wed May 29 2024 17:44:06] Starting smoothing radius 6 of 6 (R=  0.00000, sigma=  1.44766)
-[Wed May 29 2024 17:44:06] Computing second derivatives
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 1
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001740
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 4
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001715
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 5
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001706
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 2
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001693
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 6
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001690
-[Wed May 29 2024 17:44:06] Computing 2nd derivative: 3
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001681
-[Wed May 29 2024 17:44:06] Done second derivatives, cpu time = 0.022773 s
-[Wed May 29 2024 17:44:06] Computing collapse times
+[Fri Jul  5 2024 11:46:05] Starting smoothing radius 3 of 6 (R=  9.02610, sigma=  0.56067)
+[Fri Jul  5 2024 11:46:05] Computing second derivatives
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 1
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001623
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 4
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001568
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 5
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001559
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 2
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001551
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 6
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001556
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 3
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001550
+[Fri Jul  5 2024 11:46:05] Done second derivatives, cpu time = 0.027118 s
+[Fri Jul  5 2024 11:46:05] Computing collapse times
 
 	 GPU is working 
-[Wed May 29 2024 17:44:06] Done computing collapse times, cpu time = 0.022682 s
-[Wed May 29 2024 17:44:06] Completed, R= 0.000, expected sigma:  1.4477, computed sigma:  0.0000, cpu time = 0.045510 s
+[Fri Jul  5 2024 11:46:05] Done computing collapse times, cpu time = 0.010666 s
+[Fri Jul  5 2024 11:46:05] Completed, R= 9.026, expected sigma:  0.5607, computed sigma:  0.5553, cpu time = 0.037825 s
 
-[Wed May 29 2024 17:44:06] Computing LPT displacements
-[Wed May 29 2024 17:44:06] compute_sources_for_LPT: starting fft
-[Wed May 29 2024 17:44:06] compute_sources_for_LPT: done fft, cputime = 0.001166
-[Wed May 29 2024 17:44:06] Computing 2nd derivative of 2LPT source: 1
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001672
-[Wed May 29 2024 17:44:06] Computing 2nd derivative of 2LPT source: 1
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001668
-[Wed May 29 2024 17:44:06] Computing 2nd derivative of 2LPT source: 1
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001668
-[Wed May 29 2024 17:44:06] Computing 2nd derivative of 2LPT source: 2
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001655
-[Wed May 29 2024 17:44:06] Computing 2nd derivative of 2LPT source: 2
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001658
-[Wed May 29 2024 17:44:06] Computing 2nd derivative of 2LPT source: 3
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001653
-[Wed May 29 2024 17:44:06] Computing displacements
-[Wed May 29 2024 17:44:06] Computing 1st derivative of 2LPT source: 1
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001662
-[Wed May 29 2024 17:44:06] Computing 1st derivative of 2LPT source: 2
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001657
-[Wed May 29 2024 17:44:06] Computing 1st derivative of 2LPT source: 3
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001657
-[Wed May 29 2024 17:44:06] compute_sources_for_LPT: starting fft
-[Wed May 29 2024 17:44:06] compute_sources_for_LPT: done fft, cputime = 0.001099
-[Wed May 29 2024 17:44:06] Computing 3LPT_1 displacements
-[Wed May 29 2024 17:44:06] Computing 1st derivative of 3LPT_1 source: 1
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001670
-[Wed May 29 2024 17:44:06] Computing 1st derivative of 3LPT_1 source: 2
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001660
-[Wed May 29 2024 17:44:06] Computing 1st derivative of 3LPT_1 source: 3
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001654
-[Wed May 29 2024 17:44:06] compute_sources_for_LPT: starting fft
-[Wed May 29 2024 17:44:06] compute_sources_for_LPT: done fft, cputime = 0.001083
-[Wed May 29 2024 17:44:06] Computing 3LPT_2 displacements
-[Wed May 29 2024 17:44:06] Computing 1st derivative of 3LPT_2 source: 1
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001663
-[Wed May 29 2024 17:44:06] Computing 1st derivative of 3LPT_2 source: 2
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001656
-[Wed May 29 2024 17:44:06] Computing 1st derivative of 3LPT_2 source: 3
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001654
-[Wed May 29 2024 17:44:06] Done LPT displacements, cpu time = 0.072376 s
-[Wed May 29 2024 17:44:06] Computing first derivatives
-[Wed May 29 2024 17:44:06] Computing 1st derivative: 1
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001762
-[Wed May 29 2024 17:44:06] Computing 1st derivative: 2
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001703
-[Wed May 29 2024 17:44:06] Computing 1st derivative: 3
-[Wed May 29 2024 17:44:06] compute_derivative: starting fft
-[Wed May 29 2024 17:44:06] compute_derivative: done fft, cpu time = 0.001823
-[Wed May 29 2024 17:44:06] Done first derivatives, cpu time = 0.011453 s
-[Wed May 29 2024 17:44:06] Storing velocities
-[Wed May 29 2024 17:44:06] Done computing velocities, cpu time = 0.001999 s
-[Wed May 29 2024 17:44:06] Number of collapsed particles to z=0: 43772
-[Wed May 29 2024 17:44:06] Finishing fmax, total fmax cpu time =       0.369174
-		 IO       :       0.000000 (      0.369174 total time without I/O)
-		 FFT      :       0.097339
-		 COLLAPSE :       0.110538
+[Fri Jul  5 2024 11:46:05] Starting smoothing radius 4 of 6 (R=  5.46594, sigma=  0.79197)
+[Fri Jul  5 2024 11:46:05] Computing second derivatives
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 1
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001604
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 4
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001555
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 5
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001553
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 2
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001560
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 6
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001551
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 3
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001558
+[Fri Jul  5 2024 11:46:05] Done second derivatives, cpu time = 0.027023 s
+[Fri Jul  5 2024 11:46:05] Computing collapse times
 
-[Wed May 29 2024 17:44:06] Second part: fragmentation of the collapsed medium
-[Wed May 29 2024 17:44:06] Task 0 reallocated memory for 0.061034 Gb
-[Wed May 29 2024 17:44:06] Creating map of needed particles
-[Wed May 29 2024 17:44:06] Starting second re-distribution of products
-[Wed May 29 2024 17:44:06] Second re-distribution of Fmax done, 43772 particles stored by all tasks, average overhead: 0.166977, cputime =       0.016233
-[Wed May 29 2024 17:44:06] Smallest and largest overhead: 0.166977, 0.166977
-[Wed May 29 2024 17:44:06] Starting sorting
-[Wed May 29 2024 17:44:06] Sorting done, total cputime =       0.015120
-[Wed May 29 2024 17:44:06] Task 0 found 11414 peaks, 11414 in the well resolved region. Total number of peaks: 11414
-[Wed May 29 2024 17:44:06] Starting the fragmentation process to redshift  0.0000
-[Wed May 29 2024 17:44:06] ***   0% done, F =   4.37,  z =   3.37
-[Wed May 29 2024 17:44:06] ***   5% done, F =   2.42,  z =   1.42
-[Wed May 29 2024 17:44:06] ***  10% done, F =   2.18,  z =   1.18
-[Wed May 29 2024 17:44:06] ***  15% done, F =   2.03,  z =   1.03
-[Wed May 29 2024 17:44:06] ***  20% done, F =   1.91,  z =   0.91
-[Wed May 29 2024 17:44:06] ***  25% done, F =   1.82,  z =   0.82
-[Wed May 29 2024 17:44:06] ***  30% done, F =   1.74,  z =   0.74
-[Wed May 29 2024 17:44:06] ***  35% done, F =   1.66,  z =   0.66
-[Wed May 29 2024 17:44:06] ***  40% done, F =   1.59,  z =   0.59
-[Wed May 29 2024 17:44:06] ***  45% done, F =   1.53,  z =   0.53
-[Wed May 29 2024 17:44:06] ***  50% done, F =   1.48,  z =   0.48
-[Wed May 29 2024 17:44:06] ***  55% done, F =   1.42,  z =   0.42
-[Wed May 29 2024 17:44:06] ***  60% done, F =   1.37,  z =   0.37
-[Wed May 29 2024 17:44:06] ***  65% done, F =   1.32,  z =   0.32
-[Wed May 29 2024 17:44:06] ***  70% done, F =   1.27,  z =   0.27
-[Wed May 29 2024 17:44:06] ***  75% done, F =   1.23,  z =   0.23
-[Wed May 29 2024 17:44:06] ***  80% done, F =   1.18,  z =   0.18
-[Wed May 29 2024 17:44:06] ***  85% done, F =   1.13,  z =   0.13
-[Wed May 29 2024 17:44:06] ***  90% done, F =   1.09,  z =   0.09
-[Wed May 29 2024 17:44:06] ***  95% done, F =   1.04,  z =   0.04
-[Wed May 29 2024 17:44:06] *** 100% done, F =   1.00,  z =   0.00
-[Wed May 29 2024 17:44:06] Writing output at z=0.000000
-[Wed May 29 2024 17:44:06] Opening file pinocchio.0.0000.test_gpu.catalog.out
-[Wed May 29 2024 17:44:06] Task 0 has written 351 halos on file pinocchio.0.0000.test_gpu.catalog.out
-[Wed May 29 2024 17:44:06] Writing mass function into file  pinocchio.0.0000.test_gpu.mf.out
-[Wed May 29 2024 17:44:06] Opening file pinocchio.test_gpu.histories.out
-[Wed May 29 2024 17:44:06] Task 0 has written 351 trees and 354 branches on file pinocchio.test_gpu.histories.out
+	 GPU is working 
+[Fri Jul  5 2024 11:46:05] Done computing collapse times, cpu time = 0.014911 s
+[Fri Jul  5 2024 11:46:05] Completed, R= 5.466, expected sigma:  0.7920, computed sigma:  0.7720, cpu time = 0.041984 s
+
+[Fri Jul  5 2024 11:46:05] Starting smoothing radius 5 of 6 (R=  3.05835, sigma=  1.11868)
+[Fri Jul  5 2024 11:46:05] Computing second derivatives
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 1
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001603
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 4
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001570
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 5
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001549
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 2
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001558
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 6
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001549
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 3
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001553
+[Fri Jul  5 2024 11:46:05] Done second derivatives, cpu time = 0.027048 s
+[Fri Jul  5 2024 11:46:05] Computing collapse times
+
+	 GPU is working 
+[Fri Jul  5 2024 11:46:05] Done computing collapse times, cpu time = 0.015807 s
+[Fri Jul  5 2024 11:46:05] Completed, R= 3.058, expected sigma:  1.1187, computed sigma:  0.9669, cpu time = 0.042896 s
+
+[Fri Jul  5 2024 11:46:05] Starting smoothing radius 6 of 6 (R=  0.00000, sigma=  1.44766)
+[Fri Jul  5 2024 11:46:05] Computing second derivatives
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 1
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001598
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 4
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001555
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 5
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001552
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 2
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001553
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 6
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001554
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative: 3
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001548
+[Fri Jul  5 2024 11:46:05] Done second derivatives, cpu time = 0.021344 s
+[Fri Jul  5 2024 11:46:05] Computing collapse times
+
+	 GPU is working 
+[Fri Jul  5 2024 11:46:05] Done computing collapse times, cpu time = 0.015607 s
+[Fri Jul  5 2024 11:46:05] Completed, R= 0.000, expected sigma:  1.4477, computed sigma:  1.1044, cpu time = 0.036992 s
+
+[Fri Jul  5 2024 11:46:05] Computing LPT displacements
+[Fri Jul  5 2024 11:46:05] compute_sources_for_LPT: starting fft
+[Fri Jul  5 2024 11:46:05] compute_sources_for_LPT: done fft, cputime = 0.001040
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative of 2LPT source: 1
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001580
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative of 2LPT source: 1
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001549
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative of 2LPT source: 1
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001547
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative of 2LPT source: 2
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001542
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative of 2LPT source: 2
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001546
+[Fri Jul  5 2024 11:46:05] Computing 2nd derivative of 2LPT source: 3
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001545
+[Fri Jul  5 2024 11:46:05] Computing displacements
+[Fri Jul  5 2024 11:46:05] Computing 1st derivative of 2LPT source: 1
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001546
+[Fri Jul  5 2024 11:46:05] Computing 1st derivative of 2LPT source: 2
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001549
+[Fri Jul  5 2024 11:46:05] Computing 1st derivative of 2LPT source: 3
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001554
+[Fri Jul  5 2024 11:46:05] compute_sources_for_LPT: starting fft
+[Fri Jul  5 2024 11:46:05] compute_sources_for_LPT: done fft, cputime = 0.001001
+[Fri Jul  5 2024 11:46:05] Computing 3LPT_1 displacements
+[Fri Jul  5 2024 11:46:05] Computing 1st derivative of 3LPT_1 source: 1
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001554
+[Fri Jul  5 2024 11:46:05] Computing 1st derivative of 3LPT_1 source: 2
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001553
+[Fri Jul  5 2024 11:46:05] Computing 1st derivative of 3LPT_1 source: 3
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001547
+[Fri Jul  5 2024 11:46:05] compute_sources_for_LPT: starting fft
+[Fri Jul  5 2024 11:46:05] compute_sources_for_LPT: done fft, cputime = 0.000978
+[Fri Jul  5 2024 11:46:05] Computing 3LPT_2 displacements
+[Fri Jul  5 2024 11:46:05] Computing 1st derivative of 3LPT_2 source: 1
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001547
+[Fri Jul  5 2024 11:46:05] Computing 1st derivative of 3LPT_2 source: 2
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001551
+[Fri Jul  5 2024 11:46:05] Computing 1st derivative of 3LPT_2 source: 3
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001550
+[Fri Jul  5 2024 11:46:05] Done LPT displacements, cpu time = 0.069743 s
+[Fri Jul  5 2024 11:46:05] Computing first derivatives
+[Fri Jul  5 2024 11:46:05] Computing 1st derivative: 1
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001555
+[Fri Jul  5 2024 11:46:05] Computing 1st derivative: 2
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001546
+[Fri Jul  5 2024 11:46:05] Computing 1st derivative: 3
+[Fri Jul  5 2024 11:46:05] compute_derivative: starting fft
+[Fri Jul  5 2024 11:46:05] compute_derivative: done fft, cpu time = 0.001546
+[Fri Jul  5 2024 11:46:05] Done first derivatives, cpu time = 0.010475 s
+[Fri Jul  5 2024 11:46:05] Storing velocities
+[Fri Jul  5 2024 11:46:05] Done computing velocities, cpu time = 0.001586 s
+[Fri Jul  5 2024 11:46:05] Number of collapsed particles to z=0: 43772
+[Fri Jul  5 2024 11:46:05] Finishing fmax, total fmax cpu time =       0.325943
+		 IO       :       0.000000 (      0.325943 total time without I/O)
+		 FFT      :       0.087442
+		 COLLAPSE :       0.083658
+
+[Fri Jul  5 2024 11:46:05] Second part: fragmentation of the collapsed medium
+[Fri Jul  5 2024 11:46:05] Task 0 reallocated memory for 0.061034 Gb
+[Fri Jul  5 2024 11:46:05] Creating map of needed particles
+[Fri Jul  5 2024 11:46:05] Starting second re-distribution of products
+[Fri Jul  5 2024 11:46:05] Second re-distribution of Fmax done, 43772 particles stored by all tasks, average overhead: 0.166977, cputime =       0.016138
+[Fri Jul  5 2024 11:46:05] Smallest and largest overhead: 0.166977, 0.166977
+[Fri Jul  5 2024 11:46:05] Starting sorting
+[Fri Jul  5 2024 11:46:05] Sorting done, total cputime =       0.014702
+[Fri Jul  5 2024 11:46:05] Task 0 found 11414 peaks, 11414 in the well resolved region. Total number of peaks: 11414
+[Fri Jul  5 2024 11:46:05] Starting the fragmentation process to redshift  0.0000
+[Fri Jul  5 2024 11:46:05] ***   0% done, F =   4.37,  z =   3.37
+[Fri Jul  5 2024 11:46:05] ***   5% done, F =   2.42,  z =   1.42
+[Fri Jul  5 2024 11:46:05] ***  10% done, F =   2.18,  z =   1.18
+[Fri Jul  5 2024 11:46:05] ***  15% done, F =   2.03,  z =   1.03
+[Fri Jul  5 2024 11:46:05] ***  20% done, F =   1.91,  z =   0.91
+[Fri Jul  5 2024 11:46:05] ***  25% done, F =   1.82,  z =   0.82
+[Fri Jul  5 2024 11:46:05] ***  30% done, F =   1.74,  z =   0.74
+[Fri Jul  5 2024 11:46:05] ***  35% done, F =   1.66,  z =   0.66
+[Fri Jul  5 2024 11:46:05] ***  40% done, F =   1.59,  z =   0.59
+[Fri Jul  5 2024 11:46:05] ***  45% done, F =   1.53,  z =   0.53
+[Fri Jul  5 2024 11:46:05] ***  50% done, F =   1.48,  z =   0.48
+[Fri Jul  5 2024 11:46:05] ***  55% done, F =   1.42,  z =   0.42
+[Fri Jul  5 2024 11:46:05] ***  60% done, F =   1.37,  z =   0.37
+[Fri Jul  5 2024 11:46:05] ***  65% done, F =   1.32,  z =   0.32
+[Fri Jul  5 2024 11:46:05] ***  70% done, F =   1.27,  z =   0.27
+[Fri Jul  5 2024 11:46:05] ***  75% done, F =   1.23,  z =   0.23
+[Fri Jul  5 2024 11:46:05] ***  80% done, F =   1.18,  z =   0.18
+[Fri Jul  5 2024 11:46:05] ***  85% done, F =   1.13,  z =   0.13
+[Fri Jul  5 2024 11:46:05] ***  90% done, F =   1.09,  z =   0.09
+[Fri Jul  5 2024 11:46:05] ***  95% done, F =   1.04,  z =   0.04
+[Fri Jul  5 2024 11:46:05] *** 100% done, F =   1.00,  z =   0.00
+[Fri Jul  5 2024 11:46:05] Writing output at z=0.000000
+[Fri Jul  5 2024 11:46:05] Opening file pinocchio.0.0000.test_GPU.catalog.out
+[Fri Jul  5 2024 11:46:05] Task 0 has written 351 halos on file pinocchio.0.0000.test_GPU.catalog.out
+[Fri Jul  5 2024 11:46:05] Writing mass function into file  pinocchio.0.0000.test_GPU.mf.out
+[Fri Jul  5 2024 11:46:05] Opening file pinocchio.test_GPU.histories.out
+[Fri Jul  5 2024 11:46:05] Task 0 has written 351 trees and 354 branches on file pinocchio.test_GPU.histories.out
 Total number of peaks:                 11414
 Total number of good halos:            10474
 Particles with N neighbouring groups:  19900 5825 529 16 0 0
@@ -393,25 +393,25 @@ Final number of particles in halos:    24993
 Total number of collapsed particles:   43772
 Total number of uncollapsed particles: 218372
 
-[Wed May 29 2024 17:44:06] Fragmentation done to redshift 0.0000, cputime =       0.080799
-[Wed May 29 2024 17:44:06] Finishing fragment, total cputime =       0.136234
+[Fri Jul  5 2024 11:46:05] Fragmentation done to redshift 0.0000, cputime =       0.080006
+[Fri Jul  5 2024 11:46:05] Finishing fragment, total cputime =       0.134549
 
-[Wed May 29 2024 17:44:06] Minimal memory requirements:[Wed May 29 2024 17:44:06] The PredPeakFactor parameter could have been  0.26 in place of  0.80
-Total:                  1.207327
-Initialization:         0.692518 (57.36%)
-  Density in PS:        0.105225 ( 8.72%)
-fmax:                   0.369174 (30.58%)
-  LPT:                  0.072376 ( 5.99%)
-  Derivatives:          0.169219 (14.02%)
-    Mem transfer:       0.033910 ( 2.81%)
-    FFTs:               0.097339 ( 8.06%)
-  Collapse times:       0.110538 ( 9.16%)
-    inv.collapse:       0.077530 ( 6.42%)
-    ellipsoid:     862122.076492 (71407527.60%)
-  Velocities:           0.001999 ( 0.17%)
-Fragmentation:          0.136234 (11.28%)
-  Redistribution:       0.016233 ( 1.34%)
-  Sorting:              0.015120 ( 1.25%)
-  Groups:               0.080799 ( 6.69%)
-Total I/O:              0.005528 ( 0.46%)
+[Fri Jul  5 2024 11:46:05] Minimal memory requirements:[Fri Jul  5 2024 11:46:05] The PredPeakFactor parameter could have been  0.26 in place of  0.80
+Total:                  1.164679
+Initialization:         0.695008 (59.67%)
+  Density in PS:        0.106017 ( 9.10%)
+fmax:                   0.325943 (27.99%)
+  LPT:                  0.069743 ( 5.99%)
+  Derivatives:          0.157231 (13.50%)
+    Mem transfer:       0.029190 ( 2.51%)
+    FFTs:               0.087442 ( 7.51%)
+  Collapse times:       0.083658 ( 7.18%)
+    inv.collapse:       0.056137 ( 4.82%)
+    ellipsoid:          0.000000 ( 0.00%)
+  Velocities:           0.001586 ( 0.14%)
+Fragmentation:          0.134549 (11.55%)
+  Redistribution:       0.016138 ( 1.39%)
+  Sorting:              0.014702 ( 1.26%)
+  Groups:               0.080006 ( 6.87%)
+Total I/O:              0.005812 ( 0.50%)
 Pinocchio done!

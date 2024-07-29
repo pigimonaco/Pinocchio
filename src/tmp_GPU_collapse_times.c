@@ -47,34 +47,26 @@
 
 
 /* Ellipsoidal solution at 3rd perturbative order in two different ways */
-
 __attribute__((always_inline)) double ell_classic               ( int, double, double, double);  
 __attribute__((always_inline)) double ell_sng                   ( int, double, double, double);  
 
 /* Collapase time calculation */
-
 __attribute__((always_inline)) double ell                       ( int, double, double, double); 
 
 /* Calculation of inverse collpase time */
-
 __attribute__((always_inline)) double inverse_collapse_time     ( int, double *, double *, double *, double *, int *);
 #pragma omp declare target(inverse_collapse_time)
 
 /* Interpolation of collpase time from a table containing collpase times */
-
 #ifdef TABULATED_CT
-
 __attribute__((always_inline)) double interpolate_collapse_time (int, double, double, double);
-
 #endif 
 
 #ifdef MOD_GRAV_FR
-
 __attribute__((always_inline)) double ForceModification (double, double ,double);
-
 #endif
-/* Order inverse collpase time */
 
+/* Order inverse collpase time */
 __attribute__((always_inline)) void ord                         (double *,double *,double *);
 #pragma omp declare target(ord)
 
@@ -104,7 +96,6 @@ int fails;
 #endif
 
 /* Declaring smoothing radius */
-
 int ismooth;
 
 /*------------------------------------------------------- Functions implementation --------------------------------------------------------*/
@@ -516,9 +507,9 @@ These variables are private to each thread and are not shared among threads, ens
 	int num_teams;
 	int fails = 0;
 
-	// #pragma omp target teams map(tofrom: local_average, local_variance, Fmax_array[0:MyGrids[0].total_local_size], Rmax_array[0:MyGrids[0].total_local_size], invcoll_update, ell_update, num_teams, fails) map(to:second_derivatives[0][0:6][0:MyGrids[0].total_local_size], ismooth, MyGrids[0].total_local_size) num_teams(_NUM_TEAMS_)
+	#pragma omp target teams map(tofrom: local_average, local_variance, Fmax_array[0:MyGrids[0].total_local_size], Rmax_array[0:MyGrids[0].total_local_size], invcoll_update, ell_update, num_teams, fails) map(to:second_derivatives[0][0:6][0:MyGrids[0].total_local_size], ismooth, MyGrids[0].total_local_size) num_teams(_NUM_TEAMS_)
 	// #pragma omp target map(tofrom: local_average, local_variance, Fmax_array[0:MyGrids[0].total_local_size], Rmax_array[0:MyGrids[0].total_local_size], invcoll_update, ell_update, num_teams, fails) map(to:second_derivatives[0][0:6][0:MyGrids[0].total_local_size], ismooth, MyGrids[0].total_local_size)
-	#pragma omp target map(tofrom: local_average, local_variance, Fmax_array[0:MyGrids[0].total_local_size], Rmax_array[0:MyGrids[0].total_local_size], invcoll_update, ell_update, num_teams, fails, second_derivatives[0][0:6][0:MyGrids[0].total_local_size], ismooth, MyGrids[0].total_local_size)
+	// #pragma omp target map(tofrom: local_average, local_variance, Fmax_array[0:MyGrids[0].total_local_size], Rmax_array[0:MyGrids[0].total_local_size], invcoll_update, ell_update, num_teams, fails, second_derivatives[0][0:6][0:MyGrids[0].total_local_size], ismooth, MyGrids[0].total_local_size)
 	{
 
 		if (!omp_is_initial_device())
@@ -559,7 +550,7 @@ When OpenMP is disabled, the program uses the same variable names, but they refe
     
 	double tmp = omp_get_wtime();
 
-	// #pragma omp parallel for reduction(+:mylocal_average, mylocal_variance) num_threads(_NUM_THREADS_)
+	#pragma omp parallel for reduction(+:mylocal_average, mylocal_variance) num_threads(_NUM_THREADS_)
 	for (int index = 0; index < MyGrids[0].total_local_size; index++){
 
     	/* Computation of second derivatives of the potential i.e. the gravity Hessian */
@@ -577,12 +568,7 @@ When OpenMP is disabled, the program uses the same variable names, but they refe
     	double lambda1,lambda2,lambda3;
     	int    fail;
     	double Fnew = inverse_collapse_time(ismooth, diff_ten, &lambda1, &lambda2, &lambda3, &fail); 
-       
-    	/*---------------------------DEBUG----------------------------------*/
-
-    	// printf("%d %d %f %f %f %g\n", index, ismooth, lambda1, lambda2, lambda3, Fnew);
-
-    	/*-----------------------------------------------------------------*/
+    
 
     	/* Fail check during computation of the collapse time */
     	if (fail){
@@ -656,10 +642,10 @@ for (int i = 0; i < MyGrids[0].total_local_size; i++) {
 #if defined (_OPENMP)
 	
 	#pragma omp atomic
-	cputime.invcoll += invcoll_update/num_teams; 
+	cputime.invcoll += invcoll_update; 
 
 	#pragma omp atomic	
-	cputime.ell     += ell_update/num_teams;
+	cputime.ell     += ell_update;
 
 	/* fails is a local variable that indicates the number of failures in the computation. 
 	Each thread updates fails, and then the values are accumulated using atomic operations */
