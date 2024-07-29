@@ -36,7 +36,7 @@ EXEC = pinocchio_GPU.x
 # Compilation options #
 
 DEBUG = NO
-OMP   = YES
+OMP   = NO
 
 ########## Preprocessor Definitions ########## 
 
@@ -131,8 +131,8 @@ CC          = nvc
 # CC          = mpicc
 # CDEBUG      = -ggdb3 -Wall 
 # COPTIMIZED  = -acc -gpu=ccnative -Minfo=accel
-COPTIMIZED  =    $(OMP_FLAG)
-# COPTIMIZED  = -mp=gpu -gpu=cc80 -target=gpu -gpu=managed -Minfo=all -v  
+# COPTIMIZED  = $(OMP_FLAG)
+COPTIMIZED  = -mp=gpu -gpu=cc80 -target=gpu -gpu=managed -Minfo=all 
 # COPTIMIZED  = -g -mp=gpu -gpu=ccnative,debug,lineinfo -target=gpu -Minfo=all -v
 FFTW_LIBR   = -L/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/fftw-3.3.10-aqomamymhcna6zjrd6nlrync7oag4fkg/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
 FFTW_INCL   = -I/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/fftw-3.3.10-aqomamymhcna6zjrd6nlrync7oag4fkg/include
@@ -213,7 +213,7 @@ endif
 
 # Source files #
 
-OBJECTS = fmax.o  variables.o  my_cubic_spline_interpolation.o  cosmo.o initialization.o collapse_times_GPU.o fmax-pfft.o GenIC.o \
+OBJECTS = fmax.o  variables.o  my_cubic_spline_interpolation.o  cosmo.o initialization.o tmp_GPU_collapse_times.o fmax-pfft.o GenIC.o \
 	ReadParamfile.o allocations.o LPT.o distribute.o \
 	fragment.o build_groups.o write_halos.o write_snapshot.o
 

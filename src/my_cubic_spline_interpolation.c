@@ -56,9 +56,10 @@ void custom_cubic_spline_init(CubicSpline* spline, double* x_data, double* y_dat
 }
 
 CubicSpline* custom_cubic_spline_alloc(int size) {
+    
     CubicSpline* spline = (CubicSpline*)malloc(sizeof(CubicSpline));
 
-    spline->size = size;
+    spline->size     = size;
     spline->x        = (double*)malloc(size * sizeof(double));
     spline->y        = (double*)malloc(size * sizeof(double));
     spline->d2y_data = (double*)malloc((size - 1) * sizeof(double));
