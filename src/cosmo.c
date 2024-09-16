@@ -415,7 +415,10 @@ int initialize_cosmology()
                                            my_spline[SP_INVGROW]->coeff_d[0:(my_spline[SP_INVGROW]->size - 1)])
     // }
 
+#else
+ gsl_spline_init(SPLINE[SP_INVGROW], grow1, scalef, NBINS);
 #endif
+
   /* initialization of spline interpolations of time-dependent quantities using GSL */
   gsl_spline_init(SPLINE[SP_TIME], scalef, cosmtime, NBINS);
   gsl_spline_init(SPLINE[SP_INVTIME], cosmtime, scalef, NBINS);
