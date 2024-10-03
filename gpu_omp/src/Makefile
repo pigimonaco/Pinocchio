@@ -88,6 +88,10 @@ OPTIONS += -DELL_CLASSIC
 # OPTIONS += -DVETTORIALIZZA
 OPTIONS += -DNORADIATION
 # OPTIONS += -DPRINTJUNK
+#
+# -----------------------------------------------
+# - This option impacts CPU code only
+# - It is used by default using the GPU with OMP
 # OPTIONS += -DCUSTOM_INTERPOLATION
 
 ####################### CPU flag #####################
