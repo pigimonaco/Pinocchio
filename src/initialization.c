@@ -25,6 +25,58 @@ int set_scaledep_GM(void);
 unsigned int gcd(unsigned int, unsigned int);
 int set_fft_decomposition(void);
 
+#ifdef GPU_OMP
+int initialization_gpu_omp()
+{
+  // create a subgroup of processes running on the same node
+  MPI_Comm host_comm = MPI_COMM_NULL;
+  MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0,
+                      MPI_INFO_NULL, &host_comm);
+
+  int host_rank = MPI_PROC_NULL, host_ntasks = -1;
+  // get the rank withing the subgroup
+  MPI_Comm_rank(host_comm, &host_rank);
+  MPI_Comm_size(host_comm, &host_ntasks);
+
+  // get the number of available accelerators
+  const int numdev = omp_get_num_devices();
+
+  /* sync all MPI processes */
+  MPI_Barrier(MPI_COMM_WORLD);
+
+  /* one-to-one correspondence between MPI rank and GPU */
+  if (host_ntasks != numdev)
+    {
+      if (!host_rank)
+	{
+	  // get the hostname
+	  char hostname[MPI_MAX_PROCESSOR_NAME];
+	  int resultlen = -1;
+	  MPI_Get_processor_name(hostname, &resultlen);
+	  
+	  printf("\n\t Hostname: %s. Running %d MPI processes but %d GPUs available... aborting...\n\n",
+		 hostname, host_ntasks, numdev);
+	  fflush(stdout);
+	}
+      
+      return 1;
+    }
+
+  /* set the device number: one-to-one correspondence between MPI process and accelerator */
+  internal.device.hostID = omp_get_initial_device();
+  internal.device.devID  = (host_rank % numdev);
+
+  /* free the MPI subgroup */
+  MPI_Comm_free(&host_comm);
+
+  /* init the cputime for the GPU */
+  cputime.gpu_computation = 0.0;
+  cputime.gpu_mem_transf  = 0.0;
+  
+  return 0;
+}
+#endif // GPU_OMP
+
 int initialization()
 {
 

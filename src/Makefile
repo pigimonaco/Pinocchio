@@ -31,12 +31,13 @@ RUNDIR = ./
 
 # Executable name #
 
-EXEC = pinocchio_GPU.x
+EXEC ?= pinocchio.x
 
 # Compilation options #
 
-DEBUG = NO
-OMP   = NO
+DEBUG ?= NO
+OMP   ?= NO
+GPU   ?= NO
 
 ########## Preprocessor Definitions ########## 
 
@@ -87,9 +88,26 @@ OPTIONS += -DELL_CLASSIC
 # OPTIONS += -DVETTORIALIZZA
 OPTIONS += -DNORADIATION
 # OPTIONS += -DPRINTJUNK
+OPTIONS += -DCUSTOM_INTERPOLATION
 
-OPTIONS += -DGPU_INTERPOLATION
-# OPTIONS += -DCUSTOM_INTERPOLATION
+####################### CPU flag #####################
+ifeq ($(DEBUG), YES)
+OPTIONS += -DCPU_DEBUG
+endif
+######################################################
+####################### GPU flag #####################
+ifeq ($(GPU), YES)
+OPTIONS += -DGPU_OMP # Switch-on GPU using OMP
+GPU_FLAG = -gpu=ccnative -target=gpu -gpu=nomanaged
+ifeq ($(DEBUG), YES)
+OPTIONS += -DGPU_OMP_DEBUG
+GPU_FLAG = -gpu=ccnative,debug,lineinfo -target=gpu -gpu=nomanaged -mp=gpu
+endif
+else
+GPU_FLAG =
+endif
+#######################################################
+
 
 ########## Preprocessor Definitions end ########## 
 
@@ -97,16 +115,24 @@ OPTIONS += -DGPU_INTERPOLATION
 
 ifeq ($(OMP), YES)
 # OPTIONS += -DUSE_FFT_THREADS
-OMP_FLAG = -fopenmp
+OMP_FLAG = -mp=multicore
 OMP_FFTW = -lfftw3_omp
-else
+ifeq ($(GPU), YES)
+OMP_FLAG = -mp=multicore,gpu
+endif
+endif
+
+ifeq ($(OMP), NO)
+ifeq ($(GPU), YES)
+OMP_FLAG = -mp=gpu
+endif
 OMP_FLAG =
 OMP_FFTW =
 endif
 
 ########## System-specific Configuration ############
 
-SYSTYPE="LEONARDO"
+SYSTYPE ?= LeonardoBoost
 
 ###################### MARCONI ######################
 
@@ -124,6 +150,8 @@ GSL_LIBR    = -L$(GSL_LIB) -lgsl -lgslcblas -lm
 GSL_INCL    = -I$(GSL_INC)
 endif
 
+
+
 ###################### LEONARDO ######################
 
 ifeq ($(SYSTYPE),"LEONARDO")
@@ -131,8 +159,8 @@ CC          = nvc
 # CC          = mpicc
 # CDEBUG      = -ggdb3 -Wall 
 # COPTIMIZED  = -acc -gpu=ccnative -Minfo=accel
-# COPTIMIZED  = $(OMP_FLAG)
-COPTIMIZED  = -mp=gpu -gpu=cc80 -target=gpu -gpu=managed -Minfo=all 
+COPTIMIZED  =    $(OMP_FLAG)
+# COPTIMIZED  = -mp=gpu -gpu=cc80 -target=gpu -gpu=managed -Minfo=all -v  
 # COPTIMIZED  = -g -mp=gpu -gpu=ccnative,debug,lineinfo -target=gpu -Minfo=all -v
 FFTW_LIBR   = -L/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/fftw-3.3.10-aqomamymhcna6zjrd6nlrync7oag4fkg/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
 FFTW_INCL   = -I/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/fftw-3.3.10-aqomamymhcna6zjrd6nlrync7oag4fkg/include
@@ -144,6 +172,37 @@ MPI_INCL    = -I/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.
 GSL_LIBR    = -L$(GSL_LIB) -lgsl -lgslcblas -lm
 GSL_INCL    = -I$(GSL_INC)
 endif
+
+###################### LeonardoBoost ######################
+
+ifeq ($(SYSTYPE), LeonardoBoost)
+
+CC          = nvc -Minfo=all -v -Mneginfo $(GPU_FLAG)
+#CDEBUG      = -g -O0 -Wall -Wextra $(OMP_FLAG)
+CDEBUG      = -g -O0 $(OMP_FLAG)
+#COPTIMIZED  = -O3 -Wall -Wextra -Wno-unused-result $(OMP_FLAG)
+COPTIMIZED  = -O3 -fast $(OMP_FLAG)
+
+MPI_LIBR    = -lmpi
+MPI_INCL    = 
+
+LIBDIR      =  /leonardo_work/IscrC_SCGPCT/lib/nvhpc-23.11
+
+FFTW        = $(LIBDIR)/fftw/fftw-3.3.10
+FFTW_LIBR   = -L$(FFTW)/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
+FFTW_INCL   = -I$(FFTW)/include
+
+GSL         = $(LIBDIR)/gsl/gsl-2.7.1
+GSL_LIBR    = -L$(GSL)/lib -lgsl -lgslcblas -lm
+GSL_INCL    = -I$(GSL)/include
+
+PFFT        = $(LIBDIR)/pfft/pfft
+PFFT_LIBR   = -L$(PFFT)/lib -lpfft
+PFFT_INCL   = -I$(PFFT)/include
+
+endif
+
+##########################################################################
 
 ###################### PLEIADI ######################
 
@@ -213,8 +272,8 @@ endif
 
 # Source files #
 
-OBJECTS = fmax.o  variables.o  my_cubic_spline_interpolation.o  cosmo.o initialization.o tmp_GPU_collapse_times.o fmax-pfft.o GenIC.o \
-	ReadParamfile.o allocations.o LPT.o distribute.o \
+OBJECTS = fmax.o  variables.o  cubic_spline_interpolation.o cosmo.o initialization.o fmax-pfft.o GenIC.o \
+	ReadParamfile.o allocations.o LPT.o distribute.o collapse_times.o collapse_times_GPU.o \
 	fragment.o build_groups.o write_halos.o write_snapshot.o
 
 # Main targets and rules

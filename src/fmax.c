@@ -105,8 +105,6 @@ int compute_fmax(void)
       if (initialize_collapse_times(ismooth,0))
 	return 1;
 
-      cputmp=MPI_Wtime()-cputmp;
-
       if (!ThisTask)
 	{
 	  if (strcmp(params.CTtableFile,"none"))
@@ -114,19 +112,22 @@ int compute_fmax(void)
 	  else
 	    printf("[%s] Collapse times computed for interpolation, cpu time =%f s\n",fdate(),cputmp);
 	}
+#endif // TABULATED_CT
 
-      cputime.coll+=cputmp;
-      cputmp=MPI_Wtime();
-#endif
-
-      if (compute_collapse_times(ismooth))
+      if (
+#if defined(GPU_OMP)
+	  compute_collapse_times_gpu(ismooth)
+#else
+	  compute_collapse_times(ismooth)
+#endif // GPU_OMP
+	  )
 	return 1;
 
 #ifdef TABULATED_CT
       /* this is needed only for debug options, to be removed in the official code */
       if (reset_collapse_times(ismooth))
 	return 1;
-#endif
+#endif // TABULATED_CT
 
       cputmp=MPI_Wtime()-cputmp;
       if (!ThisTask)
@@ -149,6 +150,23 @@ int compute_fmax(void)
       MPI_Barrier(MPI_COMM_WORLD);
     }
 
+#if defined(CUSTOM_INTERPOLATION) || defined(GPU_OMP) 
+  
+  custom_cubic_spline_free(host_spline);
+
+#endif // defined(CUSTOM_INTERPOLATION) || defined(GPU_OMP)  
+  
+#if defined(GPU_OMP)
+
+  /*---------------- Free GPU/CPU memory ----------------------*/
+
+  /*----- Free GPU spline ----*/
+  omp_target_free(internal.device.gpu_main_memory, internal.device.devID);
+  free(host_products.Rmax);
+  free(host_products.Fmax);
+  
+#endif // GPU_OMP  
+  
   /********************************
    * COMPUTATION OF DISPLACEMENTS *
    ********************************/

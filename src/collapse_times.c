@@ -29,28 +29,34 @@
 #include <gsl/gsl_interp2d.h>
 #include <gsl/gsl_spline2d.h>
 #include <immintrin.h>
+#include <assert.h>
 
 /*------------------------------------------------------- Macros declaration --------------------------------------------------------*/
 
 
 #define SMALL ((double)1.e-20)
-
+#define INV_3 (1.0 / 3.0)
 
 /*------------------------------------------------------- Functions definition -------------------------------------------------------*/
 
 
+
 /* Ellipsoidal solution at 3rd perturbative order in two different ways */
 
-__attribute__((always_inline)) double ell_classic               ( int, double, double, double);  
+double ell_classic(const  int, const double, const double, const double);  
 __attribute__((always_inline)) double ell_sng                   ( int, double, double, double);  
 
 /* Collapase time calculation */
-
-__attribute__((always_inline)) double ell                       ( int, double, double, double); 
+double ell(const int, const double, const double, const double); 
 
 /* Calculation of inverse collpase time */
 
-__attribute__((always_inline)) double inverse_collapse_time     ( int, double *, double *, double *, double *, int *);
+double inverse_collapse_time(const int,
+			     const double *const restrict,
+			     double *const restrict,
+			     double *const restrict,
+			     double *const restrict,
+			     int *const restrict);
 
 /* Interpolation of collpase time from a table containing collpase times */
 
@@ -60,10 +66,14 @@ __attribute__((always_inline)) double interpolate_collapse_time (int, double, do
 
 #endif 
 
+#ifdef MOD_GRAV_FR
+
+__attribute__((always_inline)) double ForceModification (double, double ,double);
+
+#endif
 /* Order inverse collpase time */
 
-__attribute__((always_inline)) void ord                         (double *,double *,double *);
-
+void ord(double *const restrict, double *const restrict, double *const restrict);
 
 /*------------------------------------------------------- Global Variables declaration ----------------------------------------------------*/
 
@@ -94,118 +104,112 @@ int fails;
 
 int ismooth;
 
-
 /*------------------------------------------------------- Functions implementation --------------------------------------------------------*/
 
 /* Classical ellipsoidal collapse solution */
 
-inline double ell_classic(int ismooth, double l1, double l2, double l3) {
-
-    /*
+double ell_classic(const int    ismooth,
+		   const double l1,
+		   const double l2,
+		   const double l3)
+{
+  /*
     This routine computes the smallest non-negative solution of the 3rd
     order equation for the ellipsoid, and corrects it to reproduce the
     spherical collapse correctly.
-    */
+  */
 
-    /* Local variables declaration */
-    double ell;
-    double del = l1 + l2 + l3;   
-    double det = l1 * l2 * l3;    
+  /* Local variables declaration */
+  double ell;
+  const double del = (l1 + l2 + l3);
+  const double det = (l1 * l2 * l3);    
 
-    /* Vanishing lambda1 eigenvalue case */
-    if (fabs(l1) < SMALL) {
-        ell = -0.1;
+  /* Vanishing lambda1 eigenvalue case */
+  if (fabs(l1) < SMALL)
+    {
+      ell = -0.1;
     }
-    /* Not vanishing lambda1 eigenvalue case */
-    else {
-        double den = det / 126. + 5. * l1 * del * (del - l1) / 84.;
-        /* Check 1st perturbative order conditions */
-        if (fabs(den) < SMALL) {
-            if (fabs(del - l1) < SMALL) {
-                if (l1 > 0.0) {
-                    /* Zel'dovich approximation */
-                    ell = 1. / l1;
-                } else {
-                    ell = -.1;
-                }
-            } else {
-                /* Check 2nd perturbative order conditions */
-                double dis = 7. * l1 * (l1 + 6. * del);
-                if (dis < 0.0) {
-                    ell = -.1;
-                } else {
-                    /* 2nd order solution */
-                    ell = (7. * l1 - sqrt(dis)) / (3. * l1 * (l1 - del));
-                    if (ell < 0.) {
-                        ell = -.1;
-                    }
-                }
+  else  /* Not vanishing lambda1 eigenvalue case */
+    {
+      const double den = det / 126. + 5. * l1 * del * (del - l1) / 84.;
+      /* Check 1st perturbative order conditions */
+      if (fabs(den) < SMALL)
+	{
+	  if (fabs(del - l1) < SMALL)
+	    {
+	      ell = ((l1 > 0.0) ? (1.0 / l1) : -0.1); /* Zel'dovich approximation */
             }
-        } else {
-            /* 3rd order perturbative solution. For more details about the equations implemented, see Monaco 1996a */
+	  else
+	    {
+	      /* Check 2nd perturbative order conditions */
+	      const double dis = (7.0 * l1 * (l1 + 6.0 * del));
+	      ell = ((dis < 0.0) ? -0.1 : (7. * l1 - sqrt(dis)) / (3. * l1 * (l1 - del)));
+	      ell = ((ell < 0.0) ? -0.1 : ell);
+            }
+        } /* 1st perturbative order conditions */
+      else
+	{
+	  /* 3rd order perturbative solution. For more details about the equations implemented, see Monaco 1996a */
             
-            /* Intermediate values */
-            double rden = 1.0 / den;
-            double a1 = 3. * l1 * (del - l1) / 14. * rden;
-            double a1_2 = a1 * a1;
-            double a2 = l1 * rden;
-            double a3 = -1.0 * rden;
+	  /* Intermediate values */
+	  const double rden = (1.0 / den);
+	  const double a1 = 3. * l1 * (del - l1) / 14. * rden;
+	  const double a1_2 = a1 * a1;
+	  const double a2 = l1 * rden;
+	  const double a3 = -1.0 * rden;
 
-            /* The collapse time b_c will be a combination of R, Q, and D == den */
-            double q = (a1_2 - 3. * a2) / 9.;
-            double r = (2. * a1_2 * a1 - 9. * a1 * a2 + 27. * a3) / 54.;
-            double r_2_q_3 = r * r - q * q * q;
+	  /* The collapse time b_c will be a combination of R, Q, and D == den */
+	  const double q = (a1_2 - 3. * a2) / 9.;
+	  const double r = (2. * a1_2 * a1 - 9. * a1 * a2 + 27. * a3) / 54.;
+	  const double r_2_q_3 = r * r - q * q * q;
 
-            /* Check 3rd perturbative order conditions */
+	  /* Check 3rd perturbative order conditions */
 
-            /* ---------------- Case 1 --------------- */
-            /* If R^2 - Q^2 > 0, which is valid for spherical and quasi-spherical perturbations */
+	  /* ---------------- Case 1 --------------- */
+	  /* If R^2 - Q^2 > 0, which is valid for spherical and quasi-spherical perturbations */
             
-            /* 3rd order solution */
-            if (r_2_q_3 > 0) {
-                double fabs_r = fabs(r);
-                double sq = pow(sqrt(r_2_q_3) + fabs_r, 0.333333333333333);
-                ell = -fabs_r / r * (sq + q / sq) - a1 / 3.;
-                if (ell < 0.) {
-                    ell = -.1;
-                }
+	  /* 3rd order solution */
+	  if (r_2_q_3 > 0)
+	    {
+	      const double fabs_r = fabs(r);
+	      const double sq = pow(sqrt(r_2_q_3) + fabs_r, 0.333333333333333);
+	      ell = -fabs_r / r * (sq + q / sq) - a1 / 3.;
+	      ell = ((ell < 0.0) ? -0.1 : ell);
             }
 
-            /* ---------------- Case 2 --------------- */
-            /* The solution has to be chosen as the smallest non-negative one between s1, s2, and s3 */
+	  /* ---------------- Case 2 --------------- */
+	  /* The solution has to be chosen as the smallest non-negative one between s1, s2, and s3 */
             
-            /* 3rd order solution */
-            else {
-                double sq = 2 * sqrt(q);
-                double inv_3 = 1.0 / 3;
-                double t = acos(2 * r / q / sq);
-                double s1 = -sq * cos(t * inv_3) - a1 * inv_3;
-                double s2 = -sq * cos((t + 2. * PI) * inv_3) - a1 * inv_3;
-                double s3 = -sq * cos((t + 4. * PI) * inv_3) - a1 * inv_3;
-                if (s1 < 0.) {
-                    s1 = 1.e10;
-                }
-                if (s2 < 0.) {
-                    s2 = 1.e10;
-                }
-                if (s3 < 0.) {
-                    s3 = 1.e10;
-                }
-                ell = (s1 < s2 ? s1 : s2);
-                ell = (s3 < ell ? s3 : ell);
-                if (ell == 1.e10) {
-                    ell = -.1;
-                }
+	  /* 3rd order solution */
+	  else
+	    {
+	      const double sq = (2.0 * sqrt(q));
+	      const double t = acos(2.0 * r / q / sq);
+	      const double a1_inv_3 = (a1 * INV_3);
+
+	      double s1 = -sq * cos(t * INV_3) - a1_inv_3;
+	      s1 = ((s1 < 0.0) ? 1.e10 : s1);
+
+	      double s2 = -sq * cos((t + 2. * PI) * INV_3) - a1_inv_3;
+	      s2 = ((s2 < 0.0) ? 1.e10 : s2);
+
+	      double s3 = -sq * cos((t + 4. * PI) * INV_3) - a1_inv_3;
+	      s3 = ((s3 < 0.0) ? 1.e10 : s3);
+
+	      ell = (s1 < s2  ? s1 : s2);
+	      ell = (s3 < ell ? s3 : ell);
+	      ell = ((ell == 1.e10) ? -0.1 : ell);
             }
-        }
-    }
+        } /* 3rd order perturbative solution */
+    } /* Not vanishing lambda1 eigenvalue case */
     
-    if (del > 0. && ell > 0.) {
-        double inv_del = 1.0 / del;
-        ell += -.364 * inv_del * exp(-6.5 * (l1 - l2) * inv_del - 2.8 * (l2 - l3) * inv_del);
+  if ((del > 0.) && (ell > 0.))
+    {
+      const double inv_del = 1.0 / del;
+      ell += -.364 * inv_del * exp(-6.5 * (l1 - l2) * inv_del - 2.8 * (l2 - l3) * inv_del);
     }
 
-    return ell;
+  return ell;
 }
 
 /* Ellipsoidal collapse following Nadkarni-Ghosh & Singhal (2016) */
@@ -391,372 +395,259 @@ double ForceModification(double size, double a, double delta) {
 
 /*---------------------------------------- Calculation of b_c == growing mode at collapse time ---------------------------------------*/
 
-inline double ell(int ismooth, double l1, double l2, double l3) {
+double ell(const int ismooth,
+	   const double l1,
+	   const double l2,
+	   const double l3)
+{
 
 #ifdef ELL_CLASSIC
 
-    double bc = ell_classic(ismooth, l1, l2, l3); 
+    const double bc = ell_classic(ismooth, l1, l2, l3);
 
-    if (bc > 0.0) {
-        return 1. + InverseGrowingMode(bc, ismooth);
-    } else {
-        return 0.0;
-    }
-#endif
+    if (bc > 0.0)
+      return (1.0 + InverseGrowingMode(bc, ismooth));
+    else
+      return 0.0;
+
+#endif // ELL_CLASSIC
 
 #ifdef ELL_SNG
 
-    double bc = ell_sng(ismooth, l1, l2, l3);
+    const double bc = ell_sng(ismooth, l1, l2, l3);
 
-    if (bc > 0.0) {
-        return 1. / bc;
-    } else {
-        return 0.0;
-    }
-#endif
+    const double ret = ((bc > 0.0) ? (1.0 / bc) : 0.0);
+
+    return ret;
+
+#endif // ELL_SNG
 }
 
 /* ------------------------------------  Computation of collapse time i.e. F = 1 + z_collapse and variance ------------------------------------ */
 
-inline int compute_collapse_times(int ismooth) {    
-
-	 /*---------------------DEBUG---------------------------------------*/
-
-    // Open a file for writing collapse times
-
-    FILE *collapseTimeFile = fopen("collapse_times.txt", "w");
-    if (collapseTimeFile == NULL) {
-        printf("Error opening file for writing.\n");
-        return 1;
-    }
-
-    /*----------------------------------------------------------------*/
-
-    /* Local average and variance declaration */
-    double local_average, local_variance;
-
-    /* Initialization */
-    local_variance = 0.0;
-    local_average = 0.0;
-
-	/* Initialize Fmax, Rmax and velocity if it is the first smoothing 
-	The initialization is done in a parallel way 
-	Each thread initializes its corresponding array elements
-	This can improve the initialization performance when executed on systems with multiple processors or cores */
-
-	if (!ismooth)
-
-		/* Loop on all particles */ 
-		#pragma omp parallel for 
-		for (int i = 0; i < MyGrids[0].total_local_size; i++){
-
-			/*----------- Common initialization ----------- */		
-			products[i].Fmax   = -10.0;
-			products[i].Rmax   = -1;
-
-			/*----------- Zel'dovich case ----------- */
-			products[i].Vel[0] = 0.0;
-			products[i].Vel[1] = 0.0;
-			products[i].Vel[2] = 0.0;
+/* Function: common_initialization */
+/* Performed once by the host */
+void common_initialization(const unsigned int size)
+{
+#pragma omp parallel for
+  for (unsigned int i=0 ; i<size ; i++)
+    {
+      /*----------- Common initialization ----------- */
+      products[i].Rmax = -1;
+      products[i].Fmax = (PRODFLOAT)-10.0;
+            
+      /*----------- Zel'dovich case ----------- */
+      products[i].Vel[_x_] = (PRODFLOAT)0.0;
+      products[i].Vel[_y_] = (PRODFLOAT)0.0;
+      products[i].Vel[_z_] = (PRODFLOAT)0.0;
 
 #ifdef TWO_LPT
 
-			products[i].Vel_2LPT[0] = 0.0;
-			products[i].Vel_2LPT[1] = 0.0;
-			products[i].Vel_2LPT[2] = 0.0;
+      products[i].Vel_2LPT[_x_] = (PRODFLOAT)0.0;
+      products[i].Vel_2LPT[_y_] = (PRODFLOAT)0.0;
+      products[i].Vel_2LPT[_z_] = (PRODFLOAT)0.0;
 
 #ifdef THREE_LPT
-			
-			products[i].Vel_3LPT_1[0] = 0.0;
-			products[i].Vel_3LPT_1[1] = 0.0;
-			products[i].Vel_3LPT_1[2] = 0.0;
-			products[i].Vel_3LPT_2[0] = 0.0;
-			products[i].Vel_3LPT_2[1] = 0.0;
-			products[i].Vel_3LPT_2[2] = 0.0;
-#endif
-#endif
-			}
-			
-	/* Declaration and initialization of variables when the openmp option is ON	
-	Inside the parallel region, each thread initializes its own local variables i.e.
-	mylocal_average, mylocal_variance, cputime_invcoll, and cputime_ell 
-	These variables are private to each thread and are not shared among threads, ensuring data consistency.*/
-     
-#if defined( _OPENMP )
 
-	double invcoll_update = 0, ell_update = 0;
+      products[i].Vel_3LPT_1[_x_] = (PRODFLOAT)0.0;
+      products[i].Vel_3LPT_1[_y_] = (PRODFLOAT)0.0;
+      products[i].Vel_3LPT_1[_z_] = (PRODFLOAT)0.0;
+      products[i].Vel_3LPT_2[_x_] = (PRODFLOAT)0.0;
+      products[i].Vel_3LPT_2[_y_] = (PRODFLOAT)0.0;
+      products[i].Vel_3LPT_2[_z_] = (PRODFLOAT)0.0;
 
-	#pragma omp parallel
-	{
-
-	/* Thread-specific variables declaration */	
-	double  mylocal_average, mylocal_variance;
-    double  cputime_invcoll;
-		
-	/* Support variables */	
-	int     fails = 0;
-	int     pid = omp_get_thread_num();
-		
-	/* Initializitation */
-	mylocal_average     = 0;
-	mylocal_variance    = 0;
-	cputime_invcoll     = 0;
-	cputime_ell         = 0;
-
-#else
-
-	/* If openmp is OFF 
-    This approach is used to avoid conditional compilation directives within the code and maintain consistency in variable
-	names across the parallel and serial versions of the code. 
-	When OpenMP is disabled, the program uses the same variable names, but they refer to the original variables directly */
-
-#define mylocal_average   local_average
-#define mylocal_variance  local_variance
-#define cputime_invcoll   cputime.invcoll
-#define cputime_ell       cputime.ell
-	
-#endif
-
-/*----------------- Calculation of variance, avarage and collapse time ----------------*/
-
-	double tmp = MPI_Wtime();
-
-/* When you use a parallel region, OpenMP will automatically wait for all threads to finish before execution */
-/* If you do not need synchronization after the loop, you can disable it with nowait */
-#ifdef _OPENMP
-#pragma omp for nowait
-#endif
-
-	/* Loop on all particle */
-	for (int index = 0; index < MyGrids[0].total_local_size; index++){
-
-		/* Computation of second derivatives of the potential i.e. the gravity Hessian */
-		double diff_ten[6]; 
-		for (int i = 0; i < 6; i++){
-			diff_ten[i] = second_derivatives[0][i][index];
-		}
-
-		/* Computation of the variance of the linear density field */
-		double delta      = diff_ten[0] + diff_ten[1] + diff_ten[2];
-		mylocal_average  += delta;
-		mylocal_variance += delta*delta;
-
-		/* Computation of the collapse time */
-		double lambda1,lambda2,lambda3;
-		int    fail;
-		double Fnew = inverse_collapse_time(ismooth, diff_ten, &lambda1, &lambda2, &lambda3, &fail); 
-
-		/*---------------------------DEBUG----------------------------------*/
-
-		fprintf(collapseTimeFile, "%d %d %f %f %f %g\n", index, ismooth, lambda1, lambda2, lambda3, Fnew);
-
-		/*-----------------------------------------------------------------*/
-
-		/* Fail check during computation of the collapse time */
-		if (fail){
-			printf("ERROR on task %d: failure in inverse_collapse_time\n",ThisTask);
-			fflush(stdout);
-
-/* Workflow control */
-#if !defined( _OPENMP )		    		    
-			return 1;
-#else
-			fails = 1;
-#endif
-		}
-    
-		/* Updating collapse time */
-		if (products[index].Fmax < Fnew){
-				products[index].Fmax = Fnew;
-				products[index].Rmax = ismooth;
-		}	      
-	}
-
-	/* CPU collapse time */
-	cputime_invcoll += MPI_Wtime() - tmp;
-	
-
-	/* ------------------- Updates local variance and local average using OpenMP atomic operations  ------------------*/
-	/* local_variance and local_average are shared variables that are updated by each thread (mylocal_variance and mylocal_average)*/
-
-#if defined( _OPENMP )
-
-	#pragma omp atomic
-	local_variance += mylocal_variance;
-
-	#pragma omp atomic
-	local_average += mylocal_average;  
-
-	/* ------------------------------------ Updates total CPU collapse time -----------------------------------*/
-	/* cputime_invcoll and cputime_ell are local variables that are updated by each thread and then accumulated using atomic operations */
-
-	#pragma omp atomic
-	invcoll_update += cputime_invcoll;
-
-	#pragma omp atomic	
-	ell_update     += cputime_ell;
-
-#endif	
-
-#if defined( _OPENMP ) 
-	}
-#endif
-
-	int all_fails = 0; 
-
-	/* -------------------------- Updates cpu collapse time for a single threads -----------------------------*/
-
-#if defined (_OPENMP)
-
-	#pragma omp atomic
-	cputime.invcoll += invcoll_update/internal.nthreads_omp; 
-
-	#pragma omp atomic	
-	cputime.ell     += ell_update/internal.nthreads_omp;
-
-	/* fails is a local variable that indicates the number of failures in the computation. 
-	Each thread updates fails, and then the values are accumulated using atomic operations */
-
-	#pragma omp atomic
-	all_fails       += fails;
-
-#endif
-    
-	/* Fail check during computation of the inverse collapse time */
-	/* If there were failures, an error message is printed and the function returns 1 */
-	if (all_fails){
-		printf("ERROR on task %d: failure in inverse_collapse_time\n",ThisTask);
-		fflush(stdout);
-		return 1;
-	}
-
-	/* Calculating obtained variance and avarage */		
-	double global_variance = 0.0;
-	double global_average  = 0.0;
-    
-	/* Calculates the global variance and average by reducing the values of local_variance and local_average across all MPI tasks */
-	MPI_Reduce(&local_variance, &global_variance, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-	MPI_Reduce(&local_average , &global_average , 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-
-	/* If the current task is the root task (task 0), it divides the global variance and average by the total number of data points (MyGrids[0].Ntotal) 
-	to obtain the average values per data point */
-	if (!ThisTask){
-		global_variance /= (double)MyGrids[0].Ntotal;
-		global_average  /= (double)MyGrids[0].Ntotal;
-	}
-	
-	/* Broadcasts the value of global_variance from the root task to all other tasks using MPI_Bcast */
-	MPI_Bcast(&global_variance, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-
-	/* Stores the true variance*/
-	Smoothing.TrueVariance[ismooth] = global_variance;
-
-	return 0;
+#endif // THREE_LPT
+#endif // TWO_LPT
+    } // loop over MyGrids[0].total_local_size
+  
+  return;
 }
 
+int compute_collapse_times(int ismooth)
+{
+  /*----------------------------------------------------------------*/
+  // Size of the products array
+  const unsigned int total_size = MyGrids[0].total_local_size;
+  
+  if (!ismooth)
+    {
+      /*----------- Common initialization ----------- */
+      common_initialization(total_size);
+    }
+
+  /* timing the main loop of 'compute_collapse_times' function */
+  double cputmp = MPI_Wtime();
+  /*-----------------------------------------------------------------------------------*/
+  
+  /*----------------- Calculation of variance, average, and collapse time -------------*/
+  
+  /* Local average and variance declaration */
+  double local_average = 0.0, local_variance = 0.0;
+  int all_fails = 0; 
+  
+  #pragma omp parallel for reduction(+: local_average, local_variance, all_fails)  
+  for (unsigned int index=0 ; index<total_size ; index++)
+    {
+      /* Computation of second derivatives of the potential i.e. the gravity Hessian */
+      double diff_ten[6]; 
+      for (int i=0 ; i<6 ; i++)
+	{
+	  diff_ten[i] = second_derivatives[0][i][index];
+	}
+        
+      /* Computation of the variance of the linear density field */
+      const double delta = (diff_ten[0] + diff_ten[1] + diff_ten[2]);
+      local_average  += delta;
+      local_variance += (delta * delta);
+
+      /* Computation of the collapse time */
+      double lambda1, lambda2, lambda3;
+      int    fail;	
+      /* inverse_collapse_time(funzione ell) */
+      const double Fnew = inverse_collapse_time(ismooth, diff_ten, &lambda1, &lambda2, &lambda3, &fail);
+      all_fails += fail;
+      
+      /* Updating collapse time */      
+      const int update = (products[index].Fmax < Fnew);
+      products[index].Rmax = (update ? ismooth : products[index].Rmax);
+      products[index].Fmax = (update ? Fnew    : products[index].Fmax);
+
+    } // target region  
+
+  /* ------------- Updates cpu collapse time for a single threads -----------------------------*/
+   
+  /* Fail check during computation of the inverse collapse time */
+  /* If there were failures, an error message is printed and the function returns 1 */
+  if (all_fails)
+    {
+      printf("ERROR on task %d: failure in inverse_collapse_time\n",ThisTask);
+      fflush(stdout);
+      return 1;
+    }
+  
+  /* Calculating obtained variance and avarage */		
+  double global_variance = 0.0;
+  double global_average  = 0.0;
+    
+  /* Calculates the global variance and average by reducing the values of local_variance and local_average across all MPI tasks */
+  MPI_Reduce(&local_variance, &global_variance, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&local_average , &global_average , 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+
+  /* If the current task is the root task (task 0), it divides the global variance and average by the total number of data points (MyGrids[0].Ntotal) 
+     to obtain the average values per data point */
+  if (!ThisTask)
+    {
+      global_variance /= (double)MyGrids[0].Ntotal;
+      global_average  /= (double)MyGrids[0].Ntotal;
+    }
+	
+  /* Broadcasts the value of global_variance from the root task to all other tasks using MPI_Bcast */
+  MPI_Bcast(&global_variance, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+  /* Stores the true variance*/
+  Smoothing.TrueVariance[ismooth] = global_variance;
+
+  /* CPU collapse time */	
+  cputime.coll += (MPI_Wtime() - cputmp);
+  
+  return 0;
+
+} // compute_collapse_times
 
 /* ------------------------------------  Diagonalization of the potential Hessian ------------------------------------ */
 
 
-inline double inverse_collapse_time(int ismooth, double * restrict deformation_tensor, double * restrict x1, double * restrict x2, double * restrict x3, int * restrict fail) {
-    
-	/* Local variables declaration */
-	/* mu1, mu2 and mu3 are the principal invariants of the 3x3 tensor of second derivatives */
-	double mu1, mu2, mu3;
-	double dtensor[6] = { deformation_tensor[0], deformation_tensor[1] ,
-					 	  deformation_tensor[2], deformation_tensor[3] ,
-					 	  deformation_tensor[4], deformation_tensor[5] };
-	*fail = 0;
+double inverse_collapse_time(const int                     ismooth,
+			     const double * const restrict dtensor,
+				   double * const restrict x1,
+				   double * const restrict x2,
+				   double * const restrict x3,
+				   int    * const restrict fail)
+{  
+  /* Local variables declaration */
+  /* mu1, mu2 and mu3 are the principal invariants of the 3x3 tensor of second derivatives */
+  /*  Performs diagonalization of the tensor by calculating the values of mu1, mu2, and mu3 */
+  const double add[6] = {dtensor[0] * dtensor[0],
+			 dtensor[1] * dtensor[1],
+			 dtensor[2] * dtensor[2],
+			 dtensor[3] * dtensor[3],
+			 dtensor[4] * dtensor[4],
+			 dtensor[5] * dtensor[5]};
+  
+  const double mu1   = (dtensor[0] + dtensor[1] + dtensor[2]);
+  const double mu1_2 = (mu1 * mu1);
+  const double mu2   = ((0.5 * mu1_2) - (0.5 * (add[0] + add[1] + add[2])) - (add[3] + add[4] + add[5]));
+  
+  /* mu3 calculation */
+  const double mu3 = ((dtensor[0] * dtensor[1] * dtensor[2])       +
+		      (2.0 * dtensor[3] * dtensor[4] * dtensor[5]) -
+		      (dtensor[0] * add[5])                        -
+		      (dtensor[1] * add[4])                        -
+		      (dtensor[2] * add[3]));
 
-	/*  Performs diagonalization of the tensor by calculating the values of mu1, mu2, and mu3 */
-	mu1 = dtensor[0] + dtensor[1] + dtensor[2];
-	double mu1_2 = mu1 * mu1;
-	mu2 = 0.5 * mu1_2;
-
-    /* By define add[3] inside and outside the scope, the code ensures that any previous variable with the same name add is not affected
-	and a new variable add is created within the block. This is useful when the same variable name needs to be used again in the code without
-	conflicting with any previous variable of the same name */
-	{
-		double add[3];
-		add[0] = dtensor[0]*dtensor[0];
-		add[1] = dtensor[1]*dtensor[1];
-		add[2] = dtensor[2]*dtensor[2];
-		mu2 -= 0.5 * (add[0] + add[1] + add[2]);
-	}
-
-	/* Redefinition outside the block to calculate the squares of dtensor[3], dtensor[4], and dtensor[5].
-	 This allows separate storage for these intermediate calculations, preventing any unintended interference or confusion between the two sets of calculations.*/
-	double add[3];
-	add[0] = dtensor[3]*dtensor[3];
-	add[1] = dtensor[4]*dtensor[4];
-	add[2] = dtensor[5]*dtensor[5];
-	mu2 -= add[0] + add[1] + add[2];
-
-    /* mu3 calculation */
-	mu3 =  dtensor[0]*dtensor[1]*dtensor[2] +
-		2.*dtensor[3]*dtensor[4]*dtensor[5] -
-		dtensor[0]*add[2] -
-		dtensor[1]*add[1] -
-		dtensor[2]*add[0];
-
-	/* Check if the tensor is already diagonal */
-	double q;
-	q = ( mu1_2 - 3.0*mu2 ) /9.0;
-
-	if (q == 0.){
-		/* In this case the tensor is already diagonal */
-		*x1 = dtensor[0];
-		*x2 = dtensor[1];
-		*x3 = dtensor[2];
-	} else {  
-		/* The solution has to be chosen as the smallest non-negative one between x1, x2 and x3 */
-		double r = -(2.*mu1_2*mu1 - 9.0*mu1*mu2 + 27.0*mu3)/54.;
+  /* Check if the tensor is already diagonal */
+  const double q = (mu1_2 - 3.0 * mu2) / 9.0;
+  
+  if (q == 0.0)
+    {
+      /* In this case the tensor is already diagonal */
+      *x1 = dtensor[0];
+      *x2 = dtensor[1];
+      *x3 = dtensor[2];
+    }
+  else
+    {  
+      /* The solution has to be chosen as the smallest non-negative one between x1, x2 and x3 */
+      const double r = -(((2.0 * mu1_2 * mu1) - (9.0 * mu1 * mu2) + (27.0 * mu3)) / 54.0);
         
-		/* Fail check */
-		if (q*q*q < r*r || q<0.0){
-			return -10.0;
-		}
-
-        /* Calculating x1, x2, x3 solution in the same way as it done in ell_classic */
-		double sq = 2 * sqrt(q);
-		double t = acos(2*r/q/sq);
-		double inv_3 = 1.0/3.0;
-		*x1 = -sq*cos(t * inv_3) + mu1 * inv_3;
-		*x2 = -sq*cos((t + 2.*PI) * inv_3 )+ mu1 * inv_3;
-		*x3 = -sq*cos((t + 4.*PI) * inv_3 )+ mu1 * inv_3;
-		
+      /* Fail check */
+      if ((q * q * q) < (r * r) || (q < 0.0))
+	{
+	  *fail = 1;
+	  return -10.0;
 	}
 
-	/* Ordering and inverse collapse time */
-	ord(x1, x2, x3);
-	
-	/* -------------------------------- Tabulated collapse time case -------------------------------- */
+      /* Calculating x1, x2, x3 solution in the same way as it done in ell_classic */
+      const double sq = (2.0 * sqrt(q));
+      const double t = acos(2.0 * r / q / sq);
+      *x1 = ((-sq * cos(t * INV_3)) + (mu1 * INV_3));
+      *x2 = ((-sq * cos((t + 2.0 * PI) * INV_3)) + (mu1 * INV_3));
+      *x3 = ((-sq * cos((t + 4.0 * PI) * INV_3)) + (mu1 * INV_3));		
+    }
+
+  /* Ordering and inverse collapse time */
+  ord(x1, x2, x3);
+  
+  /* -------------------------------- Tabulated collapse time case -------------------------------- */
 
 #ifdef TABULATED_CT
-	double t = interpolate_collapse_time(ismooth,*x1,*x2,*x3);
+  double t = interpolate_collapse_time(ismooth,*x1,*x2,*x3);
 
 #ifdef DEBUG
-	double t2 = ell(ismooth,*x1,*x2,*x3);
-	if (t2 > 0.9){
-		ave_diff += t - t2;
-		var_diff += pow(t - t2, 2.0);
-		counter += 1;
+  double t2 = ell(ismooth,*x1,*x2,*x3);
+  if (t2 > 0.9)
+    {
+      ave_diff += t - t2;
+      var_diff += pow(t - t2, 2.0);
+      counter += 1;
 #ifdef PRINTJUNK
-		double ampl = sqrt(Smoothing.Variance[ismooth]);
-		fprintf(JUNK,"%d  %f %f %f   %f %f %f   %20g %20g %20g\n",ismooth, (*x1 + *x2 + *x3)/ampl, (*x1 - *x2)/ampl, (*x2 - *x3)/ampl, *x1, *x2, *x3, t, t2, t - t2);
-#endif
-	}
-#endif
+      double ampl = sqrt(Smoothing.Variance[ismooth]);
+      fprintf(JUNK,"%d  %f %f %f   %f %f %f   %20g %20g %20g\n",ismooth, (*x1 + *x2 + *x3)/ampl, (*x1 - *x2)/ampl, (*x2 - *x3)/ampl, *x1, *x2, *x3, t, t2, t - t2);
+#endif // PRINTJUNK
+    }
+#endif // DEBUG
 
 #else 
-	/* Final computation of collpse time*/
-	double t = ell(ismooth,*x1,*x2,*x3);
+
+  /* Final computation of collapse time*/
+  double t = ell(ismooth, *x1, *x2, *x3);
 	
-#endif
+#endif // TABULATED_CT
 
-	return t;
+  *fail = 0;
+  
+  return t;
 }
-
 /* ------------------------------------ Tabluated collapse times case ------------------------------------ */
 
 #ifdef TABULATED_CT
@@ -812,7 +703,7 @@ int initialize_collapse_times(int ismooth, int onlycompute){
 
 	/* The bin size for delta varies like (delta - CT_DELTA0)^CT_EXPO, 
 	so it is smallest around CT_DELTA0 if CT_EXPO>1. The bin size 
-	is never smaller than CT_MIN_INTERVAL.
+	is never smaller than CT_MIN_INTERVAL. */
 
 	/*-------------------------- FIRST SMOOTHING RADIUS CASE --------------------------*/ 
 	
@@ -1130,7 +1021,7 @@ inline double interpolate_collapse_time(int ismooth, double l1, double l2, doubl
 
 	/* In the unlikely event the point is beyond the limits */
 	ix = (ix >= CT_NBINS_XY - 1) ? CT_NBINS_XY - 2 : (ix < 0) ? 0 : ix;
-    iy = (iy >= CT_NBINS_XY - 1) ? CT_NBINS_XY - 2 : (iy < 0) ? 0 : iy;
+	iy = (iy >= CT_NBINS_XY - 1) ? CT_NBINS_XY - 2 : (iy < 0) ? 0 : iy;
 
 #ifdef ALL_SPLINE
     
@@ -1329,17 +1220,19 @@ void write_CTtable_header(){
 
 /* ------------------------------------  Tabulated collapse time : END ------------------------------------ */
 
-#define min(a,b) ((a)<(b)?(a):(b))
-#define max(a,b) ((a)>(b)?(a):(b))
+#define _MIN_(a,b) ((a) < (b) ? (a) : (b))
+#define _MAX_(a,b) ((a) > (b) ? (a) : (b))
 
 /* Orders a,b,c in decreasing order a>b>c */
-inline void ord(double * restrict a, double * restrict b, double * restrict c){
+void ord(double *const restrict a,
+	 double *const restrict b,
+	 double *const restrict c)
+{
+  const double hi = _MAX_(_MAX_(*a, *b), *c);
+  const double lo = _MIN_(_MIN_(*a, *b), *c);
+  *b = *a + *b + *c - lo - hi;
+  *a = hi;
+  *c = lo;
 
-	double lo , hi;
-	hi = max( max(*a, *b), *c );
-	lo = min( min(*a, *b), *c );
-	*b = *a + *b+ *c - lo - hi;
-	*a = hi;
-	*c = lo;
+  return;
 }
-

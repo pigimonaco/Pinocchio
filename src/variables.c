@@ -10,12 +10,18 @@ internal_data   internal;
 
 char *main_memory, *wheretoplace_mycat;
 product_data *products, *frag;
+#ifdef GPU_OMP
+gpu_product_data gpu_products, host_products;
+#endif // GPU_OMP
 unsigned int **seedtable;  // QUESTO RIMANE?
 unsigned int   *cubes_ordering;
 double **kdensity;
 double **density;
 double ***first_derivatives;
 double ***second_derivatives;
+#ifdef GPU_OMP
+gpu_second_derivatives_data gpu_second_derivatives;
+#endif // GPU_OMP
 double **VEL_for_displ;
 
 #ifdef TWO_LPT
@@ -68,6 +74,13 @@ mf_data mf;
 
 gsl_spline **SPLINE;
 gsl_interp_accel **ACCEL;
+#if defined(CUSTOM_INTERPOLATION) || defined(GPU_OMP)
+CubicSpline *host_spline;
+#if defined(GPU_OMP)
+CubicSpline gpu_spline;
+#endif // GPU_OMP
+#endif // defined(CUSTOM_INTERPOLATION) || defined(GPU_OMP)
+
 #if defined(SCALE_DEPENDENT) && defined(ELL_CLASSIC)
 gsl_spline **SPLINE_INVGROW;
 gsl_interp_accel **ACCEL_INVGROW;

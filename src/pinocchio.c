@@ -28,6 +28,12 @@ int main(int argc, char **argv, char **envp)
   }
 #endif
 
+  /* GPU initialization */
+#ifdef GPU_OMP
+  if (initialization_gpu_omp())
+    abort_code();
+#endif // GPU_OMP
+  
   /* timing of the code */
   cputime.total=MPI_Wtime();
   greetings();

@@ -30,6 +30,14 @@
 
 #define ALIGN_MEMORY_BLOCK(M) while( (M) % ALIGN ) M++
 
+#if defined(GPU_OMP)
+   #if defined(GPU_OMP_DEBUG)
+      #define GPU_ALIGN_MEMORY_BLOCK(M)
+   #else
+      #define GPU_ALIGN_MEMORY_BLOCK(M) while( (M) % ALIGN_GPU ) M++
+   #endif // GPU_OMP_DEBUG
+#endif // GPU_OMP
+
 int organize_main_memory()
 {
 
@@ -331,10 +339,281 @@ int allocate_main_memory()
       return 1;
     }
 
+#if defined(GPU_OMP)
+
+  /*--------------------------- GPU spline memory -----------------------------*/
+
+  internal.device.memory_spline.count = 0;
+  
+  internal.device.memory_spline.offset = 0;
+  
+  /* CubicSpline.x */
+  internal.device.memory_spline.x = 0;
+  internal.device.memory_spline.count += (NBINS * sizeof(double));
+  GPU_ALIGN_MEMORY_BLOCK(internal.device.memory_spline.count);
+
+  /* CubicSpline.y */
+  internal.device.memory_spline.y = internal.device.memory_spline.count;
+  internal.device.memory_spline.count += (NBINS * sizeof(double));
+  GPU_ALIGN_MEMORY_BLOCK(internal.device.memory_spline.count);
+
+  /* CubicSpline.d2y_data */
+  internal.device.memory_spline.d2y_data = internal.device.memory_spline.count;
+  internal.device.memory_spline.count += ((NBINS - 1) * sizeof(double));
+  GPU_ALIGN_MEMORY_BLOCK(internal.device.memory_spline.count);
+
+  /* CubicSpline.coeff_a */
+  internal.device.memory_spline.coeff_a = internal.device.memory_spline.count;
+  internal.device.memory_spline.count += ((NBINS - 1) * sizeof(double));
+  GPU_ALIGN_MEMORY_BLOCK(internal.device.memory_spline.count);
+
+  /* CubicSpline.coeff_b */
+  internal.device.memory_spline.coeff_b = internal.device.memory_spline.count;
+  internal.device.memory_spline.count += ((NBINS - 1) * sizeof(double));
+  GPU_ALIGN_MEMORY_BLOCK(internal.device.memory_spline.count);
+
+  /* CubicSpline.coeff_c */
+  internal.device.memory_spline.coeff_c = internal.device.memory_spline.count;
+  internal.device.memory_spline.count += ((NBINS - 1) * sizeof(double));
+  GPU_ALIGN_MEMORY_BLOCK(internal.device.memory_spline.count);
+  
+  /* CubicSpline.coeff_d */
+  internal.device.memory_spline.coeff_d = internal.device.memory_spline.count;
+  internal.device.memory_spline.count += ((NBINS - 1) * sizeof(double));
+  GPU_ALIGN_MEMORY_BLOCK(internal.device.memory_spline.count);
+  
+  /*---------------------------------------------------------------------------*/
+  
+  /*--------------------------- GPU products memory ---------------------------*/
+
+  internal.device.memory_products.count = 0;
+  
+  internal.device.memory_products.offset = internal.device.memory_spline.count;
+  
+  /* gpu_product_data.Rmax */
+  internal.device.memory_products.Rmax = 0;
+  internal.device.memory_products.count += (MyGrids[0].total_local_size * sizeof(int));
+  GPU_ALIGN_MEMORY_BLOCK(internal.device.memory_products.count);
+
+  /* gpu_product_data.Fmax */
+  internal.device.memory_products.Fmax = internal.device.memory_products.count;
+  internal.device.memory_products.count += (MyGrids[0].total_local_size * sizeof(PRODFLOAT));
+  GPU_ALIGN_MEMORY_BLOCK(internal.device.memory_products.count);
+
+  /*---------------------------------------------------------------------------*/
+
+  /*--------------------------- GPU second derivatives memory -----------------*/
+  
+  internal.device.memory_second_derivatives.offset = internal.device.memory_products.count;
+  
+  /* loop over tensors */
+  internal.device.memory_second_derivatives.count = 0;
+  for (int i=0 ; i<6 ; i++)
+    {
+      internal.device.memory_second_derivatives.tensor[i] = internal.device.memory_second_derivatives.count;
+      internal.device.memory_second_derivatives.count += (MyGrids[0].total_local_size * sizeof(double));
+      GPU_ALIGN_MEMORY_BLOCK(internal.device.memory_second_derivatives.count);
+    }
+
+  /*---------------------------------------------------------------------------*/
+
+  /*---------------------- GPU total required memory --------------------------*/
+
+  internal.device.memory = internal.device.memory_spline.count              +
+                           internal.device.memory_products.count            +
+                           internal.device.memory_second_derivatives.count;
+
+  /* GPU memory allocation */
+  internal.device.gpu_main_memory = (char *)omp_target_alloc(internal.device.memory, internal.device.devID);
+
+  if (internal.device.gpu_main_memory == NULL)
+    {
+      printf("\n\t ERROR on task %d: cannot allocate memory on the GPU \n", ThisTask);
+      fflush(stdout);
+      return 2;
+    }
+  else
+    {
+      if (ThisTask == 0)
+	{
+	  printf("\n\t Total GPU memory allocated %lg [Mbytes] \n\n", internal.device.memory / 1024. / 1024.);
+	  fflush(stdout);
+	}
+    }
+  
+  /****************************************************************************/
+
+  /*--------------------- Set GPU pointers to allocated memory ---------------*/
+  /*--------------------- and check GPU is working             ---------------*/
+
+  int gpu_working;
+  char *const gpu_main_memory      = internal.device.gpu_main_memory;
+
+  const size_t mem_spline_x        = internal.device.memory_spline.offset + internal.device.memory_spline.x;
+  const size_t mem_spline_y        = internal.device.memory_spline.offset + internal.device.memory_spline.y;
+  const size_t mem_spline_d2y_data = internal.device.memory_spline.offset + internal.device.memory_spline.d2y_data;
+  const size_t mem_spline_coeff_a  = internal.device.memory_spline.offset + internal.device.memory_spline.coeff_a;
+  const size_t mem_spline_coeff_b  = internal.device.memory_spline.offset + internal.device.memory_spline.coeff_b;
+  const size_t mem_spline_coeff_c  = internal.device.memory_spline.offset + internal.device.memory_spline.coeff_c;
+  const size_t mem_spline_coeff_d  = internal.device.memory_spline.offset + internal.device.memory_spline.coeff_d;
+
+  const size_t mem_products_Rmax   = internal.device.memory_products.offset + internal.device.memory_products.Rmax;
+  const size_t mem_products_Fmax   = internal.device.memory_products.offset + internal.device.memory_products.Fmax;
+
+  const size_t mem_second_der_tensor[6] = {internal.device.memory_second_derivatives.offset + internal.device.memory_second_derivatives.tensor[0],
+					   internal.device.memory_second_derivatives.offset + internal.device.memory_second_derivatives.tensor[1],
+					   internal.device.memory_second_derivatives.offset + internal.device.memory_second_derivatives.tensor[2],
+					   internal.device.memory_second_derivatives.offset + internal.device.memory_second_derivatives.tensor[3],
+					   internal.device.memory_second_derivatives.offset + internal.device.memory_second_derivatives.tensor[4],
+					   internal.device.memory_second_derivatives.offset + internal.device.memory_second_derivatives.tensor[5]};
+  
+#pragma omp target is_device_ptr(gpu_main_memory) map(from: gpu_working) device(internal.device.devID)
+  {
+    gpu_working = (omp_is_initial_device() ? 0 : 1);
+    
+    /*********************************** gpu_spline *************************************/
+    gpu_spline.size = NBINS;
+    
+    gpu_spline.x = (double *)(gpu_main_memory + mem_spline_x);
+      
+    gpu_spline.y = (double *)(gpu_main_memory + mem_spline_y);
+    
+    gpu_spline.d2y_data = (double *)(gpu_main_memory + mem_spline_d2y_data);
+
+    gpu_spline.coeff_a = (double *)(gpu_main_memory + mem_spline_coeff_a);
+
+    gpu_spline.coeff_b = (double *)(gpu_main_memory + mem_spline_coeff_b);
+    
+    gpu_spline.coeff_c = (double *)(gpu_main_memory + mem_spline_coeff_c);
+    
+    gpu_spline.coeff_d = (double *)(gpu_main_memory + mem_spline_coeff_d);
+    /************************************************************************************/
+
+    /************************************ gpu_products **********************************/
+    gpu_products.Rmax = (int *)(gpu_main_memory + mem_products_Rmax);
+
+    gpu_products.Fmax = (PRODFLOAT *)(gpu_main_memory + mem_products_Fmax);
+    /************************************************************************************/
+
+    /********************************** gpu_second_derivatives **************************/
+    for (int i=0 ; i<6 ; i++)
+      gpu_second_derivatives.tensor[i] = (double *)(gpu_main_memory + mem_second_der_tensor[i]);
+    /************************************************************************************/
+  } // omp target
+
+  if (!gpu_working)
+    {
+      printf("\n\t ERROR on task %d: GPU is not working \n", ThisTask);
+      fflush(stdout);
+      return 2;
+    }
+  else
+    {
+      if (ThisTask == 0)
+	{
+	  printf("\n\t GPU is working \n");
+	  fflush(stdout);
+	}
+    }
+  
+  /* copy the spline to the GPU */
+  if (host_spline == NULL)
+    {
+      printf("\n\t ERROR on task %d: cannot copy custom spline to the GPU \n", ThisTask);
+      fflush(stdout);
+      return 3;
+    }
+  else
+    {
+      if (ThisTask == 0)
+	{
+	  printf("\n\t Copying custom spline to the GPU \n");
+	  fflush(stdout);
+	}
+    }
+  
+  double cputmp = MPI_Wtime();  
+
+  /* gpu_spline->x */
+  omp_target_memcpy((void *)gpu_main_memory,
+		    (void *)host_spline->x,
+		    (host_spline->size * sizeof(double)),
+		    (internal.device.memory_spline.offset + internal.device.memory_spline.x),
+		    0,
+		    internal.device.devID,
+		    internal.device.hostID);
+
+  /* gpu_spline->y */
+  omp_target_memcpy((void *)gpu_main_memory,
+		    (void *)host_spline->y,
+		    (host_spline->size * sizeof(double)),
+		    (internal.device.memory_spline.offset + internal.device.memory_spline.y),
+		    0,
+		    internal.device.devID,
+		    internal.device.hostID);
+  
+  /* gpu_spline->d2y_data */
+  omp_target_memcpy((void *)gpu_main_memory,
+		    (void *)host_spline->d2y_data,
+		    ((host_spline->size - 1) * sizeof(double)),
+		    (internal.device.memory_spline.offset + internal.device.memory_spline.d2y_data),
+		    0,
+		    internal.device.devID,
+		    internal.device.hostID);
+
+  /* gpu_spline->coeff_a */
+  omp_target_memcpy((void *)gpu_main_memory,
+		    (void *)host_spline->coeff_a,
+		    ((host_spline->size - 1) * sizeof(double)),
+		    (internal.device.memory_spline.offset + internal.device.memory_spline.coeff_a),
+		    0,
+		    internal.device.devID,
+		    internal.device.hostID);
+
+  /* gpu_spline->coeff_b */
+  omp_target_memcpy((void *)gpu_main_memory,
+		    (void *)host_spline->coeff_b,
+		    ((host_spline->size - 1) * sizeof(double)),
+		    (internal.device.memory_spline.offset + internal.device.memory_spline.coeff_b),
+		    0,
+		    internal.device.devID,
+		    internal.device.hostID);
+
+  /* gpu_spline->coeff_c */
+  omp_target_memcpy((void *)gpu_main_memory,
+		    (void *)host_spline->coeff_c,
+		    ((host_spline->size - 1) * sizeof(double)),
+		    (internal.device.memory_spline.offset + internal.device.memory_spline.coeff_c),
+		    0,
+		    internal.device.devID,
+		    internal.device.hostID);
+
+  /* gpu_spline->coeff_d */
+  omp_target_memcpy((void *)gpu_main_memory,
+		    (void *)host_spline->coeff_d,
+		    ((host_spline->size - 1) * sizeof(double)),
+		    (internal.device.memory_spline.offset + internal.device.memory_spline.coeff_d),
+		    0,
+		    internal.device.devID,
+		    internal.device.hostID);
+  
+  cputmp = MPI_Wtime() - cputmp;
+  cputime.gpu_mem_transf += cputmp;
+
+  /*--------------------------------------------------------------------------*/
+
+  /* allocate host memory for host_products */
+  host_products.Rmax = (int *)malloc(MyGrids[0].total_local_size * sizeof(int));
+  host_products.Fmax = (PRODFLOAT *)malloc(MyGrids[0].total_local_size * sizeof(PRODFLOAT));
+  assert((host_products.Rmax != NULL) && (host_products.Fmax != NULL));
+  
+#endif // GPU_OMP
+  
   /* sets pointers to the allocated memory */
   products = (product_data *)main_memory;
   count_memory = MyGrids[0].total_local_size * sizeof(product_data);
   ALIGN_MEMORY_BLOCK( count_memory );
+
   for (igrid=0; igrid<Ngrids; igrid++)
     {
       kdensity[igrid] = (double *)(main_memory + count_memory);
@@ -369,6 +648,8 @@ int allocate_main_memory()
 	first_derivatives[igrid][i] = second_derivatives[igrid][i];
       density[igrid] = second_derivatives[igrid][0];
     }
+
+  
 //  for (igrid=0; igrid<Ngrids; igrid++)
 //    {
 //      seedtable[igrid] = (unsigned int*)(main_memory + count_memory);
