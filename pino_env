@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+
+# Source this file to set up your environment for Pinocchio development.
+
+# Edit the next line to specify the location where you installed pFFT.
+# The folder should have an "include" and "lib" directory, the former
+# containing "pfft.h" and the latter "libpfft.so".
+pfft_install_dir=$HOME/hackathon/binaries
+
+
+# Make sure this script is being sourced.
+# See: https://stackoverflow.com/a/2684300
+if test "${BASH_SOURCE[0]}" == "${0}"
+then
+    echo "Call this script with \"source\" or \".\", not directly."
+    exit 1
+fi
+
+# Make sure the "eurohack" user environment has been loaded.
+if ! uenv --no-color status | grep --quiet --fixed-string '/user-environment:eurohack'
+then
+    echo "First load the \"eurohack\" user environment with:"
+    echo "   uenv start --view=modules eurohack/24.9:v2"
+    return
+fi
+
+# Load required omdules.
+module load cray-mpich fftw gsl gcc
+
+# Help Make find include and library directories at build time.
+INC="$INC -I$GSL_ROOT_DIR/include"
+INC="$INC -I/user-environment/linux-sles15-neoverse_v2/gcc-13.2.0/fftw-3.3.10-gsc2ahsglottlgl2l7gupsbr6fm36d6l/include"
+INC="$INC -I${pfft_install_dir}/include"
+export INC
+LIB="$LIB -L$GSL_ROOT_DIR/lib"
+LIB="$LIB -L/user-environment/linux-sles15-neoverse_v2/gcc-13.2.0/fftw-3.3.10-gsc2ahsglottlgl2l7gupsbr6fm36d6l/lib"
+LIB="$LIB -L${pfft_install_dir}/lib"
+export LIB
+
+# Make shared libraries available at run time.
+# The pFFT shared library "libpfft.so" is expected to be installed there.
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${pfft_install_dir}/lib
