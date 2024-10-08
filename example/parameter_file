@@ -1,12 +1,18 @@
 # This is an example parameter file for the Pinocchio 4.0 code
 
 # run properties
-RunFlag                last_test     % name of the run
+RunFlag                GPU_latest     % name of the run
 OutputList             outputs      % name of file with required output redshifts
 BoxSize                256          % physical size of the box in Mpc
 BoxInH100                           % specify that the box is in Mpc/h
-GridSize               128           % number of grid points per side
+GridSize               256           % number of grid points per side
 RandomSeed             486604       % random seed for initial conditions
+
+
+# cuFFTMP
+Constrain_dim0        1
+Constrain_dim1        1
+Constrain_dim2        1
 
 # cosmology
 Omega0                 0.25         % Omega_0 (total matter)

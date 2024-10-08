@@ -28,11 +28,8 @@ CubicSpline* custom_cubic_spline_alloc(int size);
 void custom_cubic_spline_init(CubicSpline* spline, double* x_data, double* y_data, int size);
 
 double custom_cubic_spline_eval(CubicSpline* spline, double x);
-#pragma omp declare target(custom_cubic_spline_eval)
 
 double use_custom_spline(double, int);
-#pragma omp declare target(my_spline)
-#pragma omp declare target(use_custom_spline)
 
 void custom_cubic_spline_free(CubicSpline* spline);
 
