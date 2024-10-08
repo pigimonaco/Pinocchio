@@ -31,12 +31,14 @@ RUNDIR = ./
 
 # Executable name #
 
-EXEC = pinocchio_GPU.x
+EXEC = pinocchio.x
 
 # Compilation options #
 
-DEBUG = NO
-OMP   = NO
+DEBUG = YES
+OMP   = YES
+
+all: pinocchio_cufftmp
 
 ########## Preprocessor Definitions ########## 
 
@@ -88,15 +90,18 @@ OPTIONS += -DELL_CLASSIC
 OPTIONS += -DNORADIATION
 # OPTIONS += -DPRINTJUNK
 
-OPTIONS += -DGPU_INTERPOLATION
+# OPTIONS += -DGPU_INTERPOLATION
 # OPTIONS += -DCUSTOM_INTERPOLATION
+
+# offloading options
+OPTIONS += -DCUFFTMP
 
 ########## Preprocessor Definitions end ########## 
 
 # OpenMP Configuration #
 
 ifeq ($(OMP), YES)
-# OPTIONS += -DUSE_FFT_THREADS
+OPTIONS += -DUSE_FFT_THREADS
 OMP_FLAG = -fopenmp
 OMP_FFTW = -lfftw3_omp
 else
@@ -127,23 +132,42 @@ endif
 ###################### LEONARDO ######################
 
 ifeq ($(SYSTYPE),"LEONARDO")
-CC          = nvc
-# CC          = mpicc
-# CDEBUG      = -ggdb3 -Wall 
-# COPTIMIZED  = -acc -gpu=ccnative -Minfo=accel
-# COPTIMIZED  = $(OMP_FLAG)
-COPTIMIZED  = -mp=gpu -gpu=cc80 -target=gpu -gpu=managed -Minfo=all 
-# COPTIMIZED  = -g -mp=gpu -gpu=ccnative,debug,lineinfo -target=gpu -Minfo=all -v
+CC          =  mpicc
+CXX         =  mpic++
+CDEBUG      = -g -O0 -Wall $(OMP_FLAG)
+COPTIMIZED  = -O3 -Wno-unused-result $(OMP_FLAG)
+#COPTIMIZED  = -mp=gpu -gpu=cc80  -gpu=managed -Minfo=mp $(OMP_FLAG)                                                                                                                                                                          
+# COPTIMIZED  = -O3 -Wno-unused-result -foffload=-lm -fno-fast-math -fno-associative-math $(OMP_FLAG)                                                                                                                                         
 FFTW_LIBR   = -L/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/fftw-3.3.10-aqomamymhcna6zjrd6nlrync7oag4fkg/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
 FFTW_INCL   = -I/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/fftw-3.3.10-aqomamymhcna6zjrd6nlrync7oag4fkg/include
-PFFT_LIBR   = -L$(HOME)/lib -lpfft
-PFFT_INCL   = -I$(HOME)/include
-
-MPI_LIBR    = -L/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/openmpi-4.1.4-si334jjzldoxyl3jbbb3cf6legzshlqn/lib -lmpi
-MPI_INCL    = -I/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/openmpi-4.1.4-si334jjzldoxyl3jbbb3cf6legzshlqn/include
-GSL_LIBR    = -L$(GSL_LIB) -lgsl -lgslcblas -lm
-GSL_INCL    = -I$(GSL_INC)
+PUBLIC      = /leonardo/pub/userexternal/glacopo0/
+PFFT_LIBR   = -L$(PUBLIC)/PFFT/lib -lpfft
+PFFT_INCL   = -I$(PUBLIC)/PFFT/include
+CUDA_LIB    = -L/leonardo/prod/opt/compilers/cuda/12.1/none/lib64 -lcuda -lcudart -lnvidia-ml
+CUDA_INCL   = -I/leonardo/prod/opt/compilers/cuda/12.1/none/include
+# NVSHMEM_INC = -I/leonardo/prod/spack/5.2/install/0.21/linux-rhel8-icelake/gcc-8.5.0/nvhpc-23.11-wnrvac5a7nx7cnbtaamktaaqljmgorva/Linux_x86_64/23.11/comm_libs/nvshmem/include                                                               
+# NVSHMEM_LIB = -L/leonardo/prod/spack/5.2/install/0.21/linux-rhel8-icelake/gcc-8.5.0/nvhpc-23.11-wnrvac5a7nx7cnbtaamktaaqljmgorva/Linux_x86_64/23.11/comm_libs/nvshmem/lib -lnvshmem_host -lnvshmem_device                                   
+CUFFT_LIB   = -L/leonardo/prod/spack/5.2/install/0.21/linux-rhel8-icelake/gcc-8.5.0/nvhpc-23.11-wnrvac5a7nx7cnbtaamktaaqljmgorva/Linux_x86_64/23.11/math_libs/lib64 -lcufftMp
+CUFFT_INCL  = -I/leonardo/prod/spack/5.2/install/0.21/linux-rhel8-icelake/gcc-8.5.0/nvhpc-23.11-wnrvac5a7nx7cnbtaamktaaqljmgorva/Linux_x86_64/23.11/math_libs/include/cufftmp
+# MPI_LIBR    = -L/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/openmpi-4.1.4-si334jjzldoxyl3jbbb3cf6legzshlqn/lib -lmpi                                                                                                
+# MPI_INCL    = -I/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/openmpi-4.1.4-si334jjzldoxyl3jbbb3cf6legzshlqn/include                                                                                                  
+GSL_LIBR    = -L/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/gsl-2.7.1-wsvpkwadh36phlaba3key5sd4cemsxds/lib -lgsl -lgslcblas -lm
+GSL_INCL    = -I/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/gsl-2.7.1-wsvpkwadh36phlaba3key5sd4cemsxds/include
 endif
+
+
+ifeq (CUFFTMP,$(findstring CUFFTMP,$(OPTIONS)))
+# included libraries, shared libraries                                                                                                                                                                                                        
+INC =  $(PFFT_INCL) $(FFTW_INCL) $(MPI_INCL) $(GSL_INCL) $(CUDA_INCL) $(NVSHMEM_INC) $(CUFFT_INCL)
+LIB =  -lm $(PFFT_LIBR) $(FFTW_LIBR) $(MPI_LIBR) $(GSL_LIBR) $(CUDA_LIB) $(NVSHMEM_LIB) $(CUFFT_LIB)
+else
+# included libraries, shared libraries
+
+
+INC =  $(PFFT_INCL) $(FFTW_INCL) $(MPI_INCL) $(GSL_INCL)
+LIB =  -lm $(PFFT_LIBR) $(FFTW_LIBR) $(MPI_LIBR) $(GSL_LIBR)
+endif
+
 
 ###################### PLEIADI ######################
 
@@ -195,13 +219,16 @@ endif
 
 ########## System-specific Configuration end ########## 
 
-# Include paths for libraries #
+ifeq (CUFFTMP,$(findstring CUFFTMP,$(OPTIONS)))
+# included libraries, shared libraries 
+INC =  $(PFFT_INCL) $(FFTW_INCL) $(MPI_INCL) $(GSL_INCL) $(CUDA_INCL) $(NVSHMEM_INC) $(CUFFT_INCL)
+LIB =  -lm $(PFFT_LIBR) $(FFTW_LIBR) $(MPI_LIBR) $(GSL_LIBR) $(CUDA_LIB) $(NVSHMEM_LIB) $(CUFFT_LIB)
+else
+# included libraries, shared libraries 
+INC =  $(PFFT_INCL) $(FFTW_INCL) $(MPI_INCL) $(GSL_INCL) 
+LIB =  -lm $(PFFT_LIBR) $(FFTW_LIBR) $(MPI_LIBR) $(GSL_LIBR) 
+endif
 
-INC =  $(PFFT_INCL) $(FFTW_INCL) $(MPI_INCL) $(GSL_INCL)
-
-# Library flags #
-
-LIB =  -lm $(PFFT_LIBR) $(FFTW_LIBR) $(MPI_LIBR) $(GSL_LIBR)
 
 # Compiler options : choose from CDEBUG or COPTIMIZED #
 
@@ -213,27 +240,32 @@ endif
 
 # Source files #
 
-OBJECTS = fmax.o  variables.o  my_cubic_spline_interpolation.o  cosmo.o initialization.o tmp_GPU_collapse_times.o fmax-pfft.o GenIC.o \
+OBJECTS = fmax.o  variables.o cosmo.o initialization.o collapse_times.o fmax-pfft.o GenIC.o \
 	ReadParamfile.o allocations.o LPT.o distribute.o \
 	fragment.o build_groups.o write_halos.o write_snapshot.o
 
-# Main targets and rules
+ifeq (CUFFTMP,$(findstring CUFFTMP,$(OPTIONS)))
+NVCC               = nvcc
+#OBJECTS            += cuda_functions.o                                                                                                                                                                                                       
+COMPTIMIZED_NVIDIA = -O0 -g -G -std=c++17 --generate-code arch=compute_80,code=sm_80
+cuda_functions.o: cuda_functions.cu pinocchio.h
+	$(NVCC) $(INC) $(COMPTIMIZED_NVIDIA) $(OPTIONS) -c $< $(LIB)
+endif
 
-pinocchio: $(OBJECTS) pinocchio.o Makefile
-	$(CC) $(INC) $(COPTS) -o $(RUNDIR)$(EXEC) pinocchio.o $(OBJECTS) $(LIB)
-
-run_planner: $(OBJECTS) run_planner.o Makefile
-	$(CC) $(INC) $(COPTS) -o run_planner run_planner.o $(OBJECTS) $(LIB)	
-
-
-# Generic rule for compiling source files #
-
+# rules                                                                                                                                                                                                                                       
 %.o: %.c Makefile pinocchio.h def_splines.h
 	$(CC) $(INC) $(COPTS) $(OPTIONS) -c $<
 
-# Clean target #
+ifeq (CUFFTMP,$(findstring CUFFTMP,$(OPTIONS)))
+pinocchio_cufftmp: $(OBJECTS) pinocchio.o cuda_functions.o Makefile
+	$(CXX) $(INC) $(COPTS) -o $(RUNDIR)$(EXEC) pinocchio.o cuda_functions.o $(OBJECTS) $(LIB)
+else
+pinocchio: $(OBJECTS) pinocchio.o Makefile
+	$(CC) $(INC) $(COPTS) -o $(RUNDIR)$(EXEC) pinocchio.o $(OBJECTS) $(LIB)
+endif
+
+run_planner: $(OBJECTS) run_planner.o Makefile
+	$(CC) $(INC) $(COPTS) -o run_planner run_planner.o $(OBJECTS) $(LIB)
 
 clean:
 	\rm -f *.o *~ $(EXEC) run_planner
-
-

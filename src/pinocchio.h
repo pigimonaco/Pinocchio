@@ -23,6 +23,13 @@
 #include <gperftools/profiler.h>
 #endif
 
+#ifdef __CUDACC__
+#include <cuda_runtime.h>
+#include <complex.h>
+#include <cuComplex.h>
+#include <cufftMp.h>
+#endif
+
 /* this library is used to vectorize the computation of collapse times */
 /* #if !(defined(__aarch64__) || defined(__arm__)) */
 /* #include <immintrin.h> */
@@ -186,8 +193,6 @@ extern char *main_memory, *wheretoplace_mycat;
 
 extern product_data *products, *frag;
 
-// #pragma omp declare target(products)
-
 extern unsigned int *cubes_ordering;
 
 extern unsigned int **seedtable;
@@ -196,8 +201,6 @@ extern double **kdensity;
 extern double **density;
 extern double ***first_derivatives;
 extern double ***second_derivatives;
-
-// #pragma omp declare target(second_derivatives)
 
 extern double **VEL_for_displ;
 
@@ -223,6 +226,22 @@ typedef struct
 extern smoothing_data Smoothing;
 
 extern int Ngrids;
+
+#ifdef __CUDACC__
+typedef struct
+{
+  unsigned int           total_local_size, total_local_size_fft;
+  unsigned int           off, ParticlesPerTask;
+  long long int          GSglobal[3];
+  long long int          GSlocal[3];
+  long long int          GSstart[3];
+  long long int          GSlocal_k[3];
+  long long int          GSstart_k[3];
+  double                 lower_k_cutoff, upper_k_cutoff, norm, BoxSize, CellSize;
+  cufftHandle            forward_plan, reverse_plan;
+  unsigned long long     Ntotal;
+} grid_data;
+#else
 typedef struct
 {
   unsigned int       total_local_size, total_local_size_fft;
@@ -236,6 +255,7 @@ typedef struct
   pfft_plan          forward_plan, reverse_plan;
   unsigned long long Ntotal;
 } grid_data;
+#endif
 extern grid_data *MyGrids;
 
 
@@ -406,12 +426,12 @@ typedef struct
 } mf_data;
 extern mf_data mf;
 
-#ifdef GPU_INTERPOLATION
-// #ifdef CUSTOM_INTERPOLATION
-#include "my_cubic_spline_interpolation.h"
-CubicSpline **my_spline;
-#pragma omp declare target(my_spline)
-#endif
+/* #ifdef GPU_INTERPOLATION */
+/* // #ifdef CUSTOM_INTERPOLATION */
+/* #include "my_cubic_spline_interpolation.h" */
+/* CubicSpline **my_spline; */
+/* #pragma omp declare target(my_spline) */
+/* #endif */
 
 // Declarations for the variables
 extern gsl_spline **SPLINE;
@@ -496,11 +516,24 @@ int reset_collapse_times(int);
 #endif
 
 /* prototypes for functions defined in fmax-fftw.c */
+#ifdef __CUDACC__
+extern "C"
+int set_one_grid(int);
+extern "C"
+int compute_fft_plans();
+extern "C"
+double forward_transform(int);
+extern "C"
+double reverse_transform(int);
+extern "C"
+int finalize_fft();
+#else
 int set_one_grid(int);
 int compute_fft_plans();
 double forward_transform(int);
 double reverse_transform(int);
 int finalize_fft();
+#endif
 int compute_derivative(int, int, int);
 void write_in_cvector(int, double *);
 void write_from_cvector(int, double *);
@@ -560,10 +593,10 @@ double GrowingMode_2LPT(double,double);
 double GrowingMode_3LPT_1(double,double);
 double GrowingMode_3LPT_2(double,double);
 double InverseGrowingMode(double,int);
-#ifdef GPU_INTERPOLATION
-// #ifdef CUSTOM_INTERPOLATION
-#pragma omp declare target (InverseGrowingMode)
-#endif
+/* #ifdef GPU_INTERPOLATION */
+/* // #ifdef CUSTOM_INTERPOLATION */
+/* #pragma omp declare target (InverseGrowingMode) */
+/* #endif */
 double ComovingDistance(double);
 double InverseComovingDistance(double);
 double dComovingDistance_dz(double);
@@ -578,11 +611,11 @@ double dOmega_dVariance(double, double);
 double AnalyticMassFunction(double, double);
 double WindowFunction(double);
 double my_spline_eval(gsl_spline *, double, gsl_interp_accel *);
-#ifdef GPU_INTERPOLATION
-// #ifdef CUSTOM_INTERPOLATION
-double my_custom_spline_eval(CubicSpline *, double x);
-// #pragma omp declare target(my_custom_spline_eval)
-#endif
+/* #ifdef GPU_INTERPOLATION */
+/* // #ifdef CUSTOM_INTERPOLATION */
+/* double my_custom_spline_eval(CubicSpline *, double x); */
+/* // #pragma omp declare target(my_custom_spline_eval) */
+/* #endif */
 int jac(double, const double [], double *, double [], void *);
 
 /* prototypes for functions defined in ReadParamFile.c */
@@ -591,7 +624,12 @@ int read_parameter_file();
 /* prototypes for functions defined in fmax.c */
 int compute_fmax(void);
 int compute_displacements(void);
+#ifdef __CUDACC__
+extern "C"
 char *fdate(void);
+#else
+char *fdate(void);
+#endif
 int dump_products(void);
 int read_dumps(void);
 

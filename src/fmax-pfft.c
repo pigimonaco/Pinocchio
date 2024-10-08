@@ -40,8 +40,11 @@
 
 #define GRID MyGrids[ThisGrid]
 
+//Not useful when cufftMP is used
+//#if !defined(CUFFTMP)
 typedef ptrdiff_t point[3];
 point *starts;
+//#endif
 
 // -------------------------
 // functions' prototypes
@@ -73,8 +76,13 @@ int cubes_order(const void *A, const void *B)
 }
 
 
-
-
+/*
+GIOVANNI
+Redefine these functions involving FFT calls in a .cu extension file in which we can use
+the NVIDIA cufftMP library. The reason is that cufftMP needs some C++ abstract descriptors
+which don't have any counterpart in standard C
+*/
+#if !defined(CUFFTMP)
 int set_one_grid(int ThisGrid)
 {
   ptrdiff_t    alloc_local;
@@ -213,16 +221,16 @@ double reverse_transform(int ThisGrid)
   dvec         NORM   = {GRID.norm, GRID.norm, GRID.norm, GRID.norm};
   unsigned int mysize = GRID.total_local_size_fft / 4;
 
-// #pragma GCC ivdep  
-//   for (i = 0; i < mysize; i++)
-//     rvector_fft[ThisGrid][i] *= NORM;
+#pragma GCC ivdep  
+  for (i = 0; i < mysize; i++)
+    *((dvec*)rvector_fft[ThisGrid] + i) *= NORM;
     
   for (i = GRID.total_local_size_fft - GRID.total_local_size_fft%4 ; i < GRID.total_local_size_fft; i++)
     rvector_fft[ThisGrid][i] *= GRID.norm;
 
   // non-vector code 
-  for (i = 0 ; i < GRID.total_local_size_fft; i++)
-      rvector_fft[ThisGrid][i] *= GRID.norm;
+  /* for (i = 0 ; i < GRID.total_local_size_fft; i++) */
+  /*   rvector_fft[ThisGrid][i] *= GRID.norm; */
 
   return MPI_Wtime() - time;
 }
@@ -236,6 +244,7 @@ int finalize_fft()
   for (ThisGrid = Ngrids-1; ThisGrid >= 0; ThisGrid--)
     {
       pfft_destroy_plan(GRID.forward_plan);
+      pfft_destroy_plan(GRID.reverse_plan);
     }
 
   /* for (ThisGrid = Ngrids-1; ThisGrid >= 0; ThisGrid--) */
@@ -250,7 +259,7 @@ int finalize_fft()
 
   return 0;
 }
-
+#endif //close if !defined(CUFFTMP)
 
 int compute_derivative(int ThisGrid, int first_derivative, int second_derivative)
 {
@@ -380,7 +389,6 @@ int compute_derivative(int ThisGrid, int first_derivative, int second_derivative
 		  double diff_comp[4];
 		  
 		  // the components are stored in the vectors that control the differentiation
-      
 		  diff_comp[0] = 1.0;
 		  diff_comp[1] = k_x;
 		  diff_comp[2] = k_y;
