@@ -44,7 +44,7 @@ typedef struct
 #endif
 #endif
 } pos_data;
-extern pos_data obj, obj1, obj2;
+pos_data obj, obj1, obj2;
 
 typedef struct
 {

@@ -1,11 +1,11 @@
 # This is an example parameter file for the Pinocchio 4.0 code
 
 # run properties
-RunFlag                example      % name of the run
+RunFlag                log          % name of the run
 OutputList             outputs      % name of file with required output redshifts
-BoxSize                500.0        % physical size of the box in Mpc
+BoxSize                256          % physical size of the box in Mpc
 BoxInH100                           % specify that the box is in Mpc/h
-GridSize               200          % number of grid points per side
+GridSize               128          % number of grid points per side
 RandomSeed             486604       % random seed for initial conditions
 
 # cosmology
@@ -26,15 +26,16 @@ InputSpectrum_UnitLength_in_cm 0    % units of tabulated P(k), or 0 if it is in 
 WDM_PartMass_in_kev    0.0          % WDM cut following Bode, Ostriker & Turok (2001)
 
 # control of memory requirements
-BoundaryLayerFactor    1.0          % width of the boundary layer for fragmentation
-MaxMem                 3600         % max available memory to an MPI task in Mbyte
+BoundaryLayerFactor    3.0          % width of the boundary layer for fragmentation
+MaxMem                 60768        % max available memory to an MPI task in Mbyte
 MaxMemPerParticle      300          % max available memory in bytes per particle
+PredPeakFactor         0.8          % guess for the number of peaks in the subvolume
 
 # output
 CatalogInAscii                      % catalogs are written in ascii and not in binary format
 OutputInH100                        % units are in H=100 instead of the true H value
 NumFiles               1            % number of files in which each catalog is written
-MinHaloMass            10           % smallest halo that is given in output
+MinHaloMass            100          % smallest halo that is given in output
 AnalyticMassFunction   9            % form of analytic mass function given in the .mf.out files
 
 # output options:
@@ -42,7 +43,7 @@ AnalyticMassFunction   9            % form of analytic mass function given in th
 % DoNotWriteCatalogs                % skips the writing of full catalogs (including PLC)
 % DoNotWriteHistories               % skips the writing of merger histories
 
-# for debugging or development purposes:
+# for debugging or development purposes: si possono togliere del tutto 
 % WriteFmax                         % writes the values of the Fmax field, particle by particle
 % WriteVmax                         % writes the values of the Vmax field, particle by particle
 % WriteRmax                         % writes the values of the Rmax field, particle by particle

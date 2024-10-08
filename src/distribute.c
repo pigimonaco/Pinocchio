@@ -26,276 +26,82 @@
 
 #include "pinocchio.h"
 
-//#define VERBOSE
+#define BUFLEN 50000
 
-typedef struct
-{
-  int task,box_x,box_y,box_z,bz,gz,flag,check;  // flag si puo` levare...
-} comm_struct;
+//#define DEBUG
 
-static int largest_size;
-static product_data *sub_plane;
+static product_data *comm_buffer;
+#ifndef CLASSIC_FRAGMENTATION
+static unsigned long long frag_offset;
+#endif
 
-int find_task(int, int, int, int, int *, int *, int *);
-int send_data(comm_struct *);
-int recv_data(comm_struct *);
-int keep_data(comm_struct *);
+int intersection(int *, int *, int *);
+int send_data(int *, int);
+int recv_data(int *, int);
+int keep_data(int *, int *);
+unsigned int fft_space_index(unsigned int, int *);
+unsigned int subbox_space_index(unsigned int, int *);
+#ifndef CLASSIC_FRAGMENTATION
+int get_distmap_bit(unsigned int *, unsigned int);
+void set_distmap_bit(unsigned int *, unsigned int, int);
+void build_distmap(unsigned int *, int *);
+void update_distmap(unsigned int *, int *);
+#endif
+
+#ifdef DEBUG
+FILE *DBGFD;
+#endif
 
 int distribute(void)
 {
-  /*
-  Distributes products from planes to sub-volumes, including boundary layers
-  */
+  /* Distributes products from fft-space to sub-volumes */
 
-  int global_z, *belongs_local, *belongs_global;
-  int i1,i2,i3,main_task,second_task,sender,box_z,second_z;
+  int my_fft_box[6],my_subbox[6];
+  int log_ntask, bit, receiver, sender;
 
-  int log_ntask,bit,receiver,ss,rr,dd,turn,i,count_send,count_recv,count_keep,isend,irecv;
-  comm_struct *comm_send, *comm_recv, *comm_keep;
+  /* this defines the box that the task possesses in the FFT space */
+  my_fft_box[0] = MyGrids[0].GSstart[_x_];
+  my_fft_box[1] = MyGrids[0].GSstart[_y_];
+  my_fft_box[2] = MyGrids[0].GSstart[_z_];
+  my_fft_box[3] = MyGrids[0].GSlocal[_x_];
+  my_fft_box[4] = MyGrids[0].GSlocal[_y_];
+  my_fft_box[5] = MyGrids[0].GSlocal[_z_];
+
+  /* this defines the box that the task possesses in the subbox space 
+     (the starting coordinate may be negative) */
+  my_subbox[0] = subbox.stabl[_x_];
+  my_subbox[1] = subbox.stabl[_y_];
+  my_subbox[2] = subbox.stabl[_z_];
+  my_subbox[3] = subbox.Lgwbl[_x_];
+  my_subbox[4] = subbox.Lgwbl[_y_];
+  my_subbox[5] = subbox.Lgwbl[_z_];
+
+#ifdef DEBUG
+  char fname[SBLENGTH];
+  sprintf(fname,"Task%d.dbg",ThisTask);
+  DBGFD = fopen(fname,"a");
+#endif
 
   /* let's synchronize the tasks here */
   fflush(stdout);
   MPI_Barrier(MPI_COMM_WORLD);
 
-#ifdef VERBOSE
-  printf("\n");
-  printf("task %d, plan of sub-boxes:  %d %d %d - %d %d %d/%d - %d %d %d - %d %d %d - %d %d %d - %d %d %d - %d %d %d\n",
-	 ThisTask,MyGrids[0].GSlocal_x,MyGrids[0].GSlocal_y,MyGrids[0].GSlocal_z,
-	 subbox.nbox_x, subbox.nbox_y, subbox.nbox_z_thisslice, subbox.nbox_z_allslices,
-	 subbox.mybox_x,subbox.mybox_y,subbox.mybox_z,
-	 subbox.Lgrid_x,subbox.Lgrid_y,subbox.Lgrid_z,
-	 subbox.start_x,subbox.start_y,subbox.start_z,
-	 subbox.Lgwbl_x,subbox.Lgwbl_y,subbox.Lgwbl_z,
-	 subbox.stabl_x,subbox.stabl_y,subbox.stabl_z);
-  fflush(stdout);
-  MPI_Barrier(MPI_COMM_WORLD);
+  /* these are the already stored particles */
+#ifndef CLASSIC_FRAGMENTATION
+  frag_offset=subbox.Nneeded;
 #endif
 
-  /* here it builds a map of which task owns which plane */
-  /* NB: here it is assumed that tasks are distributed by planes */
+  /* stores the data relative to the intersection of the fft box and subbox */
+  if (keep_data(my_fft_box, my_subbox))
+    return 1;
 
-  belongs_local  = (int*)malloc(MyGrids[0].GSglobal_z*sizeof(int));
-  belongs_global = (int*)malloc(MyGrids[0].GSglobal_z*sizeof(int));
-  for (global_z=0; global_z<MyGrids[0].GSglobal_z; global_z++)
+  comm_buffer=(product_data*)calloc(BUFLEN , sizeof(product_data));
+  if (comm_buffer==0x0)
     {
-      belongs_global[global_z]=0;
-      if (global_z >= MyGrids[0].GSstart_z && global_z < MyGrids[0].GSstart_z + MyGrids[0].GSlocal_z)
-	belongs_local[global_z]=ThisTask;
-      else
-	belongs_local[global_z]=0;
-    }  
-
-  if (MPI_Reduce(belongs_local, belongs_global, 
-		 MyGrids[0].GSglobal_z, MPI_INT, MPI_SUM, 0, 
-		 MPI_COMM_WORLD) != MPI_SUCCESS)
-    {
-      printf("ERROR on task %d: distribute could not perform an MPI_Reduce\n",ThisTask);
+      printf("ERROR on task %d: could not allocate comm_buffer in distribute\n",ThisTask);
       fflush (stdout);
       return 1;
     }
-
-  if (MPI_Bcast(belongs_global, MyGrids[0].GSglobal_z, 
-		MPI_INT, 0, MPI_COMM_WORLD) != MPI_SUCCESS)
-    {
-      printf("ERROR on task %d: distribute could not perform an MPI_Bcast\n",ThisTask);
-      fflush (stdout);
-      return 1;
-    }
-
-  /* loop on global planes to count the number of communications needed */
-  /* i3 is the counter of sub-boxes, on the z direction, updated at the end of the do cycle */
-
-  for (global_z = i3=count_send=count_recv=count_keep=0; global_z<MyGrids[0].GSglobal_z; global_z++)
-    {
-      /* updates the z-sub-box index if necessary
-         NB: i3 is related to the complete box, with all slices */
-      if (i3<subbox.nbox_z_allslices-1 && global_z==find_start(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,i3+1))
-        i3++;
-
-       /* loop on all sub-planes, that is sub-boxes on the plane */
-      for (i2=0; i2<subbox.nbox_y; i2++)
-	for (i1=0; i1<subbox.nbox_x; i1++)
-	  {
-
-	    /* find the main and second task that will need the sub-plane */
-	    main_task = find_task(global_z, i1, i2, i3, &second_task, &box_z, &second_z);
-
-	    /* check if the task must send, receive or keep data */
-	    if (belongs_global[global_z]==ThisTask)
-	      {
-		if (main_task==ThisTask)
-		  count_keep++;
-		else if (main_task>=0)
-		  count_send++;
-
-		if (second_task==ThisTask)
-		  count_keep++;
-		else if (second_task>=0)
-		  count_send++;
-	      }
-
-	    if (main_task==ThisTask && belongs_global[global_z]!=ThisTask)
-	      count_recv++;
-
-	    if (second_task==ThisTask && belongs_global[global_z]!=ThisTask)
-              count_recv++;
-	  }
-    }
-  /* allocate buffers for sendind, receiving, and keeping */
-
-  comm_send=(comm_struct*)malloc(count_send * sizeof(comm_struct));
-  comm_recv=(comm_struct*)malloc(count_recv * sizeof(comm_struct));
-  comm_keep=(comm_struct*)malloc(count_keep * sizeof(comm_struct));
-
-  /* loop on global planes to record the needed communications */
-  for (global_z = i3=count_send=count_recv=count_keep=0; global_z<MyGrids[0].GSglobal_z; global_z++)
-    {
-      /* updates the z-sub-box index if necessary */
-      if (i3<subbox.nbox_z_allslices-1 && global_z==find_start(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,i3+1))
-        i3++;
-
-       /* loop on all sub-planes, that is sub-boxes on the plane */
-      for (i2=0; i2<subbox.nbox_y; i2++)
-	for (i1=0; i1<subbox.nbox_x; i1++)
-	  {
-
-	    /* find the main and second task that will need the sub-plane */
-	    main_task = find_task(global_z, i1, i2, i3, &second_task, &box_z, &second_z);
-
-	    /* store the information */
-	    if (belongs_global[global_z]==ThisTask)
-	      {
-		if (main_task==ThisTask)
-		  {
-		    comm_keep[count_keep  ].task  = ThisTask;   /* sender or receiver */
-		    comm_keep[count_keep  ].box_x = i1;         /* x-index of subbox to be processed */ 
-		    comm_keep[count_keep  ].box_y = i2;         /* y-index of subbox to be processed */ 
-		    comm_keep[count_keep  ].box_z = i3;         /* z-index (global) of subbox to be processed */ 
-		    comm_keep[count_keep  ].gz    = global_z;   /* global plane where to find data */
-		    comm_keep[count_keep  ].bz    = box_z;      /* local plane where to store data */
-		    comm_keep[count_keep  ].flag  = 1;
-		    comm_keep[count_keep++].check = 0;
-		  }
-		else if (main_task>=0)
-		  {
-		    comm_send[count_send  ].task  = main_task;
-		    comm_send[count_send  ].box_x = i1;
-		    comm_send[count_send  ].box_y = i2;
-		    comm_send[count_send  ].box_z = i3;
-		    comm_send[count_send  ].gz    = global_z;		    
-		    comm_send[count_send  ].bz    = box_z;
-		    comm_send[count_send  ].flag  = 1;
-		    comm_send[count_send++].check = 0;
-		  }
-
-		if (second_task==ThisTask)
-		  {
-		    comm_keep[count_keep  ].task  = ThisTask;
-		    comm_keep[count_keep  ].box_x = i1;
-		    comm_keep[count_keep  ].box_y = i2;
-		    comm_keep[count_keep  ].box_z = i3;
-		    comm_keep[count_keep  ].gz    = global_z;
-		    comm_keep[count_keep  ].bz    = second_z;
-		    comm_keep[count_keep  ].flag  = 2;
-		    comm_keep[count_keep++].check = 0;
-		  }
-		else if (second_task>=0)
-		  {
-		    comm_send[count_send  ].task  = second_task;
-		    comm_send[count_send  ].box_x = i1;
-		    comm_send[count_send  ].box_y = i2;
-		    comm_send[count_send  ].box_z = i3;
-		    comm_send[count_send  ].gz    = global_z;
-		    comm_send[count_send  ].bz    = second_z;
-		    comm_send[count_send  ].flag  = 2;
-		    comm_send[count_send++].check = 0;
-		  }
-	      }
-
-	    if (main_task==ThisTask && belongs_global[global_z]!=ThisTask)
-	      {
-		comm_recv[count_recv  ].task  = belongs_global[global_z];
-		comm_recv[count_recv  ].box_x = i1;
-		comm_recv[count_recv  ].box_y = i2;
-		comm_recv[count_recv  ].box_z = i3;
-		comm_recv[count_recv  ].gz    = global_z;
-		comm_recv[count_recv  ].bz    = box_z;
-		comm_recv[count_recv  ].flag  = 1;
-		comm_recv[count_recv++].check = 0;
-	      }
-
-	    if (second_task==ThisTask && belongs_global[global_z]!=ThisTask)
-	      {
-		comm_recv[count_recv  ].task  = belongs_global[global_z];
-		comm_recv[count_recv  ].box_x = i1;
-		comm_recv[count_recv  ].box_y = i2;
-		comm_recv[count_recv  ].box_z = i3;
-		comm_recv[count_recv  ].gz    = global_z;
-		comm_recv[count_recv  ].bz    = second_z;
-		comm_recv[count_recv  ].flag  = 2;
-		comm_recv[count_recv++].check = 0;
-	      }
-	  }
-    }
-
-#ifdef VERBOSE
-  int itask;
-  for (itask=0; itask<NTasks; itask++)
-    {
-      if (ThisTask==itask)
-	{
-	  printf("Task %d\n",ThisTask);
-	  printf("keep_data: %d\n",count_keep);
-	  for (i=0; i<count_keep; i++)
-	    printf("task=%d, box_x=%d, box_y=%d, box_z=%d, global_z=%d, local_z=%d, flag=%d\n",
-		   comm_keep[i].task,
-		   comm_keep[i].box_x,
-		   comm_keep[i].box_y,
-		   comm_keep[i].box_z,
-		   comm_keep[i].gz,
-		   comm_keep[i].bz,
-		   comm_keep[i].flag);
-	  printf("send_data: %d\n",count_send);
-	  for (i=0; i<count_send; i++)
-	    printf("task=%d, box_x=%d, box_y=%d, box_z=%d, global_z=%d, local_z=%d, flag=%d\n",
-		   comm_send[i].task,
-		   comm_send[i].box_x,
-		   comm_send[i].box_y,
-		   comm_send[i].box_z,
-		   comm_send[i].gz,
-		   comm_send[i].bz,
-		   comm_send[i].flag);
-	  printf("recv_data: %d\n",count_recv);
-	  for (i=0; i<count_recv; i++)
-	    printf("task=%d, box_x=%d, box_y=%d, box_z=%d, global_z=%d, local_z=%d, flag=%d\n",
-		   comm_recv[i].task,
-		   comm_recv[i].box_x,
-		   comm_recv[i].box_y,
-		   comm_recv[i].box_z,
-		   comm_recv[i].gz,
-		   comm_recv[i].bz,
-		   comm_recv[i].flag);
-	}
-    }
-#endif
-
-  largest_size=(find_length(MyGrids[0].GSglobal_x,subbox.nbox_x,0) + 2.*subbox.safe_x) *
-    (find_length(MyGrids[0].GSglobal_y,subbox.nbox_y,0) + 2.*subbox.safe_y);
-  sub_plane=(product_data*)malloc(largest_size * sizeof(product_data));
-  if (sub_plane==0x0)
-    {
-      printf("ERROR on task %d: could not allocate sub_plane in distribute\n",ThisTask);
-      fflush (stdout);
-      return 1;
-    }
-
-  /* assign the bunches of memory that should not be communicated */
-  for (i=0; i<count_keep; i++)
-    {
-      if (keep_data(comm_keep+i))
-	return 1;
-      comm_keep[i].check=1;
-    }  
 
   /* hypercubic communication scheme */
   for (log_ntask=0; log_ntask<1000; log_ntask++)
@@ -315,44 +121,23 @@ int distribute(void)
 	  if (receiver < NTasks && sender < receiver)
 	    {
 
-	      /* the communication will be done sender -> receiver and receiver -> sender */
-	      ss=sender;
-	      rr=receiver;
-#ifdef VERBOSE
-	      if (!ThisTask)
-		printf("COMMUNICATION %d %d\n",ss,rr);
-#endif
-	      for (turn=0; turn<2; turn++)
-		{
-		  if (ThisTask==ss)
-		    {
-		      for (isend=0; isend<count_send; isend++)
-			if (comm_send[isend].task==rr)
-			  {
-			    if (comm_send[isend].check) 
-			      printf("CASINO SEND %d %d %d %d\n",ThisTask,rr,ss,isend);
-			    if (send_data(comm_send+isend))
-			      return 1;
-			    comm_send[isend].check=1;
-			  }
-		    }
-		  else if (ThisTask==rr)
-		    {
-		      for (irecv=0; irecv<count_recv ; irecv++)
-			if (comm_recv[irecv].task==ss)
-			  {
-			    if (comm_recv[irecv].check) 
-			      printf("CASINO RECV %d %d %d %d\n",ThisTask,rr,ss,isend);
-			    if (recv_data(comm_recv+irecv))
-			      return 1;
-			    comm_recv[irecv].check=1;
-			  }
-		    }		
+	      /* the communication will be done 
+		 first sender -> receiver and then receiver -> sender */
 
-		  /* exchanges sender and receiver */
-		  dd=rr;
-		  rr=ss;
-		  ss=dd;
+	      if (ThisTask==sender)
+		send_data(my_fft_box, receiver);
+	      else if (ThisTask==receiver)
+		{
+		  if (recv_data(my_subbox, sender))
+		    return 1;
+		}
+
+	      if (ThisTask==receiver)
+		send_data(my_fft_box, sender);
+	      else if (ThisTask==sender)
+		{
+		  if (recv_data(my_subbox, receiver))
+		    return 1;
 		}
 
 	    }
@@ -360,25 +145,648 @@ int distribute(void)
     }
 
 
-  /* check that all wanted communications have been performed */
-  for (i=0; i<count_keep; i++)
-    if (!comm_keep[i].check) 
-      printf("CASINO FINALE KEEP %d %d %d\n",ThisTask,i,comm_keep[i].task);
-  for (i=0; i<count_send; i++)
-    if (!comm_send[i].check) 
-      printf("CASINO FINALE SEND %d %d %d\n",ThisTask,i,comm_send[i].task);
-  for (i=0; i<count_recv; i++)
-    if (!comm_recv[i].check) 
-      printf("CASINO FINALE RECV %d %d %d\n",ThisTask,i,comm_recv[i].task);
+  /* updates the number of stored particles */
+#ifdef CLASSIC_FRAGMENTATION
+  subbox.Nstored=subbox.Npart;
+#else
 
-  free(sub_plane);
+  if (frag_offset > subbox.Nalloc)
+    subbox.Nstored=subbox.Nalloc;
+  else
+    subbox.Nstored=frag_offset;
 
-  free(comm_keep);
-  free(comm_recv);
-  free(comm_send);
+  subbox.Nneeded=frag_offset;
 
-  free(belongs_global);
-  free(belongs_local);
+#endif
+
+  free(comm_buffer);
+
+  fflush(stdout);
+  MPI_Barrier(MPI_COMM_WORLD);
+
+#ifdef DEBUG
+  fclose(DBGFD);
+#endif
+
+  return 0;
+}
+
+
+int intersection(int *fbox, int *sbox, int *ibox)
+{
+
+  unsigned int istart[3], istop[3], istart2[3], istop2[3], dim, Nint,
+    stop1, stop2, this, off;
+  unsigned int ISTARTx, ISTOPx, ISTARTy, ISTOPy, ISTARTz, ISTOPz, ax, ay, az;
+
+  /* intersection of the two boxes is considered dimension by dimension */
+  Nint=1;
+  for (dim=0; dim<3; dim++)
+    {
+      /* in case, fix negative starting point */
+      if (sbox[dim]<0)
+	sbox[dim]+=MyGrids[0].GSglobal[dim];
+
+      /* first stopping point for subbox is at most the global box edge */
+      stop1=fbox[dim]+fbox[dim+3];
+      if (sbox[dim]+sbox[dim+3] > MyGrids[0].GSglobal[dim])
+	stop2=MyGrids[0].GSglobal[dim];
+      else
+	stop2=sbox[dim]+sbox[dim+3];
+
+      /* intersection up to the global box edge */
+      istart[dim] = ( fbox[dim] > sbox[dim] ? fbox[dim] : sbox[dim] );
+      istop[dim] = ( stop1 < stop2 ? stop1 : stop2 );
+
+      /* if the subbox goes beyond the global box edge, 
+	 apply PBCs to the other segment and check the intersection */
+      if ( (stop2=sbox[dim]+sbox[dim+3]) > MyGrids[0].GSglobal[dim] )
+	{
+	  stop2 = stop2%MyGrids[0].GSglobal[dim];
+	  istart2[dim] = ( fbox[dim] > 0 ? fbox[dim] : 0);
+	  istop2[dim] = ( stop1 < stop2 ? stop1 : stop2 );
+	}
+      else
+	{
+	  istart2[dim]=1;
+	  istop2[dim]=0;
+	}
+
+      /* this dimension contributes 0, 1 or 2 */
+      Nint *= (istart[dim] < istop[dim]) + (istart2[dim] < istop2[dim]);
+    }
+
+  /* store all intersections, looping on the two options for each dimension */
+  if (Nint)
+    {
+      this=0;
+      for (ax=0; ax<2; ax++)
+	{
+	  if (ax)
+	    {
+	      ISTARTx=istart[0];
+	      ISTOPx=istop[0];
+	    }
+	  else
+	    {
+	      ISTARTx=istart2[0];
+	      ISTOPx=istop2[0];
+	    }
+	  for (ay=0; ay<2; ay++)
+	    {
+	      if (ay)
+		{
+		  ISTARTy=istart[1];
+		  ISTOPy=istop[1];
+		}
+	      else
+		{
+		  ISTARTy=istart2[1];
+		  ISTOPy=istop2[1];
+		}
+	      for (az=0; az<2; az++)
+		{
+		  if (az)
+		    {
+		      ISTARTz=istart[2];
+		      ISTOPz=istop[2];
+		    }
+		  else
+		    {
+		      ISTARTz=istart2[2];
+		      ISTOPz=istop2[2];
+		    }
+
+		  if ( (ISTARTx<ISTOPx) & (ISTARTy<ISTOPy) & (ISTARTz<ISTOPz) )
+		    {
+		      off=this*6;
+		      ibox[  off]=ISTARTx;
+		      ibox[1+off]=ISTARTy;
+		      ibox[2+off]=ISTARTz;
+		      ibox[3+off]=ISTOPx-ISTARTx;
+		      ibox[4+off]=ISTOPy-ISTARTy;
+		      ibox[5+off]=ISTOPz-ISTARTz;
+		      this++;
+		    }
+		}
+	    }
+	}
+    }	  
+
+
+#ifdef DEBUG
+  fprintf(DBGFD,"INTERSECTION\n");
+  fprintf(DBGFD,"Task %d, fft box:        %d %d %d   %d %d %d\n",
+	 ThisTask,fbox[0],fbox[1],fbox[2],fbox[3],fbox[4],fbox[5]);
+  fprintf(DBGFD,"         subvolume:      %d %d %d   %d %d %d\n",
+	 sbox[0],sbox[1],sbox[2],sbox[3],sbox[4],sbox[5]);
+  for (this=0; this<Nint; this++)
+    {
+      off=this*6;
+      fprintf(DBGFD,"         intersection %d: %d %d %d   %d %d %d\n",
+	     this,ibox[off],ibox[1+off],ibox[2+off],ibox[3+off],ibox[4+off],ibox[5+off]);
+    }
+  if (!Nint)
+    fprintf(DBGFD,"        no intersections\n");
+#endif
+
+  return Nint;
+}
+
+
+int send_data(int *mybox, int target)
+{
+  /* This routine sends the content of a box to a target task.
+     Communication is divided in these stages:
+     1) the sender communicates the start and length of its box,
+     2) the sender receives the start and the length of the needed box,
+     3) intersection of the sender and target boxes is computed
+     4) if there is an intersection the sender receives a map of needed particles
+     5) the sender loops on particles and sends them in chunks of size BUFLEN
+  */
+  
+#ifndef CLASSIC_FRAGMENTATION
+  unsigned int *map, mapl;
+#endif
+  unsigned int size, bufcount;
+  int targetbox[6], interbox[48], i, Nint, box, off;
+  MPI_Status status;
+
+  MPI_Send(mybox    , 6, MPI_INT, target, 0, MPI_COMM_WORLD);
+  MPI_Recv(targetbox, 6, MPI_INT, target, 0, MPI_COMM_WORLD, &status);
+
+  /* up to 8 intersections of the two boxes */
+  Nint=intersection(mybox, targetbox, interbox);
+  for (box=0; box<Nint; box++)
+    {
+      off=box*6;
+      size = interbox[3+off] * interbox[4+off] * interbox[5+off];
+
+#ifdef DEBUG
+      fprintf(DBGFD,"Task %d will send this box: %d %d %d -- %d %d %d\n",
+	     ThisTask, interbox[0+off],interbox[1+off],interbox[2+off],
+	     interbox[3+off],interbox[4+off],interbox[5+off]);
+#endif
+
+#ifndef CLASSIC_FRAGMENTATION
+      /* receive the map of needed particles */
+      mapl = size/8 + 1;
+      map = (unsigned int*)calloc(mapl, sizeof(unsigned int));
+
+      /* the receiver has built its map and is sending it */
+      MPI_Recv(map, mapl, MPI_INT, target, 0, MPI_COMM_WORLD, &status);
+
+      /* updates the map and sends it back to the target */
+      update_distmap(map, interbox+off);
+      MPI_Send(map, mapl, MPI_INT, target, 0, MPI_COMM_WORLD);
+#endif
+
+      /* load particles on the buffer and send them to the target */
+      bufcount=0;
+      for (i=0; i<size; i++)
+	{
+#ifndef CLASSIC_FRAGMENTATION
+	  if (get_distmap_bit(map, i))
+#endif
+	    {
+	      memcpy(&comm_buffer[bufcount],&products[fft_space_index(i, interbox+off)],sizeof(product_data));
+	      //comm_buffer[bufcount] = products[fft_space_index(i, interbox+off)];
+	      //*(comm_buffer + bufcount) = *(products + fft_space_index(i, interbox+off));
+
+	      //fprintf(DBGFD," %d %d %d -- %f %f\n",i, fft_space_index(i, interbox+off),bufcount,
+	      //        products[fft_space_index(i, interbox+off)].Fmax, comm_buffer[bufcount].Fmax); // LEVARE!!!
+
+	      bufcount++;
+	    }
+	  if (bufcount==BUFLEN)
+	    {
+#ifdef DEBUG
+	      fprintf(DBGFD,"...sending %d products to Task %d... %d\n",bufcount,target,(int)sizeof(product_data));
+	      if (bufcount<10)
+		{
+		  for (int u=0; u<bufcount; u++)
+		    fprintf(DBGFD,"  %f  ",comm_buffer[u].Fmax);
+		  fprintf(DBGFD,"\n");
+		}
+	      else
+		{
+		  for (int u=0; u<5; u++)
+		    fprintf(DBGFD,"  %f  ",comm_buffer[u].Fmax);
+		  fprintf(DBGFD," ... ");
+		  for (int u=bufcount-5; u<bufcount; u++)
+		    fprintf(DBGFD,"  %f  ",comm_buffer[u].Fmax);
+		  fprintf(DBGFD,"\n");
+		}
+#endif
+	      MPI_Send(&bufcount, 1, MPI_INT, target, 0, MPI_COMM_WORLD);
+	      MPI_Send(comm_buffer, bufcount * sizeof(product_data), MPI_BYTE, target, 0, MPI_COMM_WORLD);
+	      bufcount=0;
+	    }
+	}
+
+      if (bufcount)
+	{
+#ifdef DEBUG
+	  fprintf(DBGFD,"...sending %d products to Task %d...\n",bufcount,target);
+	  if (bufcount<10)
+	    {
+	      for (int u=0; u<bufcount; u++)
+		fprintf(DBGFD,"  %f  ",comm_buffer[u].Fmax);
+	      fprintf(DBGFD,"\n");
+	    }
+	  else
+	    {
+	      for (int u=0; u<5; u++)
+		fprintf(DBGFD,"  %f  ",comm_buffer[u].Fmax);
+	      fprintf(DBGFD," ... ");
+	      for (int u=bufcount-5; u<bufcount; u++)
+		fprintf(DBGFD,"  %f  ",comm_buffer[u].Fmax);
+	      fprintf(DBGFD,"\n");
+	    }
+#endif
+	  MPI_Send(&bufcount, 1, MPI_INT, target, 0, MPI_COMM_WORLD);
+	  MPI_Send(comm_buffer, bufcount * sizeof(product_data), MPI_BYTE, target, 0, MPI_COMM_WORLD);
+	}
+
+#ifndef CLASSIC_FRAGMENTATION
+      free(map);
+#endif
+    }
+
+  /* done */
+  return 0;
+}
+
+
+int recv_data(int *mybox, int sender)
+{
+  /* This routine receives the content of a box from a sender task.
+     Communication is divided in these stages:
+     1) the target receives the start and length of sender box,
+     2) the target sends the start and the length of its box,
+     3) intersection of the sender and target boxes is computed
+     4) if there is an intersection the target sends a map of needed particles
+     5) the target loops on particles and receives them in chunks of size BUFLEN
+  */
+  
+#ifndef CLASSIC_FRAGMENTATION
+  unsigned int *map, mapl;
+  int nstore;
+#endif
+  unsigned int size, nsent, boff, expected, received;
+  int senderbox[6], interbox[48], i, Nint, box;
+  MPI_Status status;
+
+  MPI_Recv(senderbox, 6, MPI_INT, sender, 0, MPI_COMM_WORLD, &status);
+  MPI_Send(mybox    , 6, MPI_INT, sender, 0, MPI_COMM_WORLD);
+
+  /* up to 8 intersections of the two boxes */
+  Nint=intersection(senderbox, mybox, interbox);
+  for (box=0; box<Nint; box++)
+    {
+      boff=box*6;
+      size = interbox[3+boff] * interbox[4+boff] * interbox[5+boff];
+
+#ifdef DEBUG
+      fprintf(DBGFD,"Task %d will receive this box: %d %d %d -- %d %d %d\n",
+	     ThisTask, interbox[0+boff],interbox[1+boff],interbox[2+boff],
+	     interbox[3+boff],interbox[4+boff],interbox[5+boff]);
+#endif
+
+#ifndef CLASSIC_FRAGMENTATION
+      /* send the map of needed particles */
+      mapl = size/8 + 1;
+      map = (unsigned int*)calloc(mapl, sizeof(unsigned int));
+
+      /* constructs the map for the intersection and send it to the sender */
+      build_distmap(map, interbox+boff);
+      MPI_Send(map, mapl, MPI_INT, sender, 0, MPI_COMM_WORLD);
+
+      /* map is nulled before getting it back */
+      memset(map, 0, mapl * sizeof(unsigned int));
+
+      /* the map is updated by the sender and sent back */
+      MPI_Recv(map, mapl, MPI_INT, sender, 0, MPI_COMM_WORLD, &status);
+
+      /* record positions of particles that will be stored 
+	 and count how many particles will be sent */
+      int off=frag_offset;
+      int count=frag_offset;
+
+      for (i=0; i<size; i++)
+	if (get_distmap_bit(map, i))
+	  {
+	    ++count;
+	    if (off<subbox.Nalloc)
+	      frag_pos[off++]=subbox_space_index(i, interbox+boff);
+	  }
+
+      expected = count-frag_offset;
+#else
+      expected=size;
+#endif
+
+      /* receive particles */
+      received=0;
+
+      if (expected)
+	{
+
+	  do
+	    {
+
+	      MPI_Recv(&nsent, 1, MPI_INT, sender, 0, MPI_COMM_WORLD, &status);
+	      MPI_Recv(comm_buffer, nsent * sizeof(product_data), MPI_BYTE, sender, 0, MPI_COMM_WORLD, &status);
+#ifdef DEBUG
+	      fprintf(DBGFD,"...receiving %d products from Task %d... %d\n",nsent,sender,(int)sizeof(product_data));
+	      if (nsent<10)
+		{
+		  for (int u=0; u<nsent; u++)
+		    fprintf(DBGFD,"  %f  ",comm_buffer[u].Fmax);
+		  fprintf(DBGFD,"\n");
+		}
+	      else
+		{
+		  for (int u=0; u<5; u++)
+		    fprintf(DBGFD,"  %f  ",comm_buffer[u].Fmax);
+		  fprintf(DBGFD," ... ");
+		  for (int u=nsent-5; u<nsent; u++)
+		    fprintf(DBGFD,"  %f  ",comm_buffer[u].Fmax);
+		  fprintf(DBGFD,"\n");
+		}
+#endif
+
+#ifdef CLASSIC_FRAGMENTATION
+	      for (i=0; i<nsent; i++)
+		memcpy(&frag[subbox_space_index(i+received, interbox+boff)],&comm_buffer[i],sizeof(product_data));
+#else
+	      if (frag_offset + nsent < subbox.Nalloc)
+		nstore = nsent;
+	      else
+		nstore = (long long)subbox.Nalloc - (long long)frag_offset;
+
+	      for (i=0; i<nstore; i++)
+		memcpy(&frag[frag_offset + i],&comm_buffer[i],sizeof(product_data));
+	      frag_offset+=nsent;
+#endif
+	      received+=nsent;
+
+	    }
+	  while (received<expected);
+
+	}
+
+#ifndef CLASSIC_FRAGMENTATION
+      free(map);
+#endif
+    }
+
+  /* done */
+  return 0;
+}
+
+
+int keep_data(int *fft_box, int *sub_box)
+{
+  /* this routine transfers products from the fft space to the subbox space */
+
+#ifndef CLASSIC_FRAGMENTATION
+  unsigned int *map, mapl;
+#endif
+  int interbox[48], i, Nint, box, off;
+  unsigned int size;
+
+  Nint = intersection(fft_box, sub_box, interbox);
+  for (box=0; box<Nint; box++)
+    {
+      off=box*6;
+      size = interbox[3+off] * interbox[4+off] * interbox[5+off];
+
+#ifdef DEBUG
+      fprintf(DBGFD,"Task %d will keep this box: %d %d %d -- %d %d %d\n",
+	     ThisTask, interbox[0+off],interbox[1+off],interbox[2+off],interbox[3+off],interbox[4+off],interbox[5+off]);
+#endif
+
+#ifdef CLASSIC_FRAGMENTATION
+      /* copy data */
+      for (i=0; i<size; i++)
+	memcpy(&frag[subbox_space_index(i,interbox+off)],
+	       &products[fft_space_index(i, interbox+off)],sizeof(product_data));
+#else
+
+      /* map of needed particles */
+      mapl = size/8 + 1;
+      map = (unsigned int*)calloc(mapl, sizeof(unsigned int));
+      build_distmap(map, interbox+off);
+      update_distmap(map, interbox+off);
+
+      /* copy data */
+      for (i=0; i<size; i++)
+	{
+	  if (get_distmap_bit(map, i))
+	    {
+	      if (frag_offset<subbox.Nalloc)
+		{
+		  frag_pos[frag_offset]=subbox_space_index(i,interbox+off);
+		  memcpy(&frag[frag_offset], 
+			 &products[fft_space_index(i, interbox+off)], sizeof(product_data));
+		}
+	      ++frag_offset;
+	    }
+	}
+      free(map);
+#endif
+    }
+
+  return 0;
+}
+
+
+unsigned int fft_space_index(unsigned int pos, int *box)
+{
+  /* here we move:
+     (1) from index i to the relative position of the point in intersection,
+     (2) from that to global position without PBCs,
+     (3) then we impose PBCs
+     (4) then we compute the position in the local FFT box
+     (5) and finally we compute the local particle index 
+     (these are the logical steps, formulas are more compact)
+  */
+
+  unsigned int ip, jp, kp;
+
+  INDEX_TO_COORD(pos, ip, jp, kp, (box+3));
+
+  return 
+    COORD_TO_INDEX((ip + box[0]) % MyGrids[0].GSglobal[_x_] - MyGrids[0].GSstart[_x_],
+		   (jp + box[1]) % MyGrids[0].GSglobal[_y_] - MyGrids[0].GSstart[_y_],
+		   (kp + box[2]) % MyGrids[0].GSglobal[_z_] - MyGrids[0].GSstart[_z_],
+		   MyGrids[0].GSlocal);
+
+}
+
+
+unsigned int subbox_space_index(unsigned int pos, int *box)
+{
+  /* here we go 
+     (1) from index pos to relative position in intersection,
+     (2) from that to global position, imposing PBCs,
+     (3) then we compute the position in the local subbox, imposing PBCs again,
+     (4) and finally the index */
+
+  unsigned int ip, jp, kp;
+
+  INDEX_TO_COORD(pos, ip, jp, kp, (box+3)); /* coords within the intersection */
+
+  return 
+    COORD_TO_INDEX(((ip + box[_x_])%MyGrids[0].GSglobal[_x_] - subbox.stabl[_x_] + MyGrids[0].GSglobal[_x_])%MyGrids[0].GSglobal[_x_],
+		   ((jp + box[_y_])%MyGrids[0].GSglobal[_y_] - subbox.stabl[_y_] + MyGrids[0].GSglobal[_y_])%MyGrids[0].GSglobal[_y_],
+		   ((kp + box[_z_])%MyGrids[0].GSglobal[_z_] - subbox.stabl[_z_] + MyGrids[0].GSglobal[_z_])%MyGrids[0].GSglobal[_z_],
+		   subbox.Lgwbl);
+
+}
+
+
+#ifndef CLASSIC_FRAGMENTATION
+int get_distmap_bit(unsigned int *map, unsigned int pos)
+{
+  /* this operates on the map allocated for the distribution */
+  /* gets the bit corresponding to position pos */
+  unsigned int rem = pos%UINTLEN;
+  return (map[pos/UINTLEN] & (1<<rem))>>rem;
+}
+
+
+void set_distmap_bit(unsigned int *map, unsigned int pos, int value)
+{
+  /* this operates on the map allocated for the distribution */
+  /* sets to 1 the bit corresponding to position pos */
+  if (value)
+    map[pos/UINTLEN] |= (1<<pos%UINTLEN);
+  else
+    map[pos/UINTLEN] &= ~(1<<pos%UINTLEN);
+  
+}
+
+
+void build_distmap(unsigned int *map, int *box)
+{
+  /* the receiver builds the map used for distribution */
+  unsigned int size = box[3] * box[4] * box[5];
+
+  for (unsigned int i=0; i<size; i++)
+    set_distmap_bit(map, i, get_mapup_bit(subbox_space_index(i,box)));
+
+}
+
+
+void update_distmap(unsigned int *map, int *box)
+{
+
+  unsigned int size = box[3] * box[4] * box[5];
+  unsigned int bit, i;
+
+  for (i=0; i< size; i++)
+    {
+
+      bit=get_distmap_bit(map, i);
+      set_distmap_bit(map, i, (bit & (products[fft_space_index(i, box)].Fmax>=outputs.Flast) ) );
+
+    }
+}
+
+#endif
+
+
+#ifdef SNAPSHOT
+/* distribution of zacc back to the FFT space */
+
+typedef struct
+{
+  unsigned int pos;
+  PRODFLOAT zacc;
+  int group_ID;
+} back_data;
+back_data *back_buffer;
+
+int keep_data_back(int *);
+int send_data_back(int);
+int recv_data_back(int *, int);
+
+int distribute_back(void)
+{
+  /* Distributes accretion times from sub-volumes to fft-space */
+
+  int my_fft_box[6];
+  int log_ntask, bit, receiver, sender;
+
+  /* this defines the box that the task possesses in the FFT space */
+  my_fft_box[0] = MyGrids[0].GSstart[_x_];
+  my_fft_box[1] = MyGrids[0].GSstart[_y_];
+  my_fft_box[2] = MyGrids[0].GSstart[_z_];
+  my_fft_box[3] = MyGrids[0].GSlocal[_x_];
+  my_fft_box[4] = MyGrids[0].GSlocal[_y_];
+  my_fft_box[5] = MyGrids[0].GSlocal[_z_];
+
+  /* let's synchronize the tasks here */
+  fflush(stdout);
+  MPI_Barrier(MPI_COMM_WORLD);
+
+  /* stores the data relative to the intersection of the fft box and subbox */
+  if (keep_data_back(my_fft_box))
+    return 1;
+
+  back_buffer=(back_data*)calloc(BUFLEN , sizeof(back_data));
+  if (back_buffer==0x0)
+    {
+      printf("ERROR on task %d: could not allocate back_buffer in distribute_back\n",ThisTask);
+      fflush (stdout);
+      return 1;
+    }
+
+  /* hypercubic communication scheme */
+  for (log_ntask=0; log_ntask<1000; log_ntask++)
+    if (1<<log_ntask >= NTasks)
+      break;
+
+  /* loop on hypercube dimension */
+  for (bit=1; bit<1<<log_ntask; bit++)
+    {
+    /* loop on tasks */
+      for (sender=0; sender<NTasks; sender++)
+	{
+	  /* receiver task is computed with a bitwise xor */
+	  receiver = sender ^ bit;
+
+	  /* condition on sender and receiver */
+	  if (receiver < NTasks && sender < receiver)
+	    {
+
+	      /* the communication will be done 
+		 first sender -> receiver and then receiver -> sender */
+
+	      if (ThisTask==sender)
+		send_data_back(receiver);
+	      else if (ThisTask==receiver)
+		{
+		  if (recv_data_back(my_fft_box, sender))
+		    return 1;
+		}
+
+	      if (ThisTask==receiver)
+		send_data_back(sender);
+	      else if (ThisTask==sender)
+		{
+		  if (recv_data_back(my_fft_box, receiver))
+		    return 1;
+		}
+
+	    }
+	}
+    }
+
+
+  free(back_buffer);
 
   fflush(stdout);
   MPI_Barrier(MPI_COMM_WORLD);
@@ -386,199 +794,167 @@ int distribute(void)
   return 0;
 }
 
-
-int find_task(int global_z, int i1, int i2, int i3, int *second_task, int *box_z, int *second_z)
+int keep_data_back(int *fft_box)
 {
-  /* given the z-plane, find the main and secondary task
-     to which the sub-plane must be communicated */
+  /* this routine transfers products from the fft space to the subbox space */
 
-  int main_task,i3bis,TL;
+  unsigned int ibox, jbox, kbox, good_particle, fftpos;
 
-  /* sub-planes are distributed to tasks first in z, then in y and x */
-  if (i3>=subbox.nbox_z_thisslice*ThisSlice && i3<subbox.nbox_z_thisslice*(ThisSlice+1))
-    main_task=subbox.nbox_z_thisslice*(i1*subbox.nbox_y+i2)+(i3-subbox.nbox_z_thisslice*ThisSlice);
-  else
-    main_task=-1;
-
-  /* this is the local z variable in the subbox-system WITHOUT the boundary layer */
-  *box_z=global_z-find_start(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,i3);
-  TL=find_length(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,i3);
-
-  /* the second task to communicate the sub_plane to is decided using box_z */
-  if (*box_z<subbox.safe_z)            // lower border, second task is the previous in z
+  /* find particles that are wanted by the receiver */
+  for (int iz=0; iz<subbox.Nstored; iz++)
     {
-      i3bis=i3-1;
-      if (i3bis<0)
-	i3bis+=subbox.nbox_z_allslices;
-      if (i3bis>=subbox.nbox_z_thisslice*ThisSlice && i3bis<subbox.nbox_z_thisslice*(ThisSlice+1))
-	{
-	  *second_task = subbox.nbox_z_thisslice*(i1*subbox.nbox_y+i2)+(i3bis-subbox.nbox_z_thisslice*ThisSlice);
-	  *second_z = find_length(MyGrids[0].GSglobal_z,subbox.nbox_z_allslices,i3bis) + *box_z;
-	}
-      else
-	{
-	  *second_task=-1;
-	  *second_z=-99;
-	}
-    }
-  else if (*box_z>=TL-subbox.safe_z)   // upper border, second task is the next in z
-    {
-      i3bis=i3+1;
-      if (i3bis>=subbox.nbox_z_allslices)
-	i3bis-=subbox.nbox_z_allslices;
-      if (i3bis>=subbox.nbox_z_thisslice*ThisSlice && i3bis<subbox.nbox_z_thisslice*(ThisSlice+1))
-	{
-	  *second_task = subbox.nbox_z_thisslice*(i1*subbox.nbox_y+i2)+(i3bis-subbox.nbox_z_thisslice*ThisSlice);
-	  *second_z = *box_z - TL;
-	}
-      else
-	{
-	  *second_task=-1;
-	  *second_z=-99;
-	}
-    }
-  else
-    {
-      *second_task=-1;
-      *second_z=-99;
-    }
-
-  /* z-coordinates are fixed to take into account the bounday layer */
-  *box_z += subbox.safe_z;
-  *second_z += subbox.safe_z;
-
-#ifdef VERBOSE
-  //  printf("find_task: Task %d, %d    %d %d %d    %d %d   %d %d\n", 
-  //	 ThisTask, global_z, i1, i2, i3, main_task, *second_task, *box_z, *second_z);
-  //fflush(stdout);
+#ifdef CLASSIC_FRAGMENTATION
+      INDEX_TO_COORD(iz,ibox,jbox,kbox,subbox.Lgwbl);
+#else
+      INDEX_TO_COORD(frag_pos[iz],ibox,jbox,kbox,subbox.Lgwbl);
 #endif
 
-  return main_task;
-}
+      /* this is still in the subbox frame */
+      good_particle = ( ibox>=subbox.safe[_x_] && ibox<subbox.Lgwbl[_x_]-subbox.safe[_x_] && 
+			jbox>=subbox.safe[_y_] && jbox<subbox.Lgwbl[_y_]-subbox.safe[_y_] && 
+			kbox>=subbox.safe[_z_] && kbox<subbox.Lgwbl[_z_]-subbox.safe[_z_] );
 
+      /* global box frame */
+      ibox = (ibox + subbox.stabl[_x_] + MyGrids[0].GSglobal[_x_])%MyGrids[0].GSglobal[_x_];
+      jbox = (jbox + subbox.stabl[_y_] + MyGrids[0].GSglobal[_y_])%MyGrids[0].GSglobal[_y_];
+      kbox = (kbox + subbox.stabl[_z_] + MyGrids[0].GSglobal[_z_])%MyGrids[0].GSglobal[_z_];
 
-int send_data(comm_struct *comm_data)
-{
-  /* communication -> sending */
+      if (good_particle &&
+	    ibox >= fft_box[0] && ibox < fft_box[0]+fft_box[3] && 
+	    jbox >= fft_box[1] && jbox < fft_box[1]+fft_box[4] &&
+	    kbox >= fft_box[2] && kbox < fft_box[2]+fft_box[5])
+	  {
+	    /* position in the fft domain */
+	    fftpos = COORD_TO_INDEX(ibox - fft_box[0], jbox - fft_box[1], kbox - fft_box[2], (fft_box+3));
+	    products[fftpos].zacc = frag[iz].zacc;
+      products[fftpos].group_ID = frag[iz].group_ID;
+      
+      // printf(" Task %d keep: particle_ID:  %d  zacc: %f   group_ID: %d\n",ThisTask,iz,frag[iz].zacc, frag[iz].group_ID);
 
-  int j2,k2,j1,k1,k2start,k1start;
-  int Lgrid_x, Lgrid_y, offset;
-  size_t size;
+	  }
+      }
 
-#ifdef VERBOSE
-  printf("SEND_DATA: Task %d sending to %d\n",ThisTask,comm_data->task);
-#endif
-
-  Lgrid_x = find_length(MyGrids[0].GSglobal_x,subbox.nbox_x,comm_data->box_x) + 2.*subbox.safe_x;
-  Lgrid_y = find_length(MyGrids[0].GSglobal_y,subbox.nbox_y,comm_data->box_y) + 2.*subbox.safe_y;
-
-  /* allocates the plane for communications */
-  size = Lgrid_x * Lgrid_y;
-  if (size>largest_size)   /* questo poi si toglie */
-    {
-      printf("ASSURDO: size>largest_size in SEND_DATA!!!\n");
-      return 1;
-    }
-
-  /* starting coordinates of the sub-box (can be negative) */
-  k2start=find_start(MyGrids[0].GSglobal_y,subbox.nbox_y,comm_data->box_y)-subbox.safe_y;
-  k1start=find_start(MyGrids[0].GSglobal_x,subbox.nbox_x,comm_data->box_x)-subbox.safe_x;
-
-  /* storing of information on sub_plane */
-  /* NB: anche qui assume che la distribuzione della memoria sia in piani */
-  offset = (comm_data->gz - MyGrids[0].GSstart_z) * MyGrids[0].GSlocal_x *  MyGrids[0].GSlocal_y;
-  for (j2=0; j2<Lgrid_y; j2++)
-    {
-      k2=j2+k2start;
-      if (k2<0) k2+=MyGrids[0].GSglobal_y;
-      if (k2>=MyGrids[0].GSglobal_y) k2-=MyGrids[0].GSglobal_y;
-      for (j1=0; j1<Lgrid_x; j1++)
-	{
-	  k1=j1+k1start;
-	  if (k1<0) k1+=MyGrids[0].GSglobal_x;
-	  if (k1>=MyGrids[0].GSglobal_x) k1-=MyGrids[0].GSglobal_x;
-
-	  *(sub_plane + j1 + j2*Lgrid_x) = 
-	    *(products + k1 + MyGrids[0].GSlocal_x * k2 + offset);
-	}
-    }
-
-  /* sending sub_plane to the receiver */
-  if (MPI_Send((void*)sub_plane, size * sizeof(product_data), 
-	       MPI_BYTE, comm_data->task, 0, MPI_COMM_WORLD) != MPI_SUCCESS)
-    {
-      printf("ERROR on task %d: failed communication in send_data\n",ThisTask);
-      fflush(stdout);
-      return 1;
-    }
-
-  /* done */
   return 0;
 }
 
-int recv_data(comm_struct *comm_data)
+int send_data_back(int target)
 {
-
-  /* communication -> receiving */
-
-  int i,offset;
-  size_t size;
+  /* This routine sends the content of a box to a target task.
+     Communication is divided in these stages:
+     1) the sender communicates the start and length of its box,
+     2) the sender receives the start and the length of the needed box,
+     3) intersection of the sender and target boxes is computed
+     4) if there is an intersection the sender receives a map of needed particles
+     5) the sender loops on particles and sends them in chunks of size BUFLEN
+  */
+  
+  int ibox, jbox, kbox, good_particle;
+  int recv_box[6];
   MPI_Status status;
 
-#ifdef VERBOSE
-  printf("RECV_DATA: Task %d receiving from %d\n",ThisTask,comm_data->task);
+  MPI_Recv(recv_box, 6, MPI_INT, target, 0, MPI_COMM_WORLD, &status);
+
+//  printf("BOX Task %d: [%d, %d, %d] - [%d, %d, %d]\n",ThisTask,recv_box[0],recv_box[1],recv_box[2],recv_box[3],recv_box[4],recv_box[5]); //LEVARE
+
+  int bufcount=0;
+  int sent=0;
+
+  /* find particles that are wanted by the receiver */
+  for (int iz=0; iz<subbox.Nstored; iz++)
+    {
+#ifdef CLASSIC_FRAGMENTATION
+      INDEX_TO_COORD(iz,ibox,jbox,kbox,subbox.Lgwbl);
+#else
+      INDEX_TO_COORD(frag_pos[iz],ibox,jbox,kbox,subbox.Lgwbl);
 #endif
+      good_particle = ( ibox>=subbox.safe[_x_] && ibox<subbox.Lgwbl[_x_]-subbox.safe[_x_] && 
+			jbox>=subbox.safe[_y_] && jbox<subbox.Lgwbl[_y_]-subbox.safe[_y_] && 
+			kbox>=subbox.safe[_z_] && kbox<subbox.Lgwbl[_z_]-subbox.safe[_z_] );
 
-  /* allocates the plane for communications */
-  size = subbox.Lgwbl_x * subbox.Lgwbl_y;
-  if (size>largest_size)   /* questo poi si toglie */
-    {
-      printf("ASSURDO: size>largest_size in RECV_DATA!!!\n");
-      return 1;
+      /* global box frame */
+      ibox = (ibox + subbox.stabl[_x_] + MyGrids[0].GSglobal[_x_])%MyGrids[0].GSglobal[_x_];
+      jbox = (jbox + subbox.stabl[_y_] + MyGrids[0].GSglobal[_y_])%MyGrids[0].GSglobal[_y_];
+      kbox = (kbox + subbox.stabl[_z_] + MyGrids[0].GSglobal[_z_])%MyGrids[0].GSglobal[_z_];
+
+      //printf("  oioiuoi %d %d %d %d %d\n" , iz, ibox, jbox, kbox, good_particle); // LEVARE
+
+      if (good_particle &&
+	    ibox >= recv_box[0] && ibox < recv_box[0]+recv_box[3] && 
+	    jbox >= recv_box[1] && jbox < recv_box[1]+recv_box[4] &&
+	    kbox >= recv_box[2] && kbox < recv_box[2]+recv_box[5])
+	  {
+	    /* position in the fft domain */
+	    back_buffer[bufcount].pos = COORD_TO_INDEX(ibox - recv_box[0], jbox - recv_box[1], kbox - recv_box[2], (recv_box+3));
+	    back_buffer[bufcount].zacc = frag[iz].zacc;
+      back_buffer[bufcount].group_ID =frag[iz].group_ID;
+
+	    // printf(" Task %d send:  %d  %d  %f %d\n",ThisTask,iz+1,COORD_TO_INDEX(ibox,jbox,kbox,MyGrids[0].GSglobal)+1,back_buffer[iz].zacc,back_buffer[iz].group_ID); // LEVARE
+	    ++bufcount;
+	    ++sent;
+
+	    if (bufcount==BUFLEN)
+	      {
+		MPI_Send(&bufcount, 1, MPI_INT, target, 0, MPI_COMM_WORLD);
+		MPI_Send(back_buffer, bufcount * sizeof(back_data), MPI_BYTE, target, 0, MPI_COMM_WORLD);
+		bufcount=0;
+	      }		
+	  }
     }
 
-  /* receiving information from the sender */
-  if (MPI_Recv((void*)sub_plane, size * sizeof(product_data), 
-	       MPI_BYTE, comm_data->task, 0, MPI_COMM_WORLD, &status) != MPI_SUCCESS)
+  if (bufcount)
     {
-      printf("ERROR on task %d: failed communication in recv_data\n",ThisTask);
-      fflush(stdout);
-      return 1;
+      MPI_Send(&bufcount, 1, MPI_INT, target, 0, MPI_COMM_WORLD);
+      MPI_Send(back_buffer, bufcount * sizeof(back_data), MPI_BYTE, target, 0, MPI_COMM_WORLD);
     }
-
-  /* copying information onto the frag structure */
-  offset = comm_data->bz * size;
-  for (i=0; i<size; i++)
-    *(frag + i + offset) = *(sub_plane+i);
   
+  bufcount=0;
+  MPI_Send(&bufcount, 1, MPI_INT, target, 0, MPI_COMM_WORLD);
+
+//  printf("Task %d sent %d particles\n",ThisTask,sent); // LEVARE
+
   /* done */
   return 0;
 }
 
-int keep_data(comm_struct *comm_data)
+int recv_data_back(int *mybox, int sender)
 {
-  int j2,k2,j1,k1,offmax,offrag;
+  /* This routine receives the content of a box from a sender task.
+     Communication is divided in these stages:
+     1) the target receives the start and length of sender box,
+     2) the target sends the start and the length of its box,
+     3) intersection of the sender and target boxes is computed
+     4) if there is an intersection the target sends a map of needed particles
+     5) the target loops on particles and receives them in chunks of size BUFLEN
+  */
+  
+  unsigned int nsent, received;
+  MPI_Status status;
 
-  /* storing of information on the product structure */
-  /* NB: anche qui assume che la distribuzione della memoria sia in piani */
-  offmax = (comm_data->gz - MyGrids[0].GSstart_z) * MyGrids[0].GSlocal_x *  MyGrids[0].GSlocal_y;
-  offrag = comm_data->bz * subbox.Lgwbl_x * subbox.Lgwbl_y;
+  MPI_Send(mybox, 6, MPI_INT, sender, 0, MPI_COMM_WORLD);
 
-  for (j2=0; j2<subbox.Lgwbl_y; j2++)
+  /* receive particles */
+  received=0;
+
+  do
     {
-      k2=j2+subbox.stabl_y;
-      if (k2<0) k2+=MyGrids[0].GSlocal_y;
-      if (k2>=MyGrids[0].GSlocal_y) k2-=MyGrids[0].GSlocal_y;
-      for (j1=0; j1<subbox.Lgwbl_x; j1++)
+      MPI_Recv(&nsent, 1, MPI_INT, sender, 0, MPI_COMM_WORLD, &status);
+      if (nsent)
+	MPI_Recv(back_buffer, nsent * sizeof(back_data), MPI_BYTE, sender, 0, MPI_COMM_WORLD, &status);
+      for (int iz=0; iz<nsent; iz++)
 	{
-	  k1=j1+subbox.stabl_x;
-	  if (k1<0) k1+=MyGrids[0].GSlocal_x;
-	  if (k1>=MyGrids[0].GSlocal_x) k1-=MyGrids[0].GSlocal_x;
+	  products[back_buffer[iz].pos].zacc=back_buffer[iz].zacc;
+    products[back_buffer[iz].pos].group_ID=back_buffer[iz].group_ID;
 
-	  *(frag + j1 + j2*subbox.Lgwbl_x + offrag) =
-	    *(products + k1 + MyGrids[0].GSlocal_x * k2 + offmax);
+    // printf(" Task %d recv:  %d  %d  %f  %d\n",ThisTask,iz+1,back_buffer[iz].pos+1,back_buffer[iz].zacc, back_buffer[iz].group_ID);
 	}
+      received+=nsent;
     }
+  while (nsent);
 
+//  printf("Task %d received %d particles\n",ThisTask,received); // LEVARE
+
+  /* done */
   return 0;
 }
+
+#endif

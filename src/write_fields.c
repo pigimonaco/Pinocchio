@@ -29,7 +29,7 @@
 #include <sys/stat.h>
 
 #define FORTRAN
-//#define ASCII_WRITE
+// #define ASCII_WRITE
 
 int check_DataDir(void);
 int write_product(int);
