@@ -184,7 +184,6 @@ int initialize_cosmology()
   if (WhichSpectrum!=5)
 #endif
     {
-
       /* Runge-Kutta integration of cosmic time and growth rate */
       const gsl_odeiv2_step_type *T = gsl_odeiv2_step_rkf45;
       gsl_odeiv2_step *ode_s = gsl_odeiv2_step_alloc(T,NVAR);
@@ -1134,17 +1133,17 @@ int read_Pk_table_from_CAMB(double *scalef, double *grow1, double *grow2, double
      and for the growth rates
   */
 
-  double *logk, *Pk, *CAMBScalefac, *lingrow;
-  char    filename[LBLENGTH],buffer[LBLENGTH],*ugo;
-  FILE   *fd;
-  
+int i,j,dummy,i1,i2,First,Today;
+  double kappa,myPk,z,Om,slope;
+  char filename[LBLENGTH],buffer[LBLENGTH],*ugo;
+  FILE *fd;
+  double *logk,*Pk,*CAMBScalefac, *lingrow;
 #ifdef ONLY_MATTER_POWER
-  gsl_spline       *splineTransf=0x0;
+  gsl_spline *splineTransf=0x0;
   gsl_interp_accel *accel=0x0;
-  double           *Ktransf,*Ttransf,Tcdm,Ttot,Tbar;
-  int               Nktransf;
-  
-  FILE             *fd2;
+  int Nktransf;
+  double *Ktransf,*Ttransf,Tcdm,Ttot,Tbar;
+  FILE *fd2;
 #endif
 
   if (!ThisTask)
@@ -1161,7 +1160,7 @@ int read_Pk_table_from_CAMB(double *scalef, double *grow1, double *grow2, double
 	      while(!feof(fd))
 		{
 		  ugo=fgets(buffer,LBLENGTH,fd);
-		  int i = sscanf(buffer,"%*lf");
+		  i=sscanf(buffer,"%lf",&kappa);
 		  if (i && ugo!=0x0)
 		    NPowerTable++;
 		}
@@ -1179,7 +1178,7 @@ int read_Pk_table_from_CAMB(double *scalef, double *grow1, double *grow2, double
 		  while(!feof(fd2))
 		    {
 		      ugo=fgets(buffer,LBLENGTH,fd2);
-		      int i = sscanf(buffer,"%*lf");
+		      i=sscanf(buffer,"%lf",&kappa);
 		      if (i && ugo!=0x0)
 			Nktransf++;
 		    }
@@ -1233,12 +1232,12 @@ int read_Pk_table_from_CAMB(double *scalef, double *grow1, double *grow2, double
 
   /* allocates the needed memory for the power spectra */
   SPLINE[SP_PK] = gsl_spline_alloc(gsl_interp_cspline, NPowerTable);
-  logk          = (double*)malloc(NPowerTable * sizeof(double));
-  Pk            = (double*)malloc(NPowerTable * sizeof(double));
+  logk = (double*)malloc(NPowerTable * sizeof(double));
+  Pk   = (double*)malloc(NPowerTable * sizeof(double));
 
   /* allocates needed memory for the growth rates */
   CAMBScalefac  = (double*)malloc(params.camb.NCAMB * sizeof(double));
-  lingrow       = (double*)malloc(params.camb.NCAMB * NPowerTable * sizeof(double));
+  lingrow = (double*)malloc(params.camb.NCAMB * NPowerTable * sizeof(double));
 
   if (!ThisTask)
     {
@@ -1248,7 +1247,7 @@ int read_Pk_table_from_CAMB(double *scalef, double *grow1, double *grow2, double
 	  printf("Error: Redshift file %s not found\n",params.camb.RedshiftsFile);
 	  return 1;
 	}
-      for (int i = 0; i < params.camb.NCAMB; i++)
+      for (i=0; i<params.camb.NCAMB; i++)
 	fscanf(fd,"%d %lf",&dummy,CAMBScalefac+i);
       fclose(fd);
 
@@ -1260,7 +1259,7 @@ int read_Pk_table_from_CAMB(double *scalef, double *grow1, double *grow2, double
 	}
 
       /* transforms them into scale factors*/
-      for (int i = 0; i < params.camb.NCAMB; i++)
+      for (i=0; i<params.camb.NCAMB; i++)
 	CAMBScalefac[i]=1./(1.+CAMBScalefac[i]);
 
 #ifdef ONLY_MATTER_POWER
@@ -1272,17 +1271,16 @@ int read_Pk_table_from_CAMB(double *scalef, double *grow1, double *grow2, double
 #endif
 
       /* This loop starts from the last output, the one at z=0 that is stored in P(k) */
-      for (int i = params.camb. NCAMB-1; i >= 0; i--)
+      for (i=params.camb. NCAMB-1; i>=0; i--)
 	{
 #ifdef ONLY_MATTER_POWER
 	  /* reads the transfer function and initializes the spline */
 	  sprintf(filename,"%s_%s_%03d.dat",params.camb.RunName,params.camb.TransferFile,i);
 	  fd=fopen(filename,"r");
-	  for (int j = 0; j < Nktransf; j++ )
+	  for (j=0; j<Nktransf; j++)
 	    {
 	      ugo=fgets(buffer,LBLENGTH,fd);
-	      double kappa;
-	      sscanf(buffer,"%lf %lf %lf %*f %*f %*f %lf", &kappa, &Tcdm, &Tbar, &Ttot);
+	      sscanf(buffer,"%lf %lf %lf %*f %*f %*f %lf",&kappa,&Tcdm,&Tbar,&Ttot);
 	      Ktransf[j]=log10(kappa);
 #ifdef NOBARYONS
 	      Ttransf[j]=2.*log10(Tcdm/Ttot);
@@ -1297,27 +1295,25 @@ int read_Pk_table_from_CAMB(double *scalef, double *grow1, double *grow2, double
 	  /* reads the power spectrum and initializes the spline */
 	  sprintf(filename,"%s_%s_%03d.dat",params.camb.RunName,params.camb.MatterFile,i);
 	  fd=fopen(filename,"r");
-	  for (int j = 0; j < NPowerTable; j++ )
+	  for (j=0; j<NPowerTable; j++)
 	    {
-	      double kappa, myPk;
-	      fscanf(fd,"%lf %lf", &kappa, &myPk);
+	      fscanf(fd,"%lf %lf",&kappa,&myPk);
 
 #ifdef ONLY_MATTER_POWER
 	      /* here it corrects the power spectrum by the square of the ratio 
 		 of the matter and total transfer functions */
 	      myPk *= pow(10.,my_spline_eval(splineTransf, log10(kappa), accel));
 #endif
-	      int i;
-	      if ( i == params.camb.NCAMB-1)
+	      if (i==params.camb.NCAMB-1)
 		{
-		  Pk[j]   = log10(kappa*kappa*kappa*myPk);
-		  logk[j] = log10(kappa*params.Hubble100);
-		  if (params.InputSpectrum_UnitLength_in_cm != 0)
+		  Pk[j]=log10(kappa*kappa*kappa*myPk);
+		  logk[j]=log10(kappa*params.Hubble100);
+		  if (params.InputSpectrum_UnitLength_in_cm!=0.0)
 		    logk[j] += log10(params.InputSpectrum_UnitLength_in_cm/UnitLength_in_cm);
-		  lingrow[i+j*params.camb.NCAMB] = 0;
+		  lingrow[i+j*params.camb.NCAMB]=0.0;
 		}
 	      else
-		lingrow[i+j*params.camb.NCAMB] = 0.5* (log10(kappa*kappa*kappa*myPk) - Pk[j]);
+		lingrow[i+j*params.camb.NCAMB]=0.5*(log10(kappa*kappa*kappa*myPk) - Pk[j]);
 
 	    }
 	  fclose(fd);
@@ -1356,29 +1352,27 @@ int read_Pk_table_from_CAMB(double *scalef, double *grow1, double *grow2, double
   gsl_spline2d_init(AnotherSpline, CAMBScalefac, logk, lingrow, params.camb.NCAMB, NPowerTable);
 
   /* jumps to the first redshift that is within the bounds */
-  int First;
-  for (First = 0; First < NBINS && scalef[First]<CAMBScalefac[0]; First++)
+  for (First=0; First<NBINS && scalef[First]<CAMBScalefac[0]; First++)
     ;
 
-  for (int i = First; i < NBINS && scalef[i] <= 1; i++)
-    for ( int j = 0; j < NkBINS; j++)
+  for (i=First; i<NBINS && scalef[i]<=1; i++)
+    for (j=0; j<NkBINS; j++)
       {
-	double Om;
-	double kappa =LOGKMIN + j*DELTALOGK;
-	double z  = 1./scalef[i]-1.;
-	Om = OmegaMatter(z);
-	grow1 [i+j*NBINS] = pow(10., gsl_spline2d_eval(AnotherSpline, 1./(1.+z), kappa, xacc, yacc));
-	grow2 [i+j*NBINS] = 3./7. * pow(grow1[i+j*NBINS],2.0) * pow(Om,-1./143.);
-	grow31[i+j*NBINS] = grow1[i]*grow1[i]*grow1[i] * pow(Om,-4./275.)/9.;
-	grow32[i+j*NBINS] = grow1[i]*grow1[i]*grow1[i] * pow(Om,-268./17875.)*5./42.;
+	kappa=LOGKMIN + j*DELTALOGK;
+	z=1./scalef[i]-1.;
+	Om=OmegaMatter(z);
+	grow1 [i+j*NBINS]=pow(10.,gsl_spline2d_eval(AnotherSpline, 1./(1.+z), kappa, xacc, yacc));
+	grow2 [i+j*NBINS]=3./7.*pow(grow1[i+j*NBINS],2.0)*pow(Om,-1./143.);
+	grow31[i+j*NBINS]=grow1[i]*grow1[i]*grow1[i]*pow(Om,-4./275.)/9.;
+	grow32[i+j*NBINS]=grow1[i]*grow1[i]*grow1[i]*pow(Om,-268./17875.)*5./42.;
       }
 
   Today=i-1;
 
   /* growth rates at scale factor > 1 are estrapolated as power laws */
-  for (int j = 0; j < NkBINS; j++)
+  for (j=0; j<NkBINS; j++)
     {
-      double slope = log10(grow1 [Today + j*NBINS]/grow1 [Today-1 + j*NBINS])/log10(scalef[Today]/scalef[Today-1]);
+      slope = log10(grow1 [Today + j*NBINS]/grow1 [Today-1 + j*NBINS])/log10(scalef[Today]/scalef[Today-1]);
       for(i=Today+1; i<NBINS; i++)
 	{
 	  grow1 [i+j*NBINS] = grow1 [Today+j*NBINS]*pow(scalef[i]/scalef[Today],slope);
@@ -1389,58 +1383,51 @@ int read_Pk_table_from_CAMB(double *scalef, double *grow1, double *grow2, double
     }
 
   /* earlier growth rates are scaled with the scale factor */
-  for (int j = 0; j < NkBINS; j++)
-    for (int i = 0; i < First; i++)
+  for (j=0; j<NkBINS; j++)
+    for (i=0; i<First; i++)
       {
-	double scalef_over_first  = scalef[i]/scalef[First];
-	double scalef_over_first2 = scalef_over_first * scalef_over_first;
-	double z = 1./scalef[i]-1.;
-	
-	grow1 [i+j*NBINS] = grow1 [First+j*NBINS] * scalef[i]/scalef[First];
-	grow2 [i+j*NBINS] = grow2 [First+j*NBINS] * scalef_over_first2;
-	grow31[i+j*NBINS] = grow31[First+j*NBINS] * scalef_over_first2*scalef_over_first;
-	grow32[i+j*NBINS] = grow32[First+j*NBINS] * scalef_over_first2*scalef_over_first;
+	z=1./scalef[i]-1.;
+	grow1 [i+j*NBINS]=grow1 [First+j*NBINS]*scalef[i]/scalef[First];
+	grow2 [i+j*NBINS]=grow2 [First+j*NBINS]*pow(scalef[i]/scalef[First],2.);
+	grow31[i+j*NBINS]=grow31[First+j*NBINS]*pow(scalef[i]/scalef[First],3.);
+	grow32[i+j*NBINS]=grow32[First+j*NBINS]*pow(scalef[i]/scalef[First],3.);
       }
 
   /* f(Omega)'s */
-  for (int j = 0; j < NkBINS; j++)
+  for (j=0; j<NkBINS; j++)
     {
-      for (int i = 0; i < Today; i++)
+      for (i=0; i<Today; i++)
 	{
-	  int i1, i2;
-	  if (i == 0)
+	  if (i==0)
 	    {
-	      i1 = 0;
-	      i2 = 2;
+	      i1=0;
+	      i2=2;
 	    }
 	  else
 	    {
-	      i1 = i-1;
-	      i2 = i+1;
+	      i1=i-1;
+	      i2=i+1;
 	    }
 	  fomega1 [i+j*NBINS] = (grow1 [i2+j*NBINS]-grow1 [i1+j*NBINS]) / (scalef[i2]-scalef[i1]) * scalef[i]/grow1 [i+j*NBINS];
 	  fomega2 [i+j*NBINS] = (grow2 [i2+j*NBINS]-grow2 [i1+j*NBINS]) / (scalef[i2]-scalef[i1]) * scalef[i]/grow2 [i+j*NBINS];
 	  fomega31[i+j*NBINS] = (grow31[i2+j*NBINS]-grow31[i1+j*NBINS]) / (scalef[i2]-scalef[i1]) * scalef[i]/grow31[i+j*NBINS];
 	  fomega32[i+j*NBINS] = (grow32[i2+j*NBINS]-grow32[i1+j*NBINS]) / (scalef[i2]-scalef[i1]) * scalef[i]/grow32[i+j*NBINS];
 	}
-      
-      double slope;
-      
       /* today and future values are better obtained by linear extrapolation */
-      slope = (fomega1[Today-1+j*NBINS]-fomega1[Today-2+j*NBINS])/(scalef[Today-1]-scalef[Today-2]);
-      for (int i = Today; i < NBINS; i++)
+      slope=(fomega1[Today-1+j*NBINS]-fomega1[Today-2+j*NBINS])/(scalef[Today-1]-scalef[Today-2]);
+      for (i=Today; i<NBINS; i++)
 	fomega1[i+j*NBINS] = fomega1[Today-1+j*NBINS] + slope * (scalef[i]-scalef[Today-1]);
 
-      slope = (fomega2[Today-1+j*NBINS]-fomega2[Today-2+j*NBINS])/(scalef[Today-1]-scalef[Today-2]);
-      for (int i = Today; i < NBINS; i++)
+      slope=(fomega2[Today-1+j*NBINS]-fomega2[Today-2+j*NBINS])/(scalef[Today-1]-scalef[Today-2]);
+      for (i=Today; i<NBINS; i++)
 	fomega2[i+j*NBINS] = fomega2[Today-1+j*NBINS] + slope * (scalef[i]-scalef[Today-1]);
 
-      slope = (fomega31[Today-1+j*NBINS]-fomega31[Today-2+j*NBINS])/(scalef[Today-1]-scalef[Today-2]);
-      for (int i = Today; i < NBINS; i++)
+      slope=(fomega31[Today-1+j*NBINS]-fomega31[Today-2+j*NBINS])/(scalef[Today-1]-scalef[Today-2]);
+      for (i=Today; i<NBINS; i++)
 	fomega31[i+j*NBINS] = fomega31[Today-1+j*NBINS] + slope * (scalef[i]-scalef[Today-1]);
 
-      slope = (fomega32[Today-1+j*NBINS]-fomega32[Today-2+j*NBINS])/(scalef[Today-1]-scalef[Today-2]);
-      for (int i = Today; i < NBINS; i++)
+      slope=(fomega32[Today-1+j*NBINS]-fomega32[Today-2+j*NBINS])/(scalef[Today-1]-scalef[Today-2]);
+      for (i=Today; i<NBINS; i++)
 	fomega32[i+j*NBINS] = fomega32[Today-1+j*NBINS] + slope * (scalef[i]-scalef[Today-1]);
     }
 
@@ -1455,6 +1442,7 @@ int read_Pk_table_from_CAMB(double *scalef, double *grow1, double *grow2, double
 
   return 0;
 }
+
 #endif
 
 

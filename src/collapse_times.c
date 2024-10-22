@@ -557,7 +557,7 @@ inline int compute_collapse_times(int ismooth) {
 
 #ifdef DEBUG
 		
-		fprintf(collapseTimeFile, "%d %d %f %f %f %g\n", index, ismooth, lambda1, lambda2, lambda3, Fnew);
+		// fprintf(collapseTimeFile, "%d %d %f %f %f %g\n", index, ismooth, lambda1, lambda2, lambda3, Fnew);
 
 #endif
 

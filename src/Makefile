@@ -74,7 +74,9 @@ OPTIONS += -DSNAPSHOT
 
 # OPTIONS += -DSCALE_DEPENDENT
 # OPTIONS += -DMOD_GRAV_FR
-# OPTIONS += -DFR0=1.e-4
+# OPTIONS += -DFR0=1.e-8
+# OPTIONS += -DREAD_PK_TABLE
+# OPTIONS += -DONLY_MATTER_POWER
 
 # Other options # 
 
@@ -82,7 +84,8 @@ OPTIONS += -DSNAPSHOT
 # OPTIONS += -DUSE_GPERFTOOLS
 # OPTIONS += -DLONGIDS
 # OPTIONS += -DWHITENOISE
-OPTIONS += -DNO_RANDOM_MODULES
+# OPTIONS += -DNO_RANDOM_MODULES
+# OPTIONS += -DROTATE_BOX
 # OPTIONS += -DDOUBLE_PRECISION_PRODUCTS
 # OPTIONS += -DVETTORIALIZZA
 OPTIONS += -DNORADIATION
@@ -126,7 +129,7 @@ endif
 
 ifeq ($(SYSTYPE),"pleiadi")
 CC          =  mpicc
-CDEBUG      = -ggdb3 -Wall $(OMP_FLAG)
+CDEBUG      = -g -Wall $(OMP_FLAG)
 COPTIMIZED  = -O3 -Wno-unused-result $(OMP_FLAG)
 FFTW_LIBR   = -L/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/fftw-3.3.10-bap3ootbcmiypnmo7rouk57jbdhfjuty/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
 FFTW_INCL   = -I/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/fftw-3.3.10-bap3ootbcmiypnmo7rouk57jbdhfjuty/include
@@ -188,7 +191,6 @@ COPTS = $(CDEBUG)
 else
 COPTS = $(COPTIMIZED)
 endif
-
 # Source files #
 
 OBJECTS = fmax.o variables.o initialization.o collapse_times.o fmax-pfft.o GenIC.o \
