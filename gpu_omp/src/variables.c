@@ -53,6 +53,10 @@ plcgroup_data *plcgroups;
 
 cputime_data cputime={0.0};
 
+#if defined(GPU_OMP)
+gputime_data gputime;
+#endif // GPU_OMP
+
 int WindowFunctionType;
 
 group_data *groups;

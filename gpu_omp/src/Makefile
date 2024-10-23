@@ -24,22 +24,30 @@
 #  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #
 
-
 # Directory settings #
 
 RUNDIR = ./
 
-# Executable name #
+########## System-specific Configuration ############################
 
-EXEC ?= pinocchio.x
+SYSTYPE ?= LeonardoBoost
 
-# Compilation options #
+#####################################################################
+#####################################################################
+# The following variables should be passed from command line to make
+# Executable name
+EXEC     ?= Pinocchio
+# Compilation options
+COMPILER ?= mpicc
+DEBUG    ?= NO
+OMP      ?= NO
+GPU      ?= NO
+SCOREP   ?= NO
+NSIGHT   ?= NO
+ENERGY   ?= NO
+####################################################################
 
-DEBUG ?= NO
-OMP   ?= NO
-GPU   ?= NO
-
-########## Preprocessor Definitions ########## 
+########## Preprocessor Definitions ################################
 
 # Displacement LPT order # 
 
@@ -88,7 +96,14 @@ OPTIONS += -DELL_CLASSIC
 # OPTIONS += -DVETTORIALIZZA
 OPTIONS += -DNORADIATION
 # OPTIONS += -DPRINTJUNK
+#
+# -----------------------------------------------
+# - This option impacts CPU code only
+# - It is used by default using the GPU with OMP
 # OPTIONS += -DCUSTOM_INTERPOLATION
+#########################################################################################
+#########################################################################################
+
 
 ####################### CPU flag #####################
 ifeq ($(DEBUG), YES)
@@ -98,7 +113,11 @@ endif
 ####################### GPU flag #####################
 ifeq ($(GPU), YES)
 OPTIONS += -DGPU_OMP # Switch-on GPU using OMP
-GPU_FLAG = -gpu=ccnative -target=gpu -gpu=nomanaged
+ifeq ($(NSIGHT), YES)
+GPU_FLAG = -gpu=cc80 -target=gpu -gpu=nomanaged,lineinfo
+else
+GPU_FLAG = -gpu=cc80 -target=gpu -gpu=nomanaged
+endif
 ifeq ($(DEBUG), YES)
 OPTIONS += -DGPU_OMP_DEBUG
 GPU_FLAG = -gpu=ccnative,debug,lineinfo -target=gpu -gpu=nomanaged -mp=gpu
@@ -107,7 +126,6 @@ else
 GPU_FLAG =
 endif
 #######################################################
-
 
 ########## Preprocessor Definitions end ########## 
 
@@ -130,14 +148,25 @@ OMP_FLAG =
 OMP_FFTW =
 endif
 
-########## System-specific Configuration ############
+ifeq ($(ENERGY), YES)
+OPTIONS += -D_ENERGY_
+endif
 
-SYSTYPE ?= LeonardoBoost
+# Scorep configuration #
+ifeq ($(SCOREP), YES)
+SCOREP_FLAG = scorep --user
+OPTIONS += -D_SCOREP
+else
+SCOREP_FLAG = 
+endif
 
-###################### MARCONI ######################
+CC = $(SCOREP_FLAG) $(COMPILER)
 
+########################### SYSTYPE CONFIGURATION ###################################
+#####################################################################################
+######################################################################################
 ifeq ($(SYSTYPE),"Marconi100")
-CC          =  mpicc
+# CC          =  mpicc
 CDEBUG      = -ggdb3 -Wall $(OMP_FLAG)
 COPTIMIZED  = -O2 -Wno-unused-result  $(OMP_FLAG)
 FFTW_LIBR   = -L$(HOME)/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
@@ -155,7 +184,7 @@ endif
 ###################### LEONARDO ######################
 
 ifeq ($(SYSTYPE),"LEONARDO")
-CC          = nvc
+# CC          = nvc
 # CC          = mpicc
 # CDEBUG      = -ggdb3 -Wall 
 # COPTIMIZED  = -acc -gpu=ccnative -Minfo=accel
@@ -177,14 +206,16 @@ endif
 
 ifeq ($(SYSTYPE), LeonardoBoost)
 
-CC          = nvc -Minfo=all -v -Mneginfo $(GPU_FLAG)
-#CDEBUG      = -g -O0 -Wall -Wextra $(OMP_FLAG)
-CDEBUG      = -g -O0 $(OMP_FLAG)
+# CC         = nvc -Minfo=all -v -Mneginfo $(GPU_FLAG)
+#CDEBUG     = -g -O0 -Wall -Wextra $(OMP_FLAG)
 #COPTIMIZED  = -O3 -Wall -Wextra -Wno-unused-result $(OMP_FLAG)
-COPTIMIZED  = -O3 -fast $(OMP_FLAG)
 
-MPI_LIBR    = -lmpi
-MPI_INCL    =
+CDEBUG      = -g -O0 -Minfo=all -v -Mneginfo $(GPU_FLAG) $(OMP_FLAG)
+COPTIMIZED  = -O3 -fast -Minfo=all -v -Mneginfo $(GPU_FLAG) $(OMP_FLAG)
+
+MPI         = /leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3/
+MPI_LIBR    = -L$(MPI)/lib -lmpi
+MPI_INCL    = -I$(MPI)/include
 
 LIBDIR      = /leonardo/home/userexternal/dgoz0000/lib/nvhpc-23.11
 
@@ -207,7 +238,7 @@ endif
 ###################### PLEIADI ######################
 
 ifeq ($(SYSTYPE),"pleiadi")
-CC          =  mpicc
+# CC          =  mpicc
 CDEBUG      = -ggdb3 -Wall $(OMP_FLAG)
 COPTIMIZED  = -O3 -Wno-unused-result $(OMP_FLAG)
 FFTW_LIBR   = -L/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/fftw-3.3.10-bap3ootbcmiypnmo7rouk57jbdhfjuty/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
@@ -223,7 +254,7 @@ endif
 ###################### AMONRA ######################
 
 ifeq ($(SYSTYPE),"amonra")
-CC          =  mpicc
+# CC          =  mpicc
 CDEBUG      = -ggdb3 -Wall $(OMP_FLAG)
 COPTIMIZED  = -O3 -Wno-unused-result $(OMP_FLAG)
 FFTW_LIBR   = -L$(FFTW_LIB) -lfftw3_mpi -lfftw3 $(OMP_FFTW)
@@ -239,7 +270,7 @@ endif
 ###################### MY_MACHINE ####################
 
 ifeq ($(SYSTYPE),"my_machine")
-CC          =  mpicc 
+# CC          =  mpicc 
 CDEBUG      =  -ggdb3 -Wall $(OMP_FLAG)
 COPTIMIZED  =  -g -O3 -Wno-unused-result -march=native $(OMP_FLAG)
 FFTW_LIBR   = -L/usr/local/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
@@ -274,12 +305,12 @@ endif
 
 OBJECTS = fmax.o  variables.o  cubic_spline_interpolation.o cosmo.o initialization.o fmax-pfft.o GenIC.o \
 	ReadParamfile.o allocations.o LPT.o distribute.o collapse_times.o collapse_times_GPU.o \
-	fragment.o build_groups.o write_halos.o write_snapshot.o
+	fragment.o build_groups.o write_halos.o write_snapshot.o pinocchio.o
 
 # Main targets and rules
 
-pinocchio: $(OBJECTS) pinocchio.o Makefile
-	$(CC) $(INC) $(COPTS) -o $(RUNDIR)$(EXEC) pinocchio.o $(OBJECTS) $(LIB)
+$(EXEC): $(OBJECTS) Makefile
+	$(CC) $(INC) $(COPTS) -o $(RUNDIR)$(EXEC) $(OBJECTS) $(LIB)
 
 run_planner: $(OBJECTS) run_planner.o Makefile
 	$(CC) $(INC) $(COPTS) -o run_planner run_planner.o $(OBJECTS) $(LIB)	

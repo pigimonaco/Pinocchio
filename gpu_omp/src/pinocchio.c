@@ -246,29 +246,31 @@ void abort_code(void)
 
 void write_cputimes()
 {
-  printf("Total:            %14.6f\n", cputime.total);
-  printf("Initialization:   %14.6f (%5.2f%%)\n", cputime.init, 100.*cputime.init/cputime.total);
-  printf("  Density in PS:  %14.6f (%5.2f%%)\n", cputime.dens, 100.*cputime.dens/cputime.total);
-  printf("fmax:             %14.6f (%5.2f%%)\n", cputime.fmax, 100.*cputime.fmax /cputime.total);
+  printf("Total               : %14.6f\n", cputime.total);
+  printf("Initialization      : %14.6f (%5.2f%%)\n", cputime.init, 100.*cputime.init/cputime.total);
+  printf("  Density in PS     : %14.6f (%5.2f%%)\n", cputime.dens, 100.*cputime.dens/cputime.total);
+  printf("fmax                : %14.6f (%5.2f%%)\n", cputime.fmax, 100.*cputime.fmax /cputime.total);
 #ifdef TWO_LPT
-  printf("  LPT:            %14.6f (%5.2f%%)\n", cputime.lpt,  100.*cputime.lpt  /cputime.total);
+  printf("  LPT               : %14.6f (%5.2f%%)\n", cputime.lpt,  100.*cputime.lpt  /cputime.total);
 #endif
-  printf("  Derivatives:    %14.6f (%5.2f%%)\n", cputime.deriv,  100.*cputime.deriv  /cputime.total);
-  printf("    Mem transfer: %14.6f (%5.2f%%)\n", cputime.mem_transf, 100.*cputime.mem_transf  /cputime.total);
-  printf("    FFTs:         %14.6f (%5.2f%%)\n", cputime.fft,  100.*cputime.fft  /cputime.total);
-  printf("  Collapse times: %14.6f (%5.2f%%)\n", cputime.coll, 100.*cputime.coll /cputime.total);
-  printf("    inv.collapse: %14.6f (%5.2f%%)\n", cputime.invcoll, 100.*cputime.invcoll /cputime.total);
-  printf("    ellipsoid:    %14.6f (%5.2f%%)\n", cputime.ell, 100.*cputime.ell /cputime.total);
-  printf("  Velocities:     %14.6f (%5.2f%%)\n", cputime.vel,  100.*cputime.vel  /cputime.total);
-  printf("Fragmentation:    %14.6f (%5.2f%%)\n", cputime.frag, 100.*cputime.frag /cputime.total);
-  printf("  Redistribution: %14.6f (%5.2f%%)\n", cputime.distr,100.*cputime.distr/cputime.total);
-  printf("  Sorting:        %14.6f (%5.2f%%)\n", cputime.sort, 100.*cputime.sort /cputime.total);
+  printf("  Derivatives       : %14.6f (%5.2f%%)\n", cputime.deriv,  100.*cputime.deriv  /cputime.total);
+  printf("    Mem transfer    : %14.6f (%5.2f%%)\n", cputime.mem_transf, 100.*cputime.mem_transf  /cputime.total);
+  printf("    FFTs            : %14.6f (%5.2f%%)\n", cputime.fft,  100.*cputime.fft  /cputime.total);
+  printf("  Collapse times    : %14.6f (%5.2f%%)\n", cputime.coll, 100.*cputime.coll /cputime.total);
+#ifdef GPU_OMP
+  printf("    GPU computation : %14.6f (%5.2f%%)\n", gputime.computation.collapse_times, 100.*gputime.computation.collapse_times/cputime.total);
+  printf("    GPU mem transfer: %14.6f (%5.2f%%)\n", gputime.memory_transfer.collapse_times, 100.*gputime.memory_transfer.collapse_times/cputime.total);
+#endif // GPU_OMP  
+  printf("  Velocities        : %14.6f (%5.2f%%)\n", cputime.vel,  100.*cputime.vel  /cputime.total);
+  printf("Fragmentation       : %14.6f (%5.2f%%)\n", cputime.frag, 100.*cputime.frag /cputime.total);
+  printf("  Redistribution    : %14.6f (%5.2f%%)\n", cputime.distr,100.*cputime.distr/cputime.total);
+  printf("  Sorting           : %14.6f (%5.2f%%)\n", cputime.sort, 100.*cputime.sort /cputime.total);
 #ifdef PLC
-  printf("  Groups total:   %14.6f (%5.2f%%)\n", cputime.group,100.*cputime.group/cputime.total);
-  printf("  Groups PLC:     %14.6f (%5.2f%%)\n", cputime.plc,100.*cputime.plc/cputime.total);
+  printf("  Groups total      : %14.6f (%5.2f%%)\n", cputime.group,100.*cputime.group/cputime.total);
+  printf("  Groups PLC        : %14.6f (%5.2f%%)\n", cputime.plc,100.*cputime.plc/cputime.total);
 #else
-  printf("  Groups:         %14.6f (%5.2f%%)\n", cputime.group,100.*cputime.group/cputime.total);
+  printf("  Groups            : %14.6f (%5.2f%%)\n", cputime.group,100.*cputime.group/cputime.total);
 #endif
-  printf("Total I/O:        %14.6f (%5.2f%%)\n", cputime.io,   100.*cputime.io   /cputime.total);
+  printf("Total I/O           : %14.6f (%5.2f%%)\n", cputime.io,   100.*cputime.io   /cputime.total);
 }
 

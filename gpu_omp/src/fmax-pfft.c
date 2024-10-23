@@ -472,7 +472,7 @@ void write_in_cvector(int ThisGrid, double * restrict vector)
 #pragma GCC ivdep
 #endif
 #ifdef _OPENMP
-#pragma omp for schedule(simd:static)
+#pragma omp for simd schedule(static)
 #endif
   for ( int i = 0; i < mysize; i++ )
     *(target + i) = *(source + i);
@@ -500,7 +500,7 @@ void write_from_cvector(int ThisGrid, double * restrict vector)
 #pragma GCC ivdep
 #endif
 #ifdef _OPENMP
-#pragma omp for schedule(simd:static)  
+#pragma omp for simd schedule(static)  
 #endif
   for ( int i = 0; i < mysize; i++ )
     *(target + i) = *(source + i);
@@ -526,7 +526,7 @@ void write_in_rvector(int ThisGrid, double * restrict vector)
 #pragma GCC ivdep
 #endif  
 #ifdef _OPENMP
-#pragma omp for schedule(simd:static)  
+#pragma omp for simd schedule(static)  
 #endif
   for( int i = 0; i < mysize; i++ )
     *(target + i) = *(source + i);
@@ -551,7 +551,7 @@ void write_from_rvector(int ThisGrid, double * restrict vector)
 #pragma GCC ivdep
 #endif
 #ifdef _OPENMP
-#pragma omp for schedule(simd:static)  
+#pragma omp for simd schedule(static)  
 #endif
   for( int i = 0; i < mysize; i++ )
     *(target + i) = *(source + i);

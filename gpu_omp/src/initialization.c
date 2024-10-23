@@ -45,7 +45,7 @@ int initialization_gpu_omp()
   MPI_Barrier(MPI_COMM_WORLD);
 
   /* one-to-one correspondence between MPI rank and GPU */
-  if (host_ntasks != numdev)
+  if (host_ntasks > numdev)
     {
       if (!host_rank)
 	{
@@ -54,7 +54,7 @@ int initialization_gpu_omp()
 	  int resultlen = -1;
 	  MPI_Get_processor_name(hostname, &resultlen);
 	  
-	  printf("\n\t Hostname: %s. Running %d MPI processes but %d GPUs available... aborting...\n\n",
+	  printf("\n\t Hostname: %s. Running %d MPI processes but %d GPUs are available... aborting...\n\n",
 		 hostname, host_ntasks, numdev);
 	  fflush(stdout);
 	}
@@ -70,8 +70,8 @@ int initialization_gpu_omp()
   MPI_Comm_free(&host_comm);
 
   /* init the cputime for the GPU */
-  cputime.gpu_computation = 0.0;
-  cputime.gpu_mem_transf  = 0.0;
+  gputime.computation.collapse_times     = 0.0;
+  gputime.memory_transfer.collapse_times = 0.0;
   
   return 0;
 }
