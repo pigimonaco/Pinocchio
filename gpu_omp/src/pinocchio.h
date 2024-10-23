@@ -30,8 +30,8 @@
 #endif
 
 #ifdef GPU_OMP
-#define ALIGN_GPU     16
-#define GPU_OMP_BLOCK 64
+#define ALIGN_GPU     256
+#define GPU_OMP_BLOCK 32
 
 // sanity check
 #if GPU_OMP_BLOCK > 1024
@@ -403,13 +403,29 @@ typedef struct
 #ifdef PLC
     ,plc
 #endif
-
-#ifdef GPU_OMP
-    , gpu_computation, gpu_mem_transf
-#endif // GPU_OMP    
     ;
 } cputime_data;
 extern cputime_data cputime;
+
+#if defined(_ENERGY_)
+#include pmt_energy.h
+#endif // _ENERGY_
+
+#ifdef GPU_OMP
+typedef struct
+{
+  double collapse_times; 
+} gpu_functions;
+
+typedef struct
+{
+  /* timing of the accelerated routine */
+  gpu_functions computation;
+  /* timing of the memory transfer to/from the accelerated routine */
+  gpu_functions memory_transfer;
+} gputime_data;
+extern gputime_data gputime;
+#endif // GPU_OMP
 
 extern int WindowFunctionType;
 
@@ -742,3 +758,11 @@ int find_location(int, int, int);
 int write_PLC();
 void coord_transformation_cartesian_polar(PRODFLOAT *, double *, double *, double *);
 #endif
+
+/* SCOREP */
+#if defined (_SCOREP)
+   /* remove inlining */
+   #define FORCE_INLINE
+#else
+   #define FORCE_INLINE inline
+#endif /* _SCOREP */

@@ -58,77 +58,102 @@ double ell_classic_gpu(const int    ismooth,
 		       const double l2,
 		       const double l3)
 {
-  /* The actual implementation solves the branch thread-divergence */
-  
-  /* Local variables declaration */
-  const double del = (l1 + l2 + l3);
-  const double det = (l1 * l2 * l3);
+  /*
+    This routine computes the smallest non-negative solution of the 3rd
+    order equation for the ellipsoid, and corrects it to reproduce the
+    spherical collapse correctly.
+  */
 
-  double ell = 0.0;
+  /* Local variables declaration */
+  double ell;
+  const double del = (l1 + l2 + l3);
+  const double det = (l1 * l2 * l3);    
 
   /* Vanishing lambda1 eigenvalue case */
-  const unsigned int mask_l1 = ((l1 > -SMALL) && (l1 < SMALL));
-  ell += (mask_l1 * -0.1);
-
-  const double den = det / 126. + 5. * l1 * del * (del - l1) / 84.;
-
-  const unsigned int mask_den = ((den > -SMALL) && (den < SMALL));
-  /* Check 1st perturbative order conditions */
-
-  const unsigned int mask_del_l1 = (((del - l1) > -SMALL) && ((del - l1) < SMALL));
-  ell += (mask_del_l1 * mask_den * !mask_l1) * ((l1 > 0.0) ? (1.0 / l1) : -0.1); /* Zel'dovich approximation */
-  /* Check 2nd perturbative order conditions */
-  const double dis = (7.0 * l1 * (l1 + 6.0 * del));
-  ell += (!mask_del_l1 * mask_den * !mask_l1) * ((dis < 0.0) ? -0.1 : (7. * l1 - sqrt(dis)) / (3. * l1 * (l1 - del)));
-  /* 3rd order perturbative solution. For more details about the equations implemented, see Monaco 1996a */
+  if (fabs(l1) < SMALL)
+    {
+      ell = -0.1;
+    }
+  else  /* Not vanishing lambda1 eigenvalue case */
+    {
+      const double den = det / 126. + 5. * l1 * del * (del - l1) / 84.;
+      /* Check 1st perturbative order conditions */
+      if (fabs(den) < SMALL)
+	{
+	  if (fabs(del - l1) < SMALL)
+	    {
+	      ell = ((l1 > 0.0) ? (1.0 / l1) : -0.1); /* Zel'dovich approximation */
+            }
+	  else
+	    {
+	      /* Check 2nd perturbative order conditions */
+	      const double dis = (7.0 * l1 * (l1 + 6.0 * del));
+	      ell = ((dis < 0.0) ? -0.1 : (7. * l1 - sqrt(dis)) / (3. * l1 * (l1 - del)));
+	      ell = ((ell < 0.0) ? -0.1 : ell);
+            }
+        } /* 1st perturbative order conditions */
+      else
+	{
+	  /* 3rd order perturbative solution. For more details about the equations implemented, see Monaco 1996a */
             
-  /* Intermediate values */
-  const double rden = (mask_den ? 0.0 : (1.0 / den));
-  const double a1 = 3. * l1 * (del - l1) / 14. * rden;
-  const double a1_2 = a1 * a1;
-  const double a2 = l1 * rden;
-  const double a3 = -1.0 * rden;
+	  /* Intermediate values */
+	  const double rden = (1.0 / den);
+	  const double a1 = 3. * l1 * (del - l1) / 14. * rden;
+	  const double a1_2 = a1 * a1;
+	  const double a2 = l1 * rden;
+	  const double a3 = -1.0 * rden;
 
-  /* The collapse time b_c will be a combination of R, Q, and D == den */
-  const double q = (a1_2 - 3. * a2) / 9.;
-  const double r = (2. * a1_2 * a1 - 9. * a1 * a2 + 27. * a3) / 54.;
-  const double r_2_q_3 = r * r - q * q * q;
+	  /* The collapse time b_c will be a combination of R, Q, and D == den */
+	  const double q = (a1_2 - 3. * a2) / 9.;
+	  const double r = (2. * a1_2 * a1 - 9. * a1 * a2 + 27. * a3) / 54.;
+	  const double r_2_q_3 = r * r - q * q * q;
 
-  /* Check 3rd perturbative order conditions */
+	  /* Check 3rd perturbative order conditions */
 
-  /* ---------------- Case 1 --------------- */
-  /* If R^2 - Q^2 > 0, which is valid for spherical and quasi-spherical perturbations */
+	  /* ---------------- Case 1 --------------- */
+	  /* If R^2 - Q^2 > 0, which is valid for spherical and quasi-spherical perturbations */
+            
+	  /* 3rd order solution */
+	  if (r_2_q_3 > 0)
+	    {
+	      const double fabs_r = fabs(r);
+	      const double sq = pow(sqrt(r_2_q_3) + fabs_r, 0.333333333333333);
+	      ell = -fabs_r / r * (sq + q / sq) - a1 / 3.;
+	      ell = ((ell < 0.0) ? -0.1 : ell);
+            }
 
-  const unsigned int mask_r_2_q_3 = (r_2_q_3 > 0.0);
-  /* 3rd order solution */
-  const double fabs_r = ((r > 0.0) ? r : -r);
-  const double inv_r = (((r > -SMALL) && (r < SMALL)) ? 0.0 : (1.0 / r));
-  const double sq = pow(sqrt(mask_r_2_q_3 * r_2_q_3) + fabs_r, 0.333333333333333);
-  const double inv_sq = (((sq > -SMALL) && (sq < SMALL)) ? 0.0 : (1.0 / sq));
-  ell += (mask_r_2_q_3 * !mask_den * !mask_l1) * ((-fabs_r * inv_r) * (sq + (q * inv_sq)) - (a1 * INV_3));
+	  /* ---------------- Case 2 --------------- */
+	  /* The solution has to be chosen as the smallest non-negative one between s1, s2, and s3 */
+            
+	  /* 3rd order solution */
+	  else
+	    {
+	      const double sq = (2.0 * sqrt(q));
+	      const double t = acos(2.0 * r / q / sq);
+	      const double a1_inv_3 = (a1 * INV_3);
 
-  /* ---------------- Case 2 --------------- */
-  /* The solution has to be chosen as the smallest non-negative one between s1, s2, and s3 */            
-  const double sq_ = !mask_r_2_q_3 * (2.0 * sqrt((q > 0.0) * q));
-  const double inv_q = (((q > -SMALL) && (q < SMALL)) ? 0.0 : (1.0 / q));
-  const double inv_sq_ = (((sq_ > -SMALL) && (sq_ < SMALL)) ? 0.0 : (1.0 / sq_));
-  const double t = !mask_r_2_q_3 * acos(2.0 * r * inv_q * inv_sq_);
-  const double a1_inv_3 = !mask_r_2_q_3 * (a1 * INV_3);
+	      double s1 = -sq * cos(t * INV_3) - a1_inv_3;
+	      s1 = ((s1 < 0.0) ? 1.e10 : s1);
 
-  double s1 = (!mask_r_2_q_3 * !mask_den * !mask_l1) * (-sq_ * cos(t * INV_3) - a1_inv_3);
-  double s2 = (!mask_r_2_q_3 * !mask_den * !mask_l1) * (-sq_ * cos((t + 2. * PI) * INV_3) - a1_inv_3);
-  double s3 = (!mask_r_2_q_3 * !mask_den * !mask_l1) * (-sq_ * cos((t + 4. * PI) * INV_3) - a1_inv_3);
+	      double s2 = -sq * cos((t + 2. * PI) * INV_3) - a1_inv_3;
+	      s2 = ((s2 < 0.0) ? 1.e10 : s2);
 
-  ord_gpu(&s1, &s2, &s3);
+	      double s3 = -sq * cos((t + 4. * PI) * INV_3) - a1_inv_3;
+	      s3 = ((s3 < 0.0) ? 1.e10 : s3);
 
-  ell += (s3 > 0.0) * s3;
-  ell += ((s3 < 0.0) && (s2 > 0.0)) * s2;
-  ell += ((s3 < 0.0) && (s2 < 0.0) && (s1 > 0.0)) * s1;      
+	      ell = (s1 < s2  ? s1 : s2);
+	      ell = (s3 < ell ? s3 : ell);
+	      ell = ((ell == 1.e10) ? -0.1 : ell);
+            }
+        } /* 3rd order perturbative solution */
+    } /* Not vanishing lambda1 eigenvalue case */
+    
+  if ((del > 0.) && (ell > 0.))
+    {
+      const double inv_del = 1.0 / del;
+      ell += -.364 * inv_del * exp(-6.5 * (l1 - l2) * inv_del - 2.8 * (l2 - l3) * inv_del);
+    }
 
-  const unsigned int mask_del_ell = ((del > 0.0) && (ell > 0.0));
-  const double inv_del = (mask_del_ell ? (1.0 / del) : 0.0);
-  ell += mask_del_ell * (-0.364 * inv_del * exp(-6.5 * (l1 - l2) * inv_del - 2.8 * (l2 - l3) * inv_del));  
-  
   return ell;
 }
 
@@ -157,7 +182,10 @@ double ell_gpu(const int ismooth,
 
 double inverse_collapse_time_gpu(const int                     ismooth,
 				 const double * const restrict dtensor,
-				       int    * const restrict fail)
+				 double * const restrict x1,
+				 double * const restrict x2,
+				 double * const restrict x3,
+				 int    * const restrict fail)
 {  
   /* Local variables declaration */
   /* mu1, mu2 and mu3 are the principal invariants of the 3x3 tensor of second derivatives */
@@ -182,37 +210,66 @@ double inverse_collapse_time_gpu(const int                     ismooth,
 
   /* Check if the tensor is already diagonal */
   const double q = (mu1_2 - 3.0 * mu2) / 9.0;
-
-  // q == 0.0
-  const unsigned int mask_q0 = ((q <= EPSILON) && (q >= -EPSILON));
-  const double x_q0[3] = {dtensor[0], dtensor[1], dtensor[2]};
-  const double inv_q = (mask_q0 ? 0.0 : (1.0 / q));
   
-  // q > 0.0
-  const double r  = -(((2.0 * mu1_2 * mu1) - (9.0 * mu1 * mu2) + (27.0 * mu3)) / 54.0);
-  const unsigned int mask = (((q * q * q) < (r * r)) || (q < 0.0));
-  *fail = (mask ? 1 : 0);
-  if (mask) // kernel abort
-    return -10.0;
-    
-  const double sq = (2.0 * sqrt(q));
-  const double inv_sq = (mask_q0 ? 0.0 : (1.0 / sq));
-  const double t = acos(2.0 * r * inv_q * inv_sq);
-  const double x_q_gt_0[3] = {((-sq * cos(t * INV_3)) + (mu1 * INV_3)),
-			      ((-sq * cos((t + 2.0 * PI) * INV_3)) + (mu1 * INV_3)),
-			      ((-sq * cos((t + 4.0 * PI) * INV_3)) + (mu1 * INV_3))};
+  if (q == 0.0)
+    {
+      /* In this case the tensor is already diagonal */
+      *x1 = dtensor[0];
+      *x2 = dtensor[1];
+      *x3 = dtensor[2];
+    }
+  else
+    {  
+      /* The solution has to be chosen as the smallest non-negative one between x1, x2 and x3 */
+      const double r = -(((2.0 * mu1_2 * mu1) - (9.0 * mu1 * mu2) + (27.0 * mu3)) / 54.0);
+        
+      /* Fail check */
+      if ((q * q * q) < (r * r) || (q < 0.0))
+	{
+	  *fail = 1;
+	  return -10.0;
+	}
+
+      /* Calculating x1, x2, x3 solution in the same way as it done in ell_classic */
+      const double sq = (2.0 * sqrt(q));
+      const double t = acos(2.0 * r / q / sq);
+      *x1 = ((-sq * cos(t * INV_3)) + (mu1 * INV_3));
+      *x2 = ((-sq * cos((t + 2.0 * PI) * INV_3)) + (mu1 * INV_3));
+      *x3 = ((-sq * cos((t + 4.0 * PI) * INV_3)) + (mu1 * INV_3));		
+    }
 
   /* Ordering and inverse collapse time */
-  double x1 = (mask_q0 * x_q0[0]) + (!mask_q0 * x_q_gt_0[0]);
-  double x2 = (mask_q0 * x_q0[1]) + (!mask_q0 * x_q_gt_0[1]);
-  double x3 = (mask_q0 * x_q0[2]) + (!mask_q0 * x_q_gt_0[2]);
+  ord_gpu(x1, x2, x3);
+  
+  /* -------------------------------- Tabulated collapse time case -------------------------------- */
 
-  /* Ordering and inverse collapse time */
-  ord_gpu(&x1, &x2, &x3);
+#ifdef TABULATED_CT
+  double t = interpolate_collapse_time(ismooth,*x1,*x2,*x3);
 
-  const double ret = ell_gpu(ismooth, x1, x2, x3);
+#ifdef DEBUG
+  double t2 = ell(ismooth,*x1,*x2,*x3);
+  if (t2 > 0.9)
+    {
+      ave_diff += t - t2;
+      var_diff += pow(t - t2, 2.0);
+      counter += 1;
+#ifdef PRINTJUNK
+      double ampl = sqrt(Smoothing.Variance[ismooth]);
+      fprintf(JUNK,"%d  %f %f %f   %f %f %f   %20g %20g %20g\n",ismooth, (*x1 + *x2 + *x3)/ampl, (*x1 - *x2)/ampl, (*x2 - *x3)/ampl, *x1, *x2, *x3, t, t2, t - t2);
+#endif // PRINTJUNK
+    }
+#endif // DEBUG
 
-  return ret;
+#else 
+
+  /* Final computation of collapse time*/
+  double t = ell_gpu(ismooth, *x1, *x2, *x3);
+	
+#endif // TABULATED_CT
+
+  *fail = 0;
+  
+  return t;
 }
 
 /* Function: common_initialization */
@@ -339,12 +396,13 @@ int compute_collapse_times_gpu(int ismooth)
       local_variance += (delta * delta);
 
       /* Computation of the collapse time */
+      double lambda1, lambda2, lambda3;
       int    fail;	
       /* inverse_collapse_time(funzione ell) ---- qui si usa le GPU spline */
-      const double Fnew = inverse_collapse_time_gpu(ismooth, diff_ten, &fail);
+      const double Fnew = inverse_collapse_time_gpu(ismooth, diff_ten, &lambda1, &lambda2, &lambda3, &fail);
       all_fails += fail;
       
-      /* Updating collapse time */      
+      /* Updating collapse time */
       const int update = (gpu_products.Fmax[index] < Fnew);
       gpu_products.Rmax[index] = (update ? ismooth : gpu_products.Rmax[index]);
       gpu_products.Fmax[index] = (update ? Fnew    : gpu_products.Fmax[index]);

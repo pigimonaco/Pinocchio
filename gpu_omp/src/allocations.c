@@ -532,8 +532,6 @@ int allocate_main_memory()
 	}
     }
   
-  double cputmp = MPI_Wtime();  
-
   /* gpu_spline->x */
   omp_target_memcpy((void *)gpu_main_memory,
 		    (void *)host_spline->x,
@@ -597,9 +595,6 @@ int allocate_main_memory()
 		    internal.device.devID,
 		    internal.device.hostID);
   
-  cputmp = MPI_Wtime() - cputmp;
-  cputime.gpu_mem_transf += cputmp;
-
   /*--------------------------------------------------------------------------*/
 
   /* allocate host memory for host_products */
