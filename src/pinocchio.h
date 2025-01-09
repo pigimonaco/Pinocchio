@@ -99,6 +99,9 @@
 #error Please set a value to FR0 when you choose MOD_GRAV_FR
 #endif
 
+#if defined(MOD_GRAV_FR) && defined(FR0)
+#warning "You have correctly compiled the code for the modified gravity scenario. However, please keep in mind that the modified gravity run (MOD_GRAV_FR) is still under development, and this mode should be used with extreme caution as it may not be fully stable. If you are unsure about its usage, please contact the developers for guidance."
+#endif
 
 /* vectorialization */
 #define DVEC_SIZE 4
