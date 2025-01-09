@@ -588,10 +588,10 @@ void write_from_rvector_to_products(int ThisGrid, int ia, int order)
 #endif
 	for (int index = 0; index < MyGrids[ThisGrid].total_local_size; index++)
 	  products[index].Vel_2LPT[ia]=*((double*)rvector_fft[ThisGrid] + index);
-	break;
 #ifdef _OPENMP
       }
 #endif
+      break;
 
 #ifdef THREE_LPT
 
@@ -603,10 +603,10 @@ void write_from_rvector_to_products(int ThisGrid, int ia, int order)
 #endif
 	for (int index = 0; index < MyGrids[ThisGrid].total_local_size; index++)
 	  products[index].Vel_3LPT_1[ia]=*((double*)rvector_fft[ThisGrid] + index);
-	break;
 #ifdef _OPENMP
       }
 #endif
+      break;
 
     case 4:
 #ifdef _OPENMP
@@ -616,10 +616,10 @@ void write_from_rvector_to_products(int ThisGrid, int ia, int order)
 #endif
 	for (int index = 0; index < MyGrids[ThisGrid].total_local_size; index++)
 	  products[index].Vel_3LPT_2[ia]=*((double*)rvector_fft[ThisGrid] + index);
-	break;
 #ifdef _OPENMP
       }
 #endif
+      break;
 
 #endif
 #endif
