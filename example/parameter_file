@@ -55,7 +55,7 @@ PLCAperture            30           % cone aperture for the past light cone
 % CTtableFile  none
 
 # CAMB PK tables and Transfer Functions
-% CAMBMatterFileTag     matterpower       % label for matter power spectrum files
-% CAMBTransferFileTag   transfer_out      % label for transfer function files
-% CAMBRunName           nilcdm_0.3eV      % name of CAMB run
-% CAMBRedsfhitsFile     inputredshift     % list of redshifts for which the power spectrum is available
+% CAMBMatterFileTag     matterpower     % label for matter power spectrum files
+% CAMBTransferFileTag   transfer_out    % label for transfer function files
+% CAMBRunName           nilcdm_0.3eV    % name of CAMB run
+% CAMBRedsfhitsFile     inputredshift   % list of redshifts for which the power spectrum is avail
