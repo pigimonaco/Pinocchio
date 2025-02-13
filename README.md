@@ -8,6 +8,12 @@
 
 PINOCCHIO is a fast code to generate catalogues of cosmological dark matter halos with known mass, position, velocity and merger history.
 
+PINOCCHIO starts from the realisation of a linear density field on a regular grid, as in the generation of the initial conditions of a cosmological N-body simulation. The code is made of two main parts, the computation of collapse times and LPT displacements for each particle, and the grouping of collapsed particles into haloes (`fragmentation'), with the costruction of halo merger histories and light-cone with continuous time sampling. 
+Collapse times are computed by Gaussian-smoothing the linear density field on many smoothing radii, then computing the second derivatives of the potential with FFTs; these are used to compute the collapse redshift of each particle using ellipsoidal collapse. We define the inverse collapse time as $F=1+z_{\rm c}$, and store its highest value $F_{\rm max}$ for all smoothing radii. At the final smoothing radius $R=0$ (meaning that the variance of the linear density field is only limited by the Lagrangian grid), the LPT displacement fields are computed, amounting to four vectors for each particle (of the three 3LPT displacement fields we only compute the first two, the third rotational term being negligible). 
+The second part of the code uses the collapse times and displacements to group particles into haloes, with an algorithm that mimics hierarchical clustering. Because collapse here is identified with orbit crossing, collapsed particles are not necessarily contained in haloes, they may be part of the filamentary network that joins haloes. So particles may be classified into uncollapsed (still in single-stream regime), filaments and halo particles. Having recognised the haloes without really running the simulation (we just performed a single 3LPT time-step when needed), we can see PINOCCHIO as a halo finder that works on the Lagrangian space of initial conditions, plus a 3LPT engine to place the haloes at the right position.
+
+
+
 It is able to reproduce, with very good accuracy, the hierarchical formation of dark matter halos from a realization of an initial (linear) density perturbation field, given on a 3D grid.
 
 Its setup is similar to that of a conventional N-body simulation, but it is based on the powerful Lagrangian Perturbation Theory. It runs in just a small fraction of the computing time taken by an equivalent N-body simulation, producing promptly the merging histories of all halos in the catalog.
