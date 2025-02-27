@@ -1,0 +1,19 @@
+
+PMT: Power Measurement Toolkit
+paper: https://arxiv.org/pdf/2210.03724
+The PMT library is available at the link: https://git.astron.nl/RD/pmt
+
+The software in this folder is conceived to be a wrapper for the
+C++ PMT library. It should be smootly used in any C and CUDA-C code.
+
+How to use the library:
+   - include the header file "energy_pmt.h" in your source code;
+   - compile "energy_pmt_methods.cpp" with any C++ compliant compiler
+     (see below the macros definition);
+   - link the final executable with any C++ compliant compiler.
+   
+Macros definition:
+   - _ENERGY_PMT_ to use the library;
+	- _ENERGY_RAPL_   to collect power measurements from CPU using RAPL;
+	- _ENERGY_NVIDIA_ to collect power measurements from NVIDIA GPUs;
+	- _ENERGY_AMD_    to collect power measurements from AMD GPUs.
