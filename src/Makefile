@@ -97,9 +97,9 @@ OPTIONS += -DNORADIATION
 # OpenMP Configuration #
 
 ifeq ($(OMP), YES)
-# OPTIONS += -DUSE_FFT_THREADS
+OPTIONS += -DUSE_FFT_THREADS
 OMP_FLAG = -fopenmp
-OMP_FFTW = -lfftw3_omp
+OMP_FFTW = -lfftw3_omp -lfftw3_threads
 else
 OMP_FLAG =
 OMP_FFTW =
