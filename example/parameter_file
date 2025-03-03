@@ -10,9 +10,9 @@ RandomSeed             486604       % random seed for initial conditions
 
 
 # cuFFTMP
-Constrain_dim0        1
-Constrain_dim1        1
-Constrain_dim2        1
+# Constrain_dim0        1
+# Constrain_dim1        1
+# Constrain_dim2        1
 
 # cosmology
 Omega0                 0.25         % Omega_0 (total matter)
