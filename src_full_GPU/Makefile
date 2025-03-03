@@ -36,16 +36,16 @@ SYSTYPE ?= LeonardoBoost
 #####################################################################
 # The following variables should be passed from command line to make
 # Executable name
-EXEC         ?= test_debug_no_MPI
+EXEC         ?= test
 # Compilation options
 
 # C compiler
 COMPILER_CC  ?= nvc
 COMPILER_CPP ?= nvc++
-DEBUG        ?= YES
+DEBUG        ?= NO
 OMP          ?= YES
 GPU          ?= NO
-FULL_GPU     ?= YES
+FULL_GPU     ?= NO
 SCOREP       ?= NO
 NSIGHT       ?= NO
 ENERGY_CPU   ?= NO
@@ -70,9 +70,9 @@ OPTIONS += -DELL_CLASSIC
 
 # Interpolation of collapse time from a TABLE #
 
-OPTIONS += -DTABULATED_CT
+# OPTIONS += -DTABULATED_CT
 # OPTIONS += -DTRILINEAR
-OPTIONS += -DBILINEAR_SPLINE
+# OPTIONS += -DBILINEAR_SPLINE
 # OPTIONS += -DALL_SPLINE
 # OPTIONS += -DASCII
 # OPTIONS += -DHISTO
@@ -183,9 +183,9 @@ endif
 # OpenMP Configuration #
 
 ifeq ($(OMP), YES)
-# OPTIONS += -DUSE_FFT_THREADS
+OPTIONS += -DUSE_FFT_THREADS
 OMP_FLAG = -mp=multicore
-OMP_FFTW = -lfftw3_omp
+OMP_FFTW = -lfftw3_omp -lfftw3_threads
 
 ifeq ($(GPU), YES)
 OMP_FLAG = -mp=multicore,gpu
