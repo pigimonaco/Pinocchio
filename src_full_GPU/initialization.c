@@ -45,22 +45,20 @@ int initialization_gpu_omp()
   /* sync all MPI processes */
   MPI_Barrier(MPI_COMM_WORLD);
 
-  /* one-to-one correspondence between MPI rank and GPU */
-  if (host_ntasks > numdev)
+  if (numdev <= 0)
     {
       if (!host_rank)
-	{
-	  // get the hostname
-	  char hostname[MPI_MAX_PROCESSOR_NAME];
-	  int resultlen = -1;
-	  MPI_Get_processor_name(hostname, &resultlen);
+  	{
+  	  // get the hostname
+  	  char hostname[MPI_MAX_PROCESSOR_NAME];
+  	  int resultlen = -1;
+  	  MPI_Get_processor_name(hostname, &resultlen);
 	  
-	  printf("\n\t Hostname: %s. Running %d MPI processes but %d GPUs are available... aborting...\n\n",
-		 hostname, host_ntasks, numdev);
-	  fflush(stdout);
-	}
+  	  printf("\n\t Hostname: %s NO GPUs available... aborting...\n\n", hostname);
+  	  fflush(stdout);
+  	}
       
-      return 1;
+      return 1;      
     }
 
   /* set the device number: one-to-one correspondence between MPI process and accelerator */
