@@ -1,5 +1,5 @@
  *****************************************************************
- *                        PINOCCHIO  V4.1                        *
+ *                        PINOCCHIO  V5.1                        *
  *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
  *****************************************************************
  
@@ -32,7 +32,7 @@
 
 ********************************************************************
 
-   This file contains information on how to compile PINOCCHIO 4.1
+   This file contains information on how to compile PINOCCHIO 5.1
 
 ********************************************************************
 
@@ -43,7 +43,7 @@ unix machines.
 
 REQUIREMENTS
 
-Pinocchio-4.1 requires: 
+Pinocchio-5.1 requires: 
 
 Message Passing Interface (MPI) libraries;
 fftw3 libraries with MPI support (http://www.fftw.org/);
@@ -57,21 +57,21 @@ the system.
 
 1.  Extract pinocchio from the .tar.gz file
 
-    prompt> tar xvzf pinocchio-4.1.tar.gz
+    prompt> tar xvzf pinocchio-5.1.tar.gz
 
     or (if you don't have gnu tar)
 
-    prompt> gunzip pinocchio-4.1.tar.gz ; tar xvf pinocchio-4.1.tar
+    prompt> gunzip pinocchio-5.1.tar.gz ; tar xvf pinocchio-5.1.tar
 
-2.  Change directory to Pinocchio-4.1/src/
+2.  Change directory to Pinocchio-5.1/src/
 
-    prompt> cd Pinocchio-4.1/src/
+    prompt> cd Pinocchio-5.1/src/
 
 3.  Edit the Makefile and set the values of compilation flags and
     variables to those suitable for your system. You find an example
     valid for a generic linux machine, using the gnu C compiler.
 
-4.  Make the executable by typing
+5.  Make the executable by typing
 
     prompt> make
 
@@ -95,7 +95,7 @@ RUN THE CODE
 The executable is found in the src/ directory after compilation, and
 is pinocchio.x (file name specified by the EXEC variable in the
 Makefile). In the example/ directory you find a small working example
-of a 500 Mpc/h box sampled with 200^3 particles, run with 4 MPI tasks.
+of a 500 Mpc/h box sampled with 200^3 particles, run with 5 MPI tasks.
 It requires ~2Gb of RAM. The code has been compiled with TWO_LPT,
 THREE_LPT and PLC options, as in the provided Makefile.
 
@@ -107,7 +107,7 @@ file outputs contains a list of redshifts at which output is required.
 
 chdir to my.directory and run the code:
 
-> mpirun -np 4 ../src/pinocchio.x parameter_file > log
+> mpirun -np 5 ../src/pinocchio.x parameter_file > log
 
 The code will generate four catalogs and four mass function files, a
 past-light cone file and a cosmology file that contains basic
