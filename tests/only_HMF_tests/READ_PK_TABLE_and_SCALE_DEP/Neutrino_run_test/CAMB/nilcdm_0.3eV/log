@@ -1,0 +1,172 @@
+ WARNING: nu_mass_degeneracies ignored when share_delta_neff
+Om_b h^2             =  0.022068
+Om_c h^2             =  0.117706
+Om_nu h^2            =  0.003220
+Om_Lambda            =  0.682500
+Om_K                 =  0.000000
+Om_m (1-Om_K-Om_L)   =  0.317500
+100 theta (CosmoMC)  =  1.045019
+N_eff (total)        =  3.046000
+ 3 nu, g= 3.0460 m_nu*c^2/k_B/T_nu0=    593.68 (m_nu=  0.100 eV)
+Reion opt depth      =  0.0000
+Age of universe/GYr  =  13.821
+zstar                =  1090.12
+r_s(zstar)/Mpc       =  145.23
+100*theta            =  1.045300
+zdrag                =  1059.17
+r_s(zdrag)/Mpc       =  148.00
+k_D(zstar) Mpc       =  0.1399
+100*theta_D          =  0.161588
+z_EQ (if v_nu=1)     =  3342.60
+100*theta_EQ         =  0.826814
+tau_recomb/Mpc       =  281.92  tau_now/Mpc =  14175.2
+ at z =    99.000000      sigma8 (all matter)=  1.02680568E-02
+ at z =    95.956596      sigma8 (all matter)=  1.05834613E-02
+ at z =    93.005699      sigma8 (all matter)=  1.09086251E-02
+ at z =    90.144699      sigma8 (all matter)=  1.12438286E-02
+ at z =    87.370796      sigma8 (all matter)=  1.15893893E-02
+ at z =    84.681297      sigma8 (all matter)=  1.19456341E-02
+ at z =    82.073601      sigma8 (all matter)=  1.23128984E-02
+ at z =    79.545303      sigma8 (all matter)=  1.26915127E-02
+ at z =    77.094002      sigma8 (all matter)=  1.30818235E-02
+ at z =    74.717201      sigma8 (all matter)=  1.34842182E-02
+ at z =    72.412804      sigma8 (all matter)=  1.38990441E-02
+ at z =    70.178497      sigma8 (all matter)=  1.43267037E-02
+ at z =    68.012199      sigma8 (all matter)=  1.47675872E-02
+ at z =    65.911903      sigma8 (all matter)=  1.52220894E-02
+ at z =    63.875500      sigma8 (all matter)=  1.56906527E-02
+ at z =    61.901001      sigma8 (all matter)=  1.61737259E-02
+ at z =    59.986698      sigma8 (all matter)=  1.66717134E-02
+ at z =    58.130600      sigma8 (all matter)=  1.71851218E-02
+ at z =    56.331001      sigma8 (all matter)=  1.77144073E-02
+ at z =    54.586102      sigma8 (all matter)=  1.82600897E-02
+ at z =    52.894402      sigma8 (all matter)=  1.88226234E-02
+ at z =    51.254200      sigma8 (all matter)=  1.94025543E-02
+ at z =    49.663799      sigma8 (all matter)=  2.00004727E-02
+ at z =    48.121899      sigma8 (all matter)=  2.06168555E-02
+ at z =    46.626900      sigma8 (all matter)=  2.12523211E-02
+ at z =    45.177399      sigma8 (all matter)=  2.19074525E-02
+ at z =    43.771999      sigma8 (all matter)=  2.25828644E-02
+ at z =    42.409401      sigma8 (all matter)=  2.32791640E-02
+ at z =    41.088299      sigma8 (all matter)=  2.39969976E-02
+ at z =    39.807301      sigma8 (all matter)=  2.47371122E-02
+ at z =    38.565399      sigma8 (all matter)=  2.55000647E-02
+ at z =    37.361198      sigma8 (all matter)=  2.62866952E-02
+ at z =    36.193699      sigma8 (all matter)=  2.70976406E-02
+ at z =    35.061798      sigma8 (all matter)=  2.79336385E-02
+ at z =    33.964199      sigma8 (all matter)=  2.87956335E-02
+ at z =    32.900101      sigma8 (all matter)=  2.96842363E-02
+ at z =    31.868401      sigma8 (all matter)=  3.06003336E-02
+ at z =    30.868099      sigma8 (all matter)=  3.15447897E-02
+ at z =    29.898199      sigma8 (all matter)=  3.25185284E-02
+ at z =    28.957800      sigma8 (all matter)=  3.35224383E-02
+ at z =    28.046101      sigma8 (all matter)=  3.45573425E-02
+ at z =    27.162100      sigma8 (all matter)=  3.56243402E-02
+ at z =    26.305000      sigma8 (all matter)=  3.67243811E-02
+ at z =    25.474001      sigma8 (all matter)=  3.78584638E-02
+ at z =    24.668200      sigma8 (all matter)=  3.90277952E-02
+ at z =    23.886999      sigma8 (all matter)=  4.02332209E-02
+ at z =    23.129601      sigma8 (all matter)=  4.14759293E-02
+ at z =    22.395201      sigma8 (all matter)=  4.27572057E-02
+ at z =    21.683201      sigma8 (all matter)=  4.40780669E-02
+ at z =    20.992901      sigma8 (all matter)=  4.54397649E-02
+ at z =    20.323500      sigma8 (all matter)=  4.68438528E-02
+ at z =    19.674601      sigma8 (all matter)=  4.82911319E-02
+ at z =    19.045300      sigma8 (all matter)=  4.97835726E-02
+ at z =    18.435301      sigma8 (all matter)=  5.13218530E-02
+ at z =    17.843800      sigma8 (all matter)=  5.29079325E-02
+ at z =    17.270300      sigma8 (all matter)=  5.45431189E-02
+ at z =    16.714199      sigma8 (all matter)=  5.62290996E-02
+ at z =    16.175100      sigma8 (all matter)=  5.79670332E-02
+ at z =    15.652400      sigma8 (all matter)=  5.97587861E-02
+ at z =    15.145600      sigma8 (all matter)=  6.16060309E-02
+ at z =    14.654200      sigma8 (all matter)=  6.35105446E-02
+ at z =    14.177800      sigma8 (all matter)=  6.54738098E-02
+ at z =    13.715800      sigma8 (all matter)=  6.74982816E-02
+ at z =    13.268000      sigma8 (all matter)=  6.95847422E-02
+ at z =    12.833700      sigma8 (all matter)=  7.17363879E-02
+ at z =    12.412700      sigma8 (all matter)=  7.39541724E-02
+ at z =    12.004500      sigma8 (all matter)=  7.62406215E-02
+ at z =    11.608700      sigma8 (all matter)=  7.85979256E-02
+ at z =    11.225000      sigma8 (all matter)=  8.10277686E-02
+ at z =    10.852900      sigma8 (all matter)=  8.35332423E-02
+ at z =    10.492200      sigma8 (all matter)=  8.61156210E-02
+ at z =    10.142400      sigma8 (all matter)=  8.87783840E-02
+ at z =    9.8032999      sigma8 (all matter)=  9.15229693E-02
+ at z =    9.4744997      sigma8 (all matter)=  9.43524763E-02
+ at z =    9.1556997      sigma8 (all matter)=  9.72694084E-02
+ at z =    8.8466997      sigma8 (all matter)=  0.10027538    
+ at z =    8.5469999      sigma8 (all matter)=  0.10337514    
+ at z =    8.2564001      sigma8 (all matter)=  0.10657072    
+ at z =    7.9747000      sigma8 (all matter)=  0.10986413    
+ at z =    7.7016001      sigma8 (all matter)=  0.11325863    
+ at z =    7.4366999      sigma8 (all matter)=  0.11675910    
+ at z =    7.1799998      sigma8 (all matter)=  0.12036531    
+ at z =    6.9310002      sigma8 (all matter)=  0.12408403    
+ at z =    6.6896000      sigma8 (all matter)=  0.12791665    
+ at z =    6.4555998      sigma8 (all matter)=  0.13186595    
+ at z =    6.2287002      sigma8 (all matter)=  0.13593669    
+ at z =    6.0086999      sigma8 (all matter)=  0.14013217    
+ at z =    5.7954001      sigma8 (all matter)=  0.14445588    
+ at z =    5.5886002      sigma8 (all matter)=  0.14891145    
+ at z =    5.3881001      sigma8 (all matter)=  0.15350272    
+ at z =    5.1936002      sigma8 (all matter)=  0.15823634    
+ at z =    5.0050998      sigma8 (all matter)=  0.16311182    
+ at z =    4.8224001      sigma8 (all matter)=  0.16813341    
+ at z =    4.6451998      sigma8 (all matter)=  0.17330873    
+ at z =    4.4734001      sigma8 (all matter)=  0.17864013    
+ at z =    4.3067999      sigma8 (all matter)=  0.18413308    
+ at z =    4.1452999      sigma8 (all matter)=  0.18979001    
+ at z =    3.9886999      sigma8 (all matter)=  0.19561692    
+ at z =    3.8369000      sigma8 (all matter)=  0.20161635    
+ at z =    3.6896999      sigma8 (all matter)=  0.20779495    
+ at z =    3.5469000      sigma8 (all matter)=  0.21416016    
+ at z =    3.4085000      sigma8 (all matter)=  0.22071058    
+ at z =    3.2744000      sigma8 (all matter)=  0.22744861    
+ at z =    3.1443000      sigma8 (all matter)=  0.23438747    
+ at z =    3.0181999      sigma8 (all matter)=  0.24152520    
+ at z =    2.8959000      sigma8 (all matter)=  0.24887079    
+ at z =    2.7772999      sigma8 (all matter)=  0.25642794    
+ at z =    2.6623001      sigma8 (all matter)=  0.26420030    
+ at z =    2.5509000      sigma8 (all matter)=  0.27218401    
+ at z =    2.4428000      sigma8 (all matter)=  0.28039697    
+ at z =    2.3380001      sigma8 (all matter)=  0.28883556    
+ at z =    2.2363999      sigma8 (all matter)=  0.29750326    
+ at z =    2.1379001      sigma8 (all matter)=  0.30640340    
+ at z =    2.0423999      sigma8 (all matter)=  0.31553936    
+ at z =    1.9498000      sigma8 (all matter)=  0.32491454    
+ at z =    1.8601000      sigma8 (all matter)=  0.33452141    
+ at z =    1.7730000      sigma8 (all matter)=  0.34438494    
+ at z =    1.6885999      sigma8 (all matter)=  0.35448614    
+ at z =    1.6068000      sigma8 (all matter)=  0.36482683    
+ at z =    1.5275000      sigma8 (all matter)=  0.37540898    
+ at z =    1.4505000      sigma8 (all matter)=  0.38624918    
+ at z =    1.3760000      sigma8 (all matter)=  0.39730632    
+ at z =    1.3036000      sigma8 (all matter)=  0.40862644    
+ at z =    1.2335000      sigma8 (all matter)=  0.42016426    
+ at z =    1.1655999      sigma8 (all matter)=  0.43191808    
+ at z =    1.0997000      sigma8 (all matter)=  0.44390500    
+ at z =    1.0358000      sigma8 (all matter)=  0.45610708    
+ at z =   0.97380000      sigma8 (all matter)=  0.46852362    
+ at z =   0.91369998      sigma8 (all matter)=  0.48113316    
+ at z =   0.85549998      sigma8 (all matter)=  0.49391085    
+ at z =   0.79900002      sigma8 (all matter)=  0.50687557    
+ at z =   0.74430001      sigma8 (all matter)=  0.51997751    
+ at z =   0.69120002      sigma8 (all matter)=  0.53323621    
+ at z =   0.63970000      sigma8 (all matter)=  0.54662317    
+ at z =   0.58980000      sigma8 (all matter)=  0.56010711    
+ at z =   0.54140002      sigma8 (all matter)=  0.57368249    
+ at z =   0.49450001      sigma8 (all matter)=  0.58731550    
+ at z =   0.44900000      sigma8 (all matter)=  0.60100079    
+ at z =   0.40490001      sigma8 (all matter)=  0.61470306    
+ at z =   0.36219999      sigma8 (all matter)=  0.62838513    
+ at z =   0.32069999      sigma8 (all matter)=  0.64207524    
+ at z =   0.28049999      sigma8 (all matter)=  0.65570450    
+ at z =   0.24150001      sigma8 (all matter)=  0.66926992    
+ at z =   0.20379999      sigma8 (all matter)=  0.68269897    
+ at z =   0.16710000      sigma8 (all matter)=  0.69606298    
+ at z =   0.13160001      sigma8 (all matter)=  0.70925456    
+ at z =   9.71999988E-02  sigma8 (all matter)=  0.72227526    
+ at z =   6.37999997E-02  sigma8 (all matter)=  0.73513025    
+ at z =   3.13999988E-02  sigma8 (all matter)=  0.74778819    
+ at z =    0.0000000      sigma8 (all matter)=  0.76021850    
