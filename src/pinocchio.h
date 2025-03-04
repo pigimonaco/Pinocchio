@@ -19,9 +19,6 @@
 #ifdef _OPENMP
 #include <omp.h>
 #endif
-#ifdef USE_GPERFTOOLS
-#include <gperftools/profiler.h>
-#endif
 
 /* this library is used to vectorize the computation of collapse times */
 /* #if !(defined(__aarch64__) || defined(__arm__)) */
@@ -54,6 +51,8 @@
 
 #define ALIGN 32     /* for memory alignment */
 #define UINTLEN 32   /* 8*sizeof(unsigned int) */
+
+//#define ADD_RMAX_TO_SNAPSHOT
 
 /* these templates define how to pass from coordinates to indices */
 #define INDEX_TO_COORD(I,X,Y,Z,L) ({Z=(I)%L[_z_]; int _KK_=(I)/L[_z_]; Y=_KK_%L[_y_]; X=_KK_/L[_y_];})

@@ -34,6 +34,11 @@
 
 
 #define SMALL ((double)1.e-20)
+//#define TRILINEAR
+#define BILINEAR_SPLINE
+//#define ALL_SPLINE
+//#define ASCII
+//#define HISTO
 
 
 /*------------------------------------------------------- Functions definition -------------------------------------------------------*/

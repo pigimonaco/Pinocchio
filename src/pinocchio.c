@@ -9,10 +9,6 @@ void write_cputimes(void);
 int main(int argc, char **argv, char **envp)
 {
 
-#ifdef USE_GPERFTOOLS
-  ProfilerStart("pinocchio_gprofile.log");
-#endif
-  
   /* Initialize MPI */
   int got_level;
   MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &got_level); // Hybrid MPI and OPENMP parallel
@@ -38,9 +34,6 @@ int main(int argc, char **argv, char **envp)
       if (!ThisTask)
 	printf("Usage: pinocchio.x parameterfile\n");
       MPI_Finalize();
-#ifdef USE_GPERFTOOLS
-      ProfilerStop();
-#endif
       return 0;
     }
 
@@ -51,9 +44,6 @@ int main(int argc, char **argv, char **envp)
       if (!ThisTask)
 	printf("Sorry but you have to use the SNAPSHOT directive in compilation to write a snapshot\n");
       MPI_Finalize();
-#ifdef USE_GPERFTOOLS
-      ProfilerStop();
-#endif
       return 0;
     }
 #endif
@@ -65,9 +55,6 @@ int main(int argc, char **argv, char **envp)
       if (!ThisTask)
 	printf("Sorry but you have to use the TABULATED_CT directive in compilation to write the collapse time table\n");
       MPI_Finalize();
-#ifdef USE_GPERFTOOLS
-      ProfilerStop();
-#endif
       return 0;
     }
 #endif
@@ -113,9 +100,6 @@ int main(int argc, char **argv, char **envp)
 	printf("Pinocchio done!\n");
 
       MPI_Finalize();
-#ifdef USE_GPERFTOOLS
-      ProfilerStop();
-#endif
 
 #endif
       return 0;
@@ -148,9 +132,6 @@ int main(int argc, char **argv, char **envp)
 	}
 
       MPI_Finalize();
-#ifdef USE_GPERFTOOLS
-      ProfilerStop();
-#endif
       return 0;
     }
 
@@ -196,10 +177,6 @@ int main(int argc, char **argv, char **envp)
 
       MPI_Finalize();
 
- #ifdef USE_GPERFTOOLS 
-      ProfilerStop();
- #endif 
-
       return 0; 
     } 
 
@@ -243,9 +220,6 @@ int main(int argc, char **argv, char **envp)
   if (!ThisTask)
     printf("Pinocchio done!\n");
   MPI_Finalize();
-#ifdef USE_GPERFTOOLS
-      ProfilerStop();
-#endif
 
   return 0;
 }

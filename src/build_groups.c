@@ -1802,16 +1802,9 @@ int store_PLC(PRODFLOAT F)
 
       for (i=0; i<3; i++)
         {
-#ifdef ROTATE_BOX
-          ii=i-1;
-          if (ii==-1)
-            ii=2;
-#else
-          ii=i;
-#endif
           /* displacement is done up to ORDER_FOR_CATALOG */
-          plcgroups[plc.Nstored].x[ii] = x[i];
-          plcgroups[plc.Nstored].v[ii] = vel(i,&obj1);
+          plcgroups[plc.Nstored].x[i] = x[i];
+          plcgroups[plc.Nstored].v[i] = vel(i,&obj1);
         }
       /* plcgroups[plc.Nstored].rhor=rhor; */
       /* plcgroups[plc.Nstored].theta=theta; */

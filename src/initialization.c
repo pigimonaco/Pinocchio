@@ -509,11 +509,7 @@ int set_plc(void)
   char filename[LBLENGTH];
 
   /* ordering of coordinates to accomodate for rotation caused by fft ordering */
-#ifdef ROTATE_BOX
-  static int rot[3]={1,2,0};
-#else
   static int rot[3]={0,1,2};
-#endif
 
   if (params.StartingzForPLC<0.)
     {
@@ -702,10 +698,6 @@ int set_plc(void)
 	     plc.center[0]*params.InterPartDist,plc.center[1]*params.InterPartDist,plc.center[2]*params.InterPartDist);
       printf("The cone vertex will be pointed toward [%f,%f,%f]\n",plc.zvers[0],plc.zvers[1],plc.zvers[2]);
       printf("It will have an aperture of %f degrees\n",params.PLCAperture);
-#ifdef ROTATE_BOX
-      if (params.PLCProvideConeData)
-	printf("(NB: rotation has been applied to the provided coordinates)\n");
-#endif
       printf("The comoving distance at the starting redshift, z=%f, is: %f Mpc\n",
 	     params.StartingzForPLC, Largest_r*params.InterPartDist);
       printf("The comoving distance at the stopping redshift, z=%f, is: %f Mpc\n",
