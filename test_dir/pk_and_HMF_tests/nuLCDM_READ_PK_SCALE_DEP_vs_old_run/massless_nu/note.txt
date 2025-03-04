@@ -1,1 +1,0 @@
-Nel caso del run con neutrini massless non serve la flag READ_PK_TABLE
