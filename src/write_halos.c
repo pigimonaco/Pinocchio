@@ -686,7 +686,7 @@ int write_PLC(int flag)
 #endif
 
 #ifdef LIGHT_OUTPUT
-		      fprintf(file," %12Lu %16.6f %16.6f %16.6f %16.6f %16.6f\n",
+		      fprintf(file," %12Lu %16.6f %15.8f %16.6f %16.6f %16.6f\n",
 			      writethis.name,
 			      writethis.red,
 			      writethis.Mass,
