@@ -130,8 +130,8 @@ static int index_compare_P(const void * a,const void * b)
   int A = *(int*)a;
   int B = *(int*)b;
 
-  int flag1 = (frag_pos[A].Fmax > frag_pos[B].Fmax);  // returns -1
-  int flag_1 = (frag_pos[A].Fmax < frag_pos[B].Fmax);   // returns 1
+  int flag1 = (frag_pos[A] > frag_pos[B]);  // returns -1
+  int flag_1 = (frag_pos[A] < frag_pos[B]);   // returns 1
   
   return flag1 - flag_1;
 
