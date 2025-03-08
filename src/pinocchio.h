@@ -1,4 +1,31 @@
-/* ######HEADER###### */
+/*****************************************************************
+ *                        PINOCCHIO  V5.1                        *
+ *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
+ *****************************************************************
+ 
+ This code was written by
+ Pierluigi Monaco, Tom Theuns, Giuliano Taffoni, Marius Lepinzan, 
+ Chiara Moretti, Luca Tornatore, David Goz, Tiago Castro
+ Copyright (C) 2025
+ 
+ github: https://github.com/pigimonaco/Pinocchio
+ web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
+ 
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 2 of the License, or
+ (at your option) any later version.
+ 
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ 
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+*/
+
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -135,7 +162,7 @@ typedef struct
   int constrain_task_decomposition[3];  /* constraints on the number of subdivisions for each dimension */
   int verbose_level;                    /* for dprintf */
   int mimic_original_seedtable;         /* logical, set to 1 to reproduce exactly GenIC */
-  int dump_vectors;                     /* logical, dump vectors to files */
+  //int dump_vectors;                     /* logical, dump vectors to files */
   int dump_seedplane;                   /* logical, dump seedplane to files */
   int dump_kdensity;                    /* logical, dump Fourier-space density to files */
   int large_plane;                      /* select the new generation of ICs */
@@ -254,11 +281,11 @@ typedef struct
     PLCCenter[3], PLCAxis[3];
   char RunFlag[SBLENGTH],DumpDir[SBLENGTH],TabulatedEoSfile[LBLENGTH],ParameterFile[LBLENGTH],
     OutputList[LBLENGTH],FileWithInputSpectrum[LBLENGTH],CTtableFile[LBLENGTH];
-  int GridSize[3],WriteProducts,WriteDensity,DumpProducts,ReadProductsFromDumps,
+  int GridSize[3],DumpProducts,ReadProductsFromDumps,
     CatalogInAscii, DoNotWriteCatalogs, DoNotWriteHistories, WriteTimelessSnapshot,
     OutputInH100, RandomSeed, MaxMem, NumFiles, 
     BoxInH100, simpleLambda, AnalyticMassFunction, MinHaloMass, PLCProvideConeData, ExitIfExtraParticles,
-    use_transposed_fft, use_inplace_fft;
+    use_transposed_fft, FixedIC, PairedIC;
 #ifdef READ_PK_TABLE
   camb_data camb;
 #endif

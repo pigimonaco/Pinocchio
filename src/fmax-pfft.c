@@ -1,12 +1,14 @@
 /*****************************************************************
- *                        PINOCCHI0  V4.0                        *
+ *                        PINOCCHIO  V5.1                        *
  *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
  *****************************************************************
  
  This code was written by
- Pierluigi Monaco
- Copyright (C) 2016
+ Pierluigi Monaco, Tom Theuns, Giuliano Taffoni, Marius Lepinzan, 
+ Chiara Moretti, Luca Tornatore, David Goz, Tiago Castro
+ Copyright (C) 2025
  
+ github: https://github.com/pigimonaco/Pinocchio
  web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
  
  This program is free software; you can redistribute it and/or modify

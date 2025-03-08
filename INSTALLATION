@@ -1,69 +1,73 @@
- *****************************************************************
+/*****************************************************************
  *                        PINOCCHIO  V5.1                        *
  *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
  *****************************************************************
- 
- This code was written by
- Pierluigi Monaco
- Dipartimento di Fisica, Universita` di Trieste
- Copyright (C) 2016
- 
- web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
-
- The original code was developed with:
- Tom Theuns           Institute for Computational Cosmology, University of Durham 
- Giuliano Taffoni     INAF - Osservatorio Astronomico di Trieste
-
- This program is free software; you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
- the Free Software Foundation; either version 2 of the License, or
- (at your option) any later version.
- 
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
- 
- You should have received a copy of the GNU General Public License
- along with this program; if not, write to the Free Software
- Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+# This code was written by
+# Pierluigi Monaco, Tom Theuns, Giuliano Taffoni, Marius Lepinzan, 
+# Chiara Moretti, Luca Tornatore, David Goz, Tiago Castro
+# Copyright (C) 2025
+# 
+# github: https://github.com/pigimonaco/Pinocchio
+# web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
+# 
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 
 
 ********************************************************************
 
-   This file contains information on how to compile PINOCCHIO 5.1
+        INSTALLATION AND USAGE GUIDE FOR PINOCCHIO 5.1
 
 ********************************************************************
 
 
-Pinocchio is a C, fully parallel (MPI) code, and should work on most
-unix machines.
+Pinocchio is a fully parallel hybrid MPI + OpenMP code. This guide 
+provides step-by-step instructions to install, compile, and run the code.
 
 
 REQUIREMENTS
 
-Pinocchio-5.1 requires: 
+Before installing Pinocchio, ensure you have the following
+dependencies installed: 
 
-Message Passing Interface (MPI) libraries;
-fftw3 libraries with MPI support (http://www.fftw.org/);
-the GNU Scientific Libraries (http://www.gnu.org/software/gsl/).
+- Message Passing Interface (MPI) libraries
+- FFTW3 libraries with MPI support (http://www.fftw.org/)
+- GNU Scientific Library (GSL) (http://www.gnu.org/software/gsl/)
+- PFFT (Parallel FFT Library) (https://github.com/mpip/pfft)
 
+Ensure these libraries are installed and available in your environment
 
-SETUP
+INSTALLATION
 
-We assume that all the libraries listed above are properly installed in
-the system.
+- Option 1: Clone from GitHub
 
-1.  Extract pinocchio from the .tar.gz file
+1. prompt> git clone https://github.com/pigimonaco/Pinocchio.git
 
-    prompt> tar xvzf pinocchio-5.1.tar.gz
+- Option 2: Download and Extract the Tarball
+
+1.  prompt> tar xvzf pinocchio-5.1.tar.gz
 
     or (if you don't have gnu tar)
 
     prompt> gunzip pinocchio-5.1.tar.gz ; tar xvf pinocchio-5.1.tar
 
-2.  Change directory to Pinocchio-5.1/src/
+NEXT STEPS
+
+Once you have the code, follow these steps:
+
+2.  Navigate to the source directory Pinocchio-5.1/src/
 
     prompt> cd Pinocchio-5.1/src/
 
@@ -86,8 +90,8 @@ the system.
 
     Instruction on how to use it are given in the DOCUMENTATION file.
 
-The codes read_pinocchio_binary.c and read_pinocchio_binary.f90 can be
-easily compiled as indicated in the file headers.
+Use the script ReadPinocchio5.py (located in the scripts directory) 
+for reading the binary output of the code.
 
 
 RUN THE CODE
@@ -117,7 +121,6 @@ quick check can be performed with the PlotExample.py python script
 contained in the example/ directory.
 
 prompt> ipython
-[...]
 
 In [1]: %run PlotExample.py
 

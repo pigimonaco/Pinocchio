@@ -1,4 +1,31 @@
-/* ######HEADER###### */
+/*****************************************************************
+ *                        PINOCCHIO  V5.1                        *
+ *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
+ *****************************************************************
+ 
+ This code was written by
+ Pierluigi Monaco, Tom Theuns, Giuliano Taffoni, Marius Lepinzan, 
+ Chiara Moretti, Luca Tornatore, David Goz, Tiago Castro
+ Copyright (C) 2025
+ 
+ github: https://github.com/pigimonaco/Pinocchio
+ web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
+ 
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 2 of the License, or
+ (at your option) any later version.
+ 
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ 
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+*/
+
 
 #include "pinocchio.h"
 #include "def_splines.h"
@@ -106,13 +133,13 @@ int main(int argc, char **argv, char **envp)
     }
 
   /* On request, it writes the density field */
-  if (params.WriteDensity || (argc>=3 && atoi(argv[2])==1) )
+  if (argc>=3 && atoi(argv[2])==2)
     {
 #ifdef SNAPSHOT
-      /* called as "pinocchio.x parameterfile 1" it writes the density field
+      /* called as "pinocchio.x parameterfile 2" it writes the density field
 	 in configuration space and exits */
-      if (argc>=3 && atoi(argv[2])==1 && !ThisTask)
-	printf("In this configuration pinocchio only writes the linear density field\n");
+      if (!ThisTask)
+	printf("In this configuration pinocchio only writes the linear density field in a snapshot\n");
 
       for (int ThisGrid=0; ThisGrid<Ngrids; ThisGrid++)
 	{
@@ -124,6 +151,10 @@ int main(int argc, char **argv, char **envp)
 	  if (write_density(ThisGrid))
 	    abort_code();
 	}
+#else
+      if (!ThisTask)
+	printf("Please compile the code with SNAPSHOT directive to use this option\n");
+      
 #endif
       if (!ThisTask)
 	{

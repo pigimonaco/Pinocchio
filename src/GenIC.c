@@ -1,12 +1,14 @@
 /*****************************************************************
- *                        PINOCCHI0  V4.0                        *
+ *                        PINOCCHIO  V5.1                        *
  *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
  *****************************************************************
  
  This code was written by
- Pierluigi Monaco
- Copyright (C) 2016
+ Pierluigi Monaco, Tom Theuns, Giuliano Taffoni, Marius Lepinzan, 
+ Chiara Moretti, Luca Tornatore, David Goz, Tiago Castro
+ Copyright (C) 2025
  
+ github: https://github.com/pigimonaco/Pinocchio
  web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
  
  This program is free software; you can redistribute it and/or modify
@@ -115,7 +117,6 @@ int GenIC_large(int ThisGrid)
       local_start[i] = GRID.GSstart_k[i];
     }
 
-
   // actually generate seeds
   {
     map_point     bottom_left, top_right;
@@ -175,7 +176,7 @@ int GenIC_large(int ThisGrid)
   // initialize the pseudo-random number chain
   
   gsl_rng_set(random_generator, params.RandomSeed);
-  
+
   // initialize a second random generator, used on the plane k = 0
   
   k0_generator = gsl_rng_alloc(gsl_rng_ranlxd1);
@@ -366,9 +367,14 @@ int GenIC_large(int ThisGrid)
 		    }
 		}
 
-#ifndef NO_RANDOM_MODULES
-	      p_of_k *= -log(ampl);
-#endif
+	      // Paired initial conditions
+	      if (params.PairedIC)
+		phase += PI;
+
+	      // Fixed initial conditions
+	      if (!params.FixedIC)
+		p_of_k *= -log(ampl);
+
 	      double delta = fac * sqrt(p_of_k);
 
 	      int addr;

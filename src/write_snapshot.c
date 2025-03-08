@@ -1,5 +1,30 @@
-/* ######HEADER###### */
-
+/*****************************************************************
+ *                        PINOCCHIO  V5.1                        *
+ *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
+ *****************************************************************
+ 
+ This code was written by
+ Pierluigi Monaco, Tom Theuns, Giuliano Taffoni, Marius Lepinzan, 
+ Chiara Moretti, Luca Tornatore, David Goz, Tiago Castro
+ Copyright (C) 2025
+ 
+ github: https://github.com/pigimonaco/Pinocchio
+ web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
+ 
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 2 of the License, or
+ (at your option) any later version.
+ 
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ 
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+*/
 
 #include "pinocchio.h"
 
@@ -19,7 +44,6 @@
 
 #ifdef SNAPSHOT
 
-// QUESTO ANDREBBE AUTOMATIZZATO
 #ifdef LONGIDS
 #define MYIDTYPE unsigned long long int
 #else
@@ -985,81 +1009,5 @@ void my_strcpy(char *to, char *from, int n)
     *(to+i)=*(from+i);
 }
 
-
-
-/* void set_point_timedep(double z) */
-/* { */
-
-/*   /\* this is equivalent to set_point in build_groups.c for the time-dependent quantities *\/ */
-
-/*   myobj.z=z; */
-
-/* #ifdef SCALE_DEPENDENT */
-
-/*   /\* this sets the growth rates *\/ */
-
-/*   int S=Smoothing.Nsmooth-1; */
-/*   double myk=Smoothing.k_GM_displ[S]; */
-/*   myobj.D=GrowingMode(myobj.z,myk) / GrowingMode(0.0,myk); */
-/* #ifdef TWO_LPT */
-/*   myobj.D2=GrowingMode_2LPT(myobj.z,myk) * GrowingMode_2LPT(0.0,0.0) / GrowingMode_2LPT(0.0,myk); */
-/* #ifdef THREE_LPT */
-/*   myobj.D31=GrowingMode_3LPT_1(myobj.z,myk) * GrowingMode_3LPT_1(0.0,0.0) / GrowingMode_3LPT_1(0.0,myk); */
-/*   myobj.D32=GrowingMode_3LPT_2(myobj.z,myk) * GrowingMode_3LPT_2(0.0,0.0) / GrowingMode_3LPT_2(0.0,myk); */
-/* #endif */
-/* #endif */
-
-/*   // PROBABILMENTE INUTILE */
-/*   /\* this sets the growth rates for peculiar velocities *\/ */
-
-/*   double interp=(1.-myobj.R/Smoothing.Rad_GM[0])*(double)(Smoothing.Nsmooth-1); */
-/*   interp=(interp<0.?0.:interp); */
-/*   int indx=(int)interp; */
-/*   double w=interp-(double)indx; */
-
-/*   /\* linear interpolation of log k *\/ */
-/*   myk=pow(10., log10(Smoothing.k_GM_vel[indx])*(1.-w) + log10(Smoothing.k_GM_vel[indx+1])*w); */
-/*   myobj.Dv = fomega(myobj.z,myk) * GrowingMode(myobj.z,myk) * GrowingMode(0.0,0.0) / GrowingMode(0.0,myk); */
-/*     //\* (Smoothing.norm_GM1_vel[indx+1]*(1.-w) + Smoothing.norm_GM1_vel[indx+1]*w); */
-/* #ifdef TWO_LPT */
-/*   myobj.D2v = fomega_2LPT(myobj.z,myk) * GrowingMode_2LPT(myobj.z,myk) * GrowingMode_2LPT(0.0,0.0) / GrowingMode_2LPT(0.0,myk); */
-/*     //\* (Smoothing.norm_GM2_vel[indx+1]*(1.-w) + Smoothing.norm_GM2_vel[indx+1]*w); */
-/* #ifdef THREE_LPT */
-/*   myobj.D31v = fomega_3LPT_1(myobj.z,myk) * GrowingMode_3LPT_1(myobj.z,myk) * GrowingMode_3LPT_1(0.0,0.0) / GrowingMode_3LPT_1(0.0,myk);  */
-/*     //\* (Smoothing.norm_GM31_vel[indx+1]*(1.-w) + Smoothing.norm_GM31_vel[indx+1]*w); */
-/*   myobj.D32v = fomega_3LPT_2(myobj.z,myk) * GrowingMode_3LPT_2(myobj.z,myk) * GrowingMode_3LPT_2(0.0,0.0) /  GrowingMode_3LPT_2(0.0,myk); */
-/*     //\* (Smoothing.norm_GM32_vel[indx+1]*(1.-w) + Smoothing.norm_GM32_vel[indx+1]*w); */
-/* #endif */
-/* #endif */
-
-/* #else */
-
-/*   double myk=params.k_for_GM; */
-
-/*   /\* this sets the growth rates *\/ */
-/*   myobj.D=GrowingMode(myobj.z,myk); */
-/* #ifdef TWO_LPT */
-/*   myobj.D2=GrowingMode_2LPT(myobj.z,myk); */
-/* #ifdef THREE_LPT */
-/*   myobj.D31=GrowingMode_3LPT_1(myobj.z,myk); */
-/*   myobj.D32=GrowingMode_3LPT_2(myobj.z,myk); */
-/* #endif */
-/* #endif */
-
-/*   /\* this sets the growth rates for peculiar velocities *\/ */
-/*   myobj.Dv = fomega(myobj.z,myk) * myobj.D; */
-/* #ifdef TWO_LPT */
-/*   myobj.D2v = fomega_2LPT(myobj.z,myk) * myobj.D2; */
-/* #ifdef THREE_LPT */
-/*   myobj.D31v = fomega_3LPT_1(myobj.z,myk) * myobj.D31; */
-/*   myobj.D32v = fomega_3LPT_2(myobj.z,myk) * myobj.D32; */
-/* #endif */
-/* #endif */
-
-/* #endif */
-
-/*   myobj.M=1; */
-
-/* } */
 
 #endif

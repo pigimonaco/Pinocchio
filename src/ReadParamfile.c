@@ -1,12 +1,14 @@
 /*****************************************************************
- *                        PINOCCHIO  V4.1                        *
+ *                        PINOCCHIO  V5.1                        *
  *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
  *****************************************************************
  
  This code was written by
- Pierluigi Monaco
- Copyright (C) 2016
+ Pierluigi Monaco, Tom Theuns, Giuliano Taffoni, Marius Lepinzan, 
+ Chiara Moretti, Luca Tornatore, David Goz, Tiago Castro
+ Copyright (C) 2025
  
+ github: https://github.com/pigimonaco/Pinocchio
  web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
  
  This program is free software; you can redistribute it and/or modify
@@ -67,6 +69,22 @@ int read_parameter_file()
       addr[nt] = params.OutputList;
       id[nt++] = STRING;
 
+      strcpy(tag[nt], "BoxSize");
+      addr[nt] = &params.BoxSize;
+      id[nt++] = DOUBLE;
+
+      strcpy(tag[nt], "BoxInH100");
+      addr[nt] = &params.BoxInH100;
+      id[nt++] = LOGICAL;
+
+      strcpy(tag[nt], "GridSize");
+      addr[nt] = &(params.GridSize[0]);
+      id[nt++] = INT;
+
+      strcpy(tag[nt], "RandomSeed");
+      addr[nt] = &params.RandomSeed;
+      id[nt++] = INT;
+
       strcpy(tag[nt], "Omega0");
       addr[nt] = &params.Omega0;
       id[nt++] = DOUBLE;
@@ -75,20 +93,20 @@ int read_parameter_file()
       addr[nt] = &params.OmegaLambda;
       id[nt++] = DOUBLE;
 
-      strcpy(tag[nt], "PrimordialIndex");
-      addr[nt] = &params.PrimordialIndex;
-      id[nt++] = DOUBLE;
-
-      strcpy(tag[nt], "Sigma8");
-      addr[nt] = &params.Sigma8;
+      strcpy(tag[nt], "OmegaBaryon");
+      addr[nt] = &params.OmegaBaryon;
       id[nt++] = DOUBLE;
 
       strcpy(tag[nt], "Hubble100");
       addr[nt] = &params.Hubble100;
       id[nt++] = DOUBLE;
 
-      strcpy(tag[nt], "OmegaBaryon");
-      addr[nt] = &params.OmegaBaryon;
+      strcpy(tag[nt], "Sigma8");
+      addr[nt] = &params.Sigma8;
+      id[nt++] = DOUBLE;
+
+      strcpy(tag[nt], "PrimordialIndex");
+      addr[nt] = &params.PrimordialIndex;
       id[nt++] = DOUBLE;
 
       strcpy(tag[nt], "DEw0");
@@ -98,6 +116,70 @@ int read_parameter_file()
       strcpy(tag[nt], "DEwa");
       addr[nt] = &params.DEwa;
       id[nt++] = DOUBLE;
+
+      strcpy(tag[nt], "TabulatedEoSfile");
+      addr[nt] = params.TabulatedEoSfile;
+      id[nt++] = STRING;
+
+      strcpy(tag[nt], "FileWithInputSpectrum");
+      addr[nt] = params.FileWithInputSpectrum;
+      id[nt++] = STRING;
+
+      strcpy(tag[nt], "InputSpectrum_UnitLength_in_cm");
+      addr[nt] = &(params.InputSpectrum_UnitLength_in_cm);
+      id[nt++] = DOUBLE;
+
+      strcpy(tag[nt], "WDM_PartMass_in_kev");
+      addr[nt] = &(params.WDM_PartMass_in_kev);
+      id[nt++] = DOUBLE;
+
+      strcpy(tag[nt], "BoundaryLayerFactor");
+      addr[nt] = &params.BoundaryLayerFactor;
+      id[nt++] = DOUBLE;
+
+      strcpy(tag[nt], "MaxMem");
+      addr[nt] = &params.MaxMem;
+      id[nt++] = INT;
+
+      strcpy(tag[nt], "MaxMemPerParticle");
+      addr[nt] = &(params.MaxMemPerParticle);
+      id[nt++] = DOUBLE;
+
+      strcpy(tag[nt], "PredPeakFactor");
+      addr[nt] = &(params.PredPeakFactor);
+      id[nt++] = DOUBLE;
+
+      strcpy(tag[nt], "CatalogInAscii");
+      addr[nt] = &params.CatalogInAscii;
+      id[nt++] = LOGICAL;
+
+      strcpy(tag[nt], "OutputInH100");
+      addr[nt] = &params.OutputInH100;
+      id[nt++] = LOGICAL;
+
+      strcpy(tag[nt], "NumFiles");
+      addr[nt] = &params.NumFiles;
+      id[nt++] = INT_SKIP;
+
+      strcpy(tag[nt], "MinHaloMass");
+      addr[nt] = &params.MinHaloMass;
+      id[nt++] = INT;
+
+      strcpy(tag[nt], "AnalyticMassFunction");
+      addr[nt] = &params.AnalyticMassFunction;
+      id[nt++] = INT;
+
+      strcpy(tag[nt], "WriteTimelessSnapshot");
+      addr[nt] = &params.WriteTimelessSnapshot;
+      id[nt++] = LOGICAL;
+
+      strcpy(tag[nt], "DoNotWriteCatalogs");
+      addr[nt] = &params.DoNotWriteCatalogs;
+      id[nt++] = LOGICAL;
+
+      strcpy(tag[nt], "DoNotWriteHistories");
+      addr[nt] = &params.DoNotWriteHistories;
+      id[nt++] = LOGICAL;
 
       strcpy(tag[nt], "StartingzForPLC");
       addr[nt] = &params.StartingzForPLC;
@@ -123,37 +205,37 @@ int read_parameter_file()
       addr[nt] = &(params.PLCAxis);
       id[nt++] = DOUBLE3;
 
-      strcpy(tag[nt], "BoxSize");
-      addr[nt] = &params.BoxSize;
-      id[nt++] = DOUBLE;
-
-      strcpy(tag[nt], "BoxInH100");
-      addr[nt] = &params.BoxInH100;
+      strcpy(tag[nt], "FixedIC");
+      addr[nt] = &(params.FixedIC);
       id[nt++] = LOGICAL;
 
-      strcpy(tag[nt], "RandomSeed");
-      addr[nt] = &params.RandomSeed;
-      id[nt++] = INT;
-
-      strcpy(tag[nt], "GridSize");
-      addr[nt] = &(params.GridSize[0]);
-      id[nt++] = INT;
-
-      strcpy(tag[nt], "BoundaryLayerFactor");
-      addr[nt] = &params.BoundaryLayerFactor;
-      id[nt++] = DOUBLE;
-
-      strcpy(tag[nt], "MinHaloMass");
-      addr[nt] = &params.MinHaloMass;
-      id[nt++] = INT;
-
-      strcpy(tag[nt], "WriteDensity");
-      addr[nt] = &params.WriteDensity;
+      strcpy(tag[nt], "PairedIC");
+      addr[nt] = &(params.PairedIC);
       id[nt++] = LOGICAL;
 
-      strcpy(tag[nt], "WriteProducts");
-      addr[nt] = &params.WriteProducts;
-      id[nt++] = LOGICAL;
+#ifdef TABULATED_CT
+      strcpy(tag[nt], "CTtableFile");
+      addr[nt] = params.CTtableFile;
+      id[nt++] = STRING;
+#endif
+
+#ifdef READ_PK_TABLE
+      strcpy(tag[nt], "CAMBRunName");
+      addr[nt] = params.camb.RunName;
+      id[nt++] = STRING;
+
+      strcpy(tag[nt], "CAMBMatterFileTag");
+      addr[nt] = params.camb.MatterFile;
+      id[nt++] = STRING;
+
+      strcpy(tag[nt], "CAMBTransferFileTag");
+      addr[nt] = params.camb.TransferFile;
+      id[nt++] = STRING;
+
+      strcpy(tag[nt], "CAMBRedsfhitsFile");
+      addr[nt] = params.camb.RedshiftsFile;
+      id[nt++] = STRING;
+#endif
 
       strcpy(tag[nt], "DumpProducts");
       addr[nt] = &params.DumpProducts;
@@ -163,119 +245,31 @@ int read_parameter_file()
       addr[nt] = &params.ReadProductsFromDumps;
       id[nt++] = LOGICAL;
 
-      strcpy(tag[nt], "NumFiles");
-      addr[nt] = &params.NumFiles;
-      id[nt++] = INT_SKIP;
-
-      strcpy(tag[nt], "MaxMem");
-      addr[nt] = &params.MaxMem;
-      id[nt++] = INT;
-
-      strcpy(tag[nt], "AnalyticMassFunction");
-      addr[nt] = &params.AnalyticMassFunction;
-      id[nt++] = INT;
-
-      strcpy(tag[nt], "CatalogInAscii");
-      addr[nt] = &params.CatalogInAscii;
-      id[nt++] = LOGICAL;
-
-      strcpy(tag[nt], "DoNotWriteCatalogs");
-      addr[nt] = &params.DoNotWriteCatalogs;
-      id[nt++] = LOGICAL;
-
-      strcpy(tag[nt], "DoNotWriteHistories");
-      addr[nt] = &params.DoNotWriteHistories;
-      id[nt++] = LOGICAL;
-
-      strcpy(tag[nt], "WriteTimelessSnapshot");
-      addr[nt] = &params.WriteTimelessSnapshot;
-      id[nt++] = LOGICAL;
-
-      strcpy(tag[nt], "OutputInH100");
-      addr[nt] = &params.OutputInH100;
-      id[nt++] = LOGICAL;
-
-      strcpy(tag[nt], "InputSpectrum_UnitLength_in_cm");
-      addr[nt] = &(params.InputSpectrum_UnitLength_in_cm);
-      id[nt++] = DOUBLE;
-
-      strcpy(tag[nt], "FileWithInputSpectrum");
-      addr[nt] = params.FileWithInputSpectrum;
-      id[nt++] = STRING;
-
-      strcpy(tag[nt], "WDM_PartMass_in_kev");
-      addr[nt] = &(params.WDM_PartMass_in_kev);
-      id[nt++] = DOUBLE;
-
-      strcpy(tag[nt], "TabulatedEoSfile");
-      addr[nt] = params.TabulatedEoSfile;
-      id[nt++] = STRING;
-
-      strcpy(tag[nt], "MaxMemPerParticle");
-      addr[nt] = &(params.MaxMemPerParticle);
-      id[nt++] = DOUBLE;
-
-      strcpy(tag[nt], "PredPeakFactor");
-      addr[nt] = &(params.PredPeakFactor);
-      id[nt++] = DOUBLE;
-
       strcpy(tag[nt], "ExitIfExtraParticles");
       addr[nt] = &params.ExitIfExtraParticles;
       id[nt++] = LOGICAL;
-
-#ifdef READ_PK_TABLE
-      strcpy(tag[nt], "CAMBMatterFileTag");
-      addr[nt] = params.camb.MatterFile;
-      id[nt++] = STRING;
-
-      strcpy(tag[nt], "CAMBTransferFileTag");
-      addr[nt] = params.camb.TransferFile;
-      id[nt++] = STRING;
-
-      strcpy(tag[nt], "CAMBRunName");
-      addr[nt] = params.camb.RunName;
-      id[nt++] = STRING;
-
-      strcpy(tag[nt], "CAMBRedsfhitsFile");
-      addr[nt] = params.camb.RedshiftsFile;
-      id[nt++] = STRING;
-#endif
-
-#ifdef TABULATED_CT
-      strcpy(tag[nt], "CTtableFile");
-      addr[nt] = params.CTtableFile;
-      id[nt++] = STRING;
-#endif
 
       strcpy(tag[nt], "UseTransposedFFT");
       addr[nt] = &(params.use_transposed_fft);
       id[nt++] = LOGICAL;
 
-      strcpy(tag[nt], "DumpVectors");        // LEVARE
-      addr[nt] = &(internal.dump_vectors);
-      id[nt++] = LOGICAL;
-
-      strcpy(tag[nt], "DumpSeedPlane");      // LEVARE
-      addr[nt] = &(internal.dump_seedplane);
-      id[nt++] = INT_SKIP_DEF;
-
-      strcpy(tag[nt], "DumpKDensity");       // LEVARE
-      addr[nt] = &(internal.dump_kdensity);
-      id[nt++] = INT_SKIP_DEF;
-
-      strcpy(tag[nt], "UseInPlaceFFT");      // LEVARE
-      addr[nt] = &(params.use_inplace_fft);
-      id[nt++] = LOGICAL;
-
-      strcpy(tag[nt], "VerboseLevel");       // LEVARE
-      addr[nt] = &(internal.verbose_level);
-      id[nt++] = INT_SKIP_DEF;
-
       strcpy(tag[nt], "MimicOldSeed");
       addr[nt] = &(internal.mimic_original_seedtable);
       id[nt++] = LOGICAL;
+
+      strcpy(tag[nt], "DumpSeedPlane");
+      addr[nt] = &(internal.dump_seedplane);
+      id[nt++] = INT_SKIP_DEF;
+
+      strcpy(tag[nt], "DumpKDensity");
+      addr[nt] = &(internal.dump_kdensity);
+      id[nt++] = INT_SKIP_DEF;
+
+      strcpy(tag[nt], "VerboseLevel");
+      addr[nt] = &(internal.verbose_level);
+      id[nt++] = INT_SKIP_DEF;
       
-      strcpy(tag[nt], "LargePlane");         // LASCIARE DI DEFAULT?
+      strcpy(tag[nt], "LargePlane");
       addr[nt] = &(internal.large_plane);
       id[nt++] = LOGICAL;
 
@@ -290,14 +284,7 @@ int read_parameter_file()
       strcpy(tag[nt], "Constrain_dim2");
       addr[nt] = &(internal.constrain_task_decomposition[2]);
       id[nt++] = INT_SKIP_DEF;
-      
 
-#ifdef USE_FFT_THREADS
-// Using the same threads for FFTs
-//      strcpy(tag[nt], "NThreads");
-//      addr[nt] = &(internal.nthreads_fft);
-//      id[nt++] = INT;
-#endif      
       
       for (j=0; j<nt; j++)     /* All logical tags are FALSE by default */
 	if (id[j]==LOGICAL)

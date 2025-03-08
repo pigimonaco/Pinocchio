@@ -1,4 +1,31 @@
-/* ######HEADER###### */
+/*****************************************************************
+ *                        PINOCCHIO  V5.1                        *
+ *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
+ *****************************************************************
+ 
+ This code was written by
+ Pierluigi Monaco, Tom Theuns, Giuliano Taffoni, Marius Lepinzan, 
+ Chiara Moretti, Luca Tornatore, David Goz, Tiago Castro
+ Copyright (C) 2025
+ 
+ github: https://github.com/pigimonaco/Pinocchio
+ web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
+ 
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 2 of the License, or
+ (at your option) any later version.
+ 
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ 
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+*/
+
 
 #include "pinocchio.h"
 #include <sys/types.h>
@@ -459,7 +486,6 @@ int fragment()
   if (!ThisTask)
     {
       printf("\n");
-      printf("[%s] Minimal memory requirements:",fdate());
       printf("[%s] The PredPeakFactor parameter could have been %5.2f in place of %5.2f\n",
 	     fdate(),BestPredPeakFactor,params.PredPeakFactor);
     }
@@ -1042,17 +1068,6 @@ int estimate_file_size(void)
   nblo+=1;
 #endif
 
-
-  if (params.WriteDensity)
-    {
-      size=268. + IDsize + 6. + (double)MyGrids[0].Ntotal * sizeof(float) + 6. + 2*40 + 6.;
-      total+=size;
-      gb=size2Mb(&size);
-      printf("density snapshot size: %f %s", size, (gb?"Gbyte":"Mbyte"));
-      if (params.NumFiles>1)
-	printf(" - each file will have a size of %f %s",size/(double)params.NumFiles,(gb?"Gbyte":"Mbyte"));
-      printf("\n");
-    }
 
   if (params.WriteTimelessSnapshot)
     {

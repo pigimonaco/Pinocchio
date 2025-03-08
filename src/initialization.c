@@ -1,4 +1,31 @@
-/* ######HEADER###### */
+/*****************************************************************
+ *                        PINOCCHIO  V5.1                        *
+ *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
+ *****************************************************************
+ 
+ This code was written by
+ Pierluigi Monaco, Tom Theuns, Giuliano Taffoni, Marius Lepinzan, 
+ Chiara Moretti, Luca Tornatore, David Goz, Tiago Castro
+ Copyright (C) 2025
+ 
+ github: https://github.com/pigimonaco/Pinocchio
+ web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
+ 
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 2 of the License, or
+ (at your option) any later version.
+ 
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ 
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+*/
+
 
 #include "pinocchio.h"
 
@@ -182,7 +209,7 @@ int set_parameters()
   internal.dump_kdensity                   = 0;
   internal.large_plane                     = 1;
   internal.mimic_original_seedtable        = 0;
-  internal.dump_vectors                    = 0;
+  //internal.dump_vectors                    = 0;
   internal.constrain_task_decomposition[0] = 0;
   internal.constrain_task_decomposition[1] = 0;
   internal.constrain_task_decomposition[2] = 0;
@@ -256,6 +283,8 @@ int set_parameters()
       dprintf(VMSG, 0, "Sigma8                      %f\n",params.Sigma8);
       dprintf(VMSG, 0, "PrimordialIndex             %f\n",params.PrimordialIndex);
       dprintf(VMSG, 0, "RandomSeed                  %d\n",params.RandomSeed);
+      dprintf(VMSG, 0, "PairedIC                    %d\n",params.PairedIC);
+      dprintf(VMSG, 0, "FixedIC                     %d\n",params.FixedIC);
       dprintf(VMSG, 0, "OutputList                  %s\n",params.OutputList);
       dprintf(VMSG, 0, "Number of outputs           %d\n",outputs.n);
       dprintf(VMSG, 0, "Output redshifts           ");
@@ -274,16 +303,17 @@ int set_parameters()
       dprintf(VMSG, 0, "BoundaryLayerFactor         %f\n",params.BoundaryLayerFactor);
       dprintf(VMSG, 0, "MaxMem per task (Mb)        %d\n",params.MaxMem);
       dprintf(VMSG, 0, "MaxMem per particle (b)     %f\n",params.MaxMemPerParticle);
+      dprintf(VMSG, 0, "PredPeakFactor              %f\n",params.PredPeakFactor);
       dprintf(VMSG, 0, "CatalogInAscii              %d\n",params.CatalogInAscii);
       dprintf(VMSG, 0, "NumFiles                    %d\n",params.NumFiles);
       dprintf(VMSG, 0, "DoNotWriteCatalogs          %d\n",params.DoNotWriteCatalogs);
       dprintf(VMSG, 0, "DoNotWriteHistories         %d\n",params.DoNotWriteHistories);
       dprintf(VMSG, 0, "WriteTimelessSnapshot       %d\n",params.WriteTimelessSnapshot);
       dprintf(VMSG, 0, "OutputInH100                %d\n",params.OutputInH100);
-      dprintf(VMSG, 0, "WriteDensity                %d\n",params.WriteDensity);
-      dprintf(VMSG, 0, "WriteProducts               %d\n",params.WriteProducts);
       dprintf(VMSG, 0, "DumpProducts                %d\n",params.DumpProducts);
       dprintf(VMSG, 0, "ReadProductsFromDumps       %d\n",params.ReadProductsFromDumps);
+      dprintf(VMSG, 0, "ExitIfExtraParticles        %d\n",params.ExitIfExtraParticles);
+
       switch(params.AnalyticMassFunction)
 	{
 	case 0:
@@ -331,6 +361,15 @@ int set_parameters()
       dprintf(VMSG, 0, "InputSpectrum_UnitLength_in_cm %f\n",params.InputSpectrum_UnitLength_in_cm);
       dprintf(VMSG, 0, "FileWithInputSpectrum          %s\n",params.FileWithInputSpectrum);
       dprintf(VMSG, 0, "WDM_PartMass_in_kev            %f\n",params.WDM_PartMass_in_kev);
+#ifdef TABULATED_CT
+      dprintf(VMSG, 0, "CTtableFile                    %s\n",params.CTtableFile);
+#endif
+#ifdef READ_PK_TABLE
+      dprintf(VMSG, 0, "CAMBRunName                    %s\n",params.camb.RunName);
+      dprintf(VMSG, 0, "CAMBMatterFileTag              %s\n",params.camb.MatterFileTag);
+      dprintf(VMSG, 0, "CAMBTransferFileTag            %s\n",params.camb.TransferFileTag);
+      dprintf(VMSG, 0, "CAMBRedsfhitsFile              %s\n",params.camb.RedsfhitsFile);
+#endif
       dprintf(VMSG, 0, "\n");
     }
 
@@ -1335,7 +1374,7 @@ int check_parameters_and_directives(void)
   
 
 #ifndef SNAPSHOT
-  if (params.WriteTimelessSnapshot || params.WriteDensity)
+  if (params.WriteTimelessSnapshot)
     {
       if (!ThisTask)
 	printf("ERROR: to produce a snapshot you have to compile with SNAPSHOT directive\n");
@@ -1348,7 +1387,7 @@ int check_parameters_and_directives(void)
   static unsigned long long largest32 = (unsigned)1<<31;
 
 #ifndef LONGIDS
-  if ((params.WriteTimelessSnapshot || params.WriteDensity) && MyGrids[0].Ntotal > largest32)
+  if ((params.WriteTimelessSnapshot) && MyGrids[0].Ntotal > largest32)
     {
       if (!ThisTask)
 	printf("ERROR: with these many particles you need to compile with LONGIDS directive\n  otherwise the snapshot IDs will be unreadable\n");
@@ -2005,7 +2044,7 @@ void greetings(void)
 
   if (!ThisTask)
     {
-      printf("[%s] This is pinocchio V5.0, running on %d MPI tasks\n\n",fdate(),NTasks);
+      printf("[%s] This is pinocchio V5.1, running on %d MPI tasks\n\n",fdate(),NTasks);
 #ifdef _OPENMP
       printf( "Using %d OpenMP threads\n", internal.nthreads_omp );
 #endif
@@ -2015,38 +2054,53 @@ void greetings(void)
 #endif
 #ifdef TWO_LPT
 #ifndef THREE_LPT
-      printf("This version uses 2LPT displacements\n");
+      printf("Using 2LPT displacements\n");
 #else
-      printf("This version uses 3LPT displacements\n");
+      printf("Using 3LPT displacements\n");
 #endif
 #else
-      printf("This version uses Zeldovich displacements\n");
+      printf("Using Zeldovich displacements\n");
+#endif
+#ifdef PLC
+      printf("Performing PLC construction\n");
+#else
+      printf("PLC reconstruction is switched off\n");
 #endif
 #ifdef NORADIATION
       printf("Radiation is not included in the Friedmann equations\n");
 #else
       printf("Radiation is included in the Friedmann equations\n");
 #endif
-#ifdef LIGHT_OUTPUT
-      printf("Catalogs will be written in the light version\n");
-#endif
-
-#ifdef TABULATED_CT
 #ifdef ELL_CLASSIC
-      printf("Ellipsoidal collapse will be tabulated as Monaco (1995)\n");
+      printf("Ellipsoidal collapse will be computed as in Monaco (1995)\n");
 #endif
 #ifdef ELL_SNG
+      printf("Ellipsoidal collapse will be computed as in Nadkarni-Ghosh (2015)\n");
+#endif
+#ifdef TABULATED_CT
       printf("Numerical integration of ellipsoidal collapse will be tabulated\n");
 #endif
+#ifdef CLASSIC_FRAGMENTATION
+      printf("Using classic fragmentation\n");
 #else
-      printf("Ellipsoidal collapse will be computed as Monaco (1995)\n");
+      printf("Using v5 fragmentation\n");
 #endif
-
 #ifdef WHITENOISE
 #error WHITENOISE is not implemented yet
       printf("Initial conditions will be read from a white noise file\n");
 #endif
-
+#ifdef SNAPSHOT
+      printf("Writing of snapshots enabled\n");
+#ifdef LONGIDS
+      printf("IDs in the snapshot will be long long\n");
+#endif
+#endif
+#ifdef LIGHT_OUTPUT
+      printf("Catalogs will be written in the light version\n");
+#endif
+#ifdef DOUBLE_PRECISION_PRODUCTS
+      printf("Products in double precision\n");
+#endif
 #ifdef SCALE_DEPENDENT
       printf("This version of the code works with scale-dependent growing modes\n");
 #ifdef MOD_GRAV_FR
@@ -2064,10 +2118,6 @@ void greetings(void)
       printf("The power spectrum will include TOTAL matter fluctuations, including neutrinos (if present)\n");
 #endif
 #endif
-#endif
-
-#ifdef NO_RANDOM_MODULES
-      printf("Initial conditions will be generated with non-random modules of the Fourier modes\n");
 #endif
 
       printf("\n");
