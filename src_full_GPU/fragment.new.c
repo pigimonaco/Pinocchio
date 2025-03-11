@@ -752,7 +752,7 @@ int count_peaks(int *ngood)
   /* counts the number of Fmax peaks down to the final redshift
      to know the total number of groups */
 
-  int iz,i,j,k,nn,ngroups_tot,peak_cond,i1,j1,k1;
+  int ngroups_tot;
 
 #ifdef DEBUG
   FILE *fd=fopen("peaks.dat","w");
@@ -761,8 +761,12 @@ int count_peaks(int *ngood)
   ngroups_tot=0;     // number of groups, group 1 is the filament group
   *ngood=0;          // number of groups out of the safety boundary
 
-  for (iz=0; iz<subbox.Nstored; iz++)
+ #pragma omp parallel loop schedule(dynamic)
+  for ( unsigned int iz = 0; iz < subbox.Nstored; iz++ )
     {
+
+      int i, j, k;
+      
       /* position on the local box */
 #ifdef CLASSIC_FRAGMENTATION
       INDEX_TO_COORD(iz,i,j,k,subbox.Lgwbl);
@@ -781,14 +785,24 @@ int count_peaks(int *ngood)
 /*       k  = kk/subbox.Lgwbl[_y_]; */
 
       /* avoid borders */
+      int continue_condition =
+	( !subbox.pbc[_x_] && (i==0 || i==subbox.Lgwbl[_x_]-1) ) ||
+	( !subbox.pbc[_y_] && (j==0 || j==subbox.Lgwbl[_y_]-1) ) ||
+	( !subbox.pbc[_z_] && (k==0 || k==subbox.Lgwbl[_z_]-1) );
+
+      if ( continue_condition ) continue;
+
+      /*
       if ( !subbox.pbc[_x_] && (i==0 || i==subbox.Lgwbl[_x_]-1) ) continue;
       if ( !subbox.pbc[_y_] && (j==0 || j==subbox.Lgwbl[_y_]-1) ) continue;
       if ( !subbox.pbc[_z_] && (k==0 || k==subbox.Lgwbl[_z_]-1) ) continue;
+      */
 
       /* peak condition */
-      peak_cond=1;
-      for (nn=0; nn<6; nn++)
+      int peak_cond = 1;
+      for ( int nn = 0; nn < 6; nn++ )
 	{
+	  int i1, j1, k1;	  
 	  switch (nn)
 	    {
 	    case 0:
@@ -838,18 +852,20 @@ int count_peaks(int *ngood)
 
 	}
 
-      if (peak_cond)
-	{
-	  ngroups_tot++;
-	  if ( i>=subbox.safe[_x_] && i<subbox.Lgwbl[_x_]-subbox.safe[_x_] &&
-	       j>=subbox.safe[_y_] && j<subbox.Lgwbl[_y_]-subbox.safe[_y_] &&
-	       k>=subbox.safe[_z_] && k<subbox.Lgwbl[_z_]-subbox.safe[_z_])
-	    (*ngood)++;
-#ifdef DEBUG
-	  fprintf(fd," %2d %2d %2d   %12.10f\n",i,j,k,frag[iz].Fmax);
-#endif
-
-	}
+     #pragma omp critical(register_new_group)
+      {
+	if (peak_cond)
+	  {
+	    ngroups_tot++;
+	    if ( i>=subbox.safe[_x_] && i<subbox.Lgwbl[_x_]-subbox.safe[_x_] &&
+		 j>=subbox.safe[_y_] && j<subbox.Lgwbl[_y_]-subbox.safe[_y_] &&
+		 k>=subbox.safe[_z_] && k<subbox.Lgwbl[_z_]-subbox.safe[_z_])
+	      (*ngood)++;
+	   #ifdef DEBUG
+	    fprintf(fd," %2d %2d %2d   %12.10f\n",i,j,k,frag[iz].Fmax);
+	   #endif
+	  }
+      }
     }
 
 #ifdef DEBUG
