@@ -761,7 +761,7 @@ int count_peaks(int *ngood)
   ngroups_tot=0;     // number of groups, group 1 is the filament group
   *ngood=0;          // number of groups out of the safety boundary
 
- #pragma omp parallel loop schedule(dynamic)
+ #pragma omp parallel for schedule(dynamic)
   for ( unsigned int iz = 0; iz < subbox.Nstored; iz++ )
     {
 
