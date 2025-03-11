@@ -44,6 +44,8 @@
 
 #ifdef SNAPSHOT
 
+static unsigned long long largest32 = (unsigned)1<<31;
+
 #ifdef LONGIDS
 #define MYIDTYPE unsigned long long int
 #else
@@ -95,7 +97,7 @@ typedef struct
 
 MPI_Status status;
 
-void WriteBlockName(FILE *,int, char*);
+void WriteBlockName(FILE *,unsigned long long, char*);
 void my_strcpy(char *,char *, int);
 int write_header();
 int write_block(Block_data);
@@ -503,13 +505,19 @@ int write_header()
 int write_block(Block_data block)
 {
   /* writes a specified block in the snapshot */
-  int dummy, npart, next, itask;
+  int npart, next, itask;
+  unsigned long dummy_4;
+  unsigned long long dummy_8;
 
   if (ThisTask==collector)
     {
-      dummy=NPartInFile*block.sizeof_type;
-      WriteBlockName(file,dummy,block.name);
-      fwrite(&dummy, sizeof(dummy), 1, file);
+      dummy_8=NPartInFile*block.sizeof_type;
+      if (dummy_8>largest32-10)
+	dummy_4=0;
+      else
+	dummy_4=(unsigned long)dummy_8;
+      WriteBlockName(file,dummy_8,block.name);
+      fwrite(&dummy_4, sizeof(dummy_4), 1, file);
       fwrite(block.data, block.sizeof_type, myNpart, file);
     }
 
@@ -532,7 +540,7 @@ int write_block(Block_data block)
 
   /* collector task closes the block */
   if (ThisTask==collector)
-    fwrite(&dummy, sizeof(dummy), 1, file);
+    fwrite(&dummy_4, sizeof(dummy_4), 1, file);
 
   return 0;
 }
@@ -988,17 +996,31 @@ int initialize_VEL(Block_data *block)
 }
 
 
-void WriteBlockName(FILE *fd,int dummy, char* LABEL)
+void WriteBlockName(FILE *fd,unsigned long long dummy, char* LABEL)
 {
-  int dummy2;
 
-  dummy2=8;
-  fwrite(&dummy2,sizeof(dummy2),1,fd);
-  fwrite(LABEL,4,1,fd);
-  dummy2=dummy+8;
-  fwrite(&dummy2,sizeof(dummy2),1,fd);
-  dummy2=8;
-  fwrite(&dummy2,sizeof(dummy2),1,fd);
+  if (dummy>largest32-10)
+    {
+      unsigned long dummy_4;
+      unsigned long long dummy2_8;
+      dummy_4=12;
+      fwrite(&dummy_4,sizeof(dummy_4),1,fd);
+      fwrite(LABEL,4,1,fd);
+      dummy2_8=dummy+8;
+      fwrite(&dummy2_8,sizeof(dummy2_8),1,fd);
+      fwrite(&dummy_4,sizeof(dummy_4),1,fd);
+    }
+  else
+    {
+      unsigned int dummy2;
+      dummy2=8;
+      fwrite(&dummy2,sizeof(dummy2),1,fd);
+      fwrite(LABEL,4,1,fd);
+      dummy2=(unsigned long)dummy+8;
+      fwrite(&dummy2,sizeof(dummy2),1,fd);
+      dummy2=8;
+      fwrite(&dummy2,sizeof(dummy2),1,fd);
+    }
 } 
 
 

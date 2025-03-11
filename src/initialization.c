@@ -1395,6 +1395,7 @@ int check_parameters_and_directives(void)
     }
 #endif
 
+  /*
   if (params.WriteTimelessSnapshot)
     {
       unsigned long long BlockLength = MyGrids[0].Ntotal * 12 / (unsigned long long)params.NumFiles;
@@ -1411,6 +1412,7 @@ int check_parameters_and_directives(void)
 	  return 1;
 	}
     }
+    */
 #endif
 
 
