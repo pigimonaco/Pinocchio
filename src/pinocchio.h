@@ -1,4 +1,31 @@
-/* ######HEADER###### */
+/*****************************************************************
+ *                        PINOCCHIO  V5.1                        *
+ *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
+ *****************************************************************
+ 
+ This code was written by
+ Pierluigi Monaco, Tom Theuns, Giuliano Taffoni, Marius Lepinzan, 
+ Chiara Moretti, Luca Tornatore, David Goz, Tiago Castro
+ Copyright (C) 2025
+ 
+ github: https://github.com/pigimonaco/Pinocchio
+ web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
+ 
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 2 of the License, or
+ (at your option) any later version.
+ 
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ 
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+*/
+
 
 #pragma once
 
@@ -89,6 +116,8 @@
 #define ALIGN 32     /* for memory alignment */
 #define UINTLEN 32   /* 8*sizeof(unsigned int) */
 
+//#define ADD_RMAX_TO_SNAPSHOT
+
 /* these templates define how to pass from coordinates to indices */
 #define INDEX_TO_COORD(I,X,Y,Z,L) ({Z=(I)%L[_z_]; int _KK_=(I)/L[_z_]; Y=_KK_%L[_y_]; X=_KK_/L[_y_];})
 #define COORD_TO_INDEX(X,Y,Z,L) ((Z) + L[_z_]*((Y) + L[_y_]*(X)))
@@ -133,6 +162,9 @@
 #error Please set a value to FR0 when you choose MOD_GRAV_FR
 #endif
 
+#if defined(MOD_GRAV_FR) && defined(FR0)
+#warning "You have correctly compiled the code for the modified gravity scenario. However, please keep in mind that the modified gravity run (MOD_GRAV_FR) is still under development, and this mode should be used with extreme caution as it may not be fully stable. If you are unsure about its usage, please contact the developers for guidance."
+#endif
 
 /* vectorialization */
 #define DVEC_SIZE 4
@@ -213,7 +245,7 @@ typedef struct
   int constrain_task_decomposition[3];  /* constraints on the number of subdivisions for each dimension */
   int verbose_level;                    /* for dprintf */
   int mimic_original_seedtable;         /* logical, set to 1 to reproduce exactly GenIC */
-  int dump_vectors;                     /* logical, dump vectors to files */
+  //int dump_vectors;                     /* logical, dump vectors to files */
   int dump_seedplane;                   /* logical, dump seedplane to files */
   int dump_kdensity;                    /* logical, dump Fourier-space density to files */
   int large_plane;                      /* select the new generation of ICs */
@@ -256,11 +288,11 @@ typedef struct  // RIALLINEARE?
 #endif
 
 #ifdef RECOMPUTE_DISPLACEMENTS
-  PRODFLOAT Vel_after[3];
+  PRODFLOAT Vel_prev[3];
 #ifdef TWO_LPT
-  PRODFLOAT Vel_2LPT_after[3];
+  PRODFLOAT Vel_2LPT_prev[3];
 #ifdef THREE_LPT
-  PRODFLOAT Vel_3LPT_1_after[3],Vel_3LPT_2_after[3];
+  PRODFLOAT Vel_3LPT_1_prev[3],Vel_3LPT_2_prev[3];
 #endif
 #endif
 #endif
@@ -339,7 +371,6 @@ extern gsl_spline ***CT_Spline;
 #ifdef TWO_LPT
 extern double *kvector_2LPT;
 extern double *source_2LPT;
-extern double **VEL2_for_displ;
 #ifdef THREE_LPT
 extern double *kvector_3LPT_1,*kvector_3LPT_2;
 extern double *source_3LPT_1,*source_3LPT_2;
@@ -389,15 +420,6 @@ typedef struct
 } camb_data;
 #endif
 
-#ifdef SCALE_DEPENDENT
-typedef struct
-{
-  int order;
-  double redshift;
-} ScaleDep_data;
-extern ScaleDep_data ScaleDep;
-#endif
-
 typedef struct
 {
   double Omega0, OmegaLambda, Hubble100, Sigma8, OmegaBaryon, DEw0, DEwa, 
@@ -407,11 +429,11 @@ typedef struct
     PLCCenter[3], PLCAxis[3];
   char RunFlag[SBLENGTH],DumpDir[SBLENGTH],TabulatedEoSfile[LBLENGTH],ParameterFile[LBLENGTH],
     OutputList[LBLENGTH],FileWithInputSpectrum[LBLENGTH],CTtableFile[LBLENGTH];
-  int GridSize[3],WriteProducts,WriteDensity,DumpProducts,ReadProductsFromDumps,
+  int GridSize[3],DumpProducts,ReadProductsFromDumps,
     CatalogInAscii, DoNotWriteCatalogs, DoNotWriteHistories, WriteTimelessSnapshot,
     OutputInH100, RandomSeed, MaxMem, NumFiles, 
     BoxInH100, simpleLambda, AnalyticMassFunction, MinHaloMass, PLCProvideConeData, ExitIfExtraParticles,
-    use_transposed_fft, use_inplace_fft;
+    use_transposed_fft, FixedIC, PairedIC;
 #ifdef READ_PK_TABLE
   camb_data camb;
 #endif
@@ -483,11 +505,11 @@ typedef struct
 #endif
 #endif
 #ifdef RECOMPUTE_DISPLACEMENTS
-  PRODFLOAT Vel_after[3];
+  PRODFLOAT Vel_prev[3];
 #ifdef TWO_LPT
-  PRODFLOAT Vel_2LPT_after[3];
+  PRODFLOAT Vel_2LPT_prev[3];
 #ifdef THREE_LPT
-  PRODFLOAT Vel_3LPT_1_after[3], Vel_3LPT_2_after[3];
+  PRODFLOAT Vel_3LPT_1_prev[3], Vel_3LPT_2_prev[3];
 #endif
 #endif
 #endif
@@ -534,6 +556,7 @@ extern char date_string[25];
 extern int *frag_pos,*indices,*indicesY,*sorted_pos,*group_ID,*linking_list;
 
 extern unsigned int *frag_map, *frag_map_update;
+extern int map_to_be_used;
 
 /* fragmentation parameters */
 extern double f_m, f_rm, espo, f_a, f_ra, f_200, sigmaD0;
@@ -587,26 +610,24 @@ extern int ngroups;
 typedef struct
 {
   int M,i;
-  PRODFLOAT R,q[3],v[3],D,Dv;
-  double z;
+  PRODFLOAT R,q[3],v[3],D,Dv,w;
+  double z,myk;
 #ifdef TWO_LPT
-  PRODFLOAT D2,D2v,v2[3];
+  PRODFLOAT D2,D2v,v2[3],w2;
 #ifdef THREE_LPT
-  PRODFLOAT D31,D31v,v31[3],D32,D32v,v32[3];
+  PRODFLOAT D31,D31v,v31[3],D32,D32v,v32[3],w31,w32;
 #endif
 #endif
 #ifdef RECOMPUTE_DISPLACEMENTS
-  PRODFLOAT w;
-  PRODFLOAT v_aft[3];
+  PRODFLOAT v_prev[3];
 #ifdef TWO_LPT
-  PRODFLOAT v2_aft[3];
+  PRODFLOAT v2_prev[3];
 #ifdef THREE_LPT
-  PRODFLOAT v31_aft[3],v32_aft[3];
+  PRODFLOAT v31_prev[3],v32_prev[3];
 #endif
 #endif
 #endif
 } pos_data;
-extern pos_data obj, obj1, obj2;
 
 typedef struct
 {
@@ -632,10 +653,11 @@ typedef struct
 
 typedef struct
 {
-  int n, mine;
-  double z[MAXOUTPUTS];
-} Segment_data;
-extern Segment_data Segment;
+  int nseg, myseg, no_interp, order;
+  double z[MAXOUTPUTS],D[MAXOUTPUTS],D2[MAXOUTPUTS],D31[MAXOUTPUTS],D32[MAXOUTPUTS];
+  double redshift; /* this is the redshift used in compute_derivative */
+} ScaleDep_data;
+extern ScaleDep_data ScaleDep;
 
 /* prototypes for functions defined in collapse_times.c */
 int compute_collapse_times(int);
@@ -665,7 +687,7 @@ void write_in_cvector(int, double *);
 void write_from_cvector(int, double *);
 void write_in_rvector(int, double *);
 void write_from_rvector(int, double *);
-int store_velocities();
+void write_from_rvector_to_products(int, int, int);
 
 // PROBABILMENTE DA TOGLIERE DOPO IL DEBUG
 void dump_cvector(double*, int, int, ptrdiff_t *, ptrdiff_t *,  char *, int);
@@ -700,7 +722,7 @@ int check_parameters_and_directives(void);
 /* prototypes in write_snapshot.c */
 #ifdef SNAPSHOT
 int write_density(int);
-int write_LPT_snapshot(double);
+int write_LPT_snapshot(void);
 int write_timeless_snapshot(void);
 #endif
 
@@ -746,14 +768,15 @@ int read_parameter_file();
 
 /* prototypes for functions defined in fmax.c */
 int compute_fmax(void);
-int compute_displacements(void);
+int compute_displacements(int, int, double);
+int compute_first_derivatives(double, int, int, double*);
 char *fdate(void);
 int dump_products(void);
 int read_dumps(void);
 
 #ifdef TWO_LPT
 /* prototypes for functions defined in LPT.c */
-int compute_LPT_displacements();
+int compute_LPT_displacements(int, double);
 #endif
 
 /* prototypes for functions defined in distribute.c */
@@ -763,7 +786,8 @@ int distribute_back(void);
 /* prototypes for functions defined in fragment.c */
 int fragment_driver(void);
 int get_mapup_bit(unsigned int);
-int get_map_bit(int, int, int);
+int get_map_bit(unsigned int);
+int get_map_bit_coord(int, int, int);
 void set_mapup_bit(int, int, int);
 int estimate_file_size(void);
 double compute_Nhalos_in_PLC(double, double);

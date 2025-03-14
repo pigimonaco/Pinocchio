@@ -1,40 +1,37 @@
- *****************************************************************
- *                        PINOCCHIO  V4.1                        *
- *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
- *****************************************************************
- 
- This code was written by
- Pierluigi Monaco
- Dipartimento di Fisica, Universita` di Trieste
- Copyright (C) 2016
- 
- web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
+*****************************************************************
+*                        PINOCCHIO  V5.1                        *
+*  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
+*****************************************************************
 
- The original code was developed with:
- Tom Theuns           Institute for Computational Cosmology, University of Durham 
- Giuliano Taffoni     INAF - Osservatorio Astronomico di Trieste
+This code was written by
+Pierluigi Monaco, Tom Theuns, Giuliano Taffoni, Marius Lepinzan, 
+Chiara Moretti, Luca Tornatore, David Goz, Tiago Castro
+Copyright (C) 2025
 
- This program is free software; you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
- the Free Software Foundation; either version 2 of the License, or
- (at your option) any later version.
- 
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
- 
- You should have received a copy of the GNU General Public License
- along with this program; if not, write to the Free Software
- Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+github: https://github.com/pigimonaco/Pinocchio
+web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
 
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 
 *****************************************************************
 
-   This file contains information on how to run PINOCCHIO-4.1
+   This file contains information on how to run PINOCCHIO v5.1
 
 *****************************************************************
+
 
 This documentation is meant to give technical support in running the
 PINOCCHIO code. It is not meant to explain the scientific and
@@ -52,52 +49,55 @@ http://adlibitum.oats.inaf.it/monaco/pinocchio.html
 
 INDEX
 
- 0. V4.1.2
+ 0. V5.1
  1. Differences with previous versions
- 2. The package - V4.1
+ 2. The package - V5.1
  3. The parameter file
  4. Pre-compiler directives
  5. Outputs
  6. Designing a run
- 7. Special behaviour
- 8. Scale-dependent growth rate
+ 7. Scale-dependent growth rate
+ 8. Special behaviour
  9. PINOCCHIO papers
 
 
 *****************************************************************
 
 
-0. V4.1.2
+0. V5.1
 
-This version has been completely re-written in C. I strongly recommend
-this version with respect to the previous ones. Moreover, it presents
-a number of new features, presented in Munari et al. (2016) and Rizzo
-et al. (2016):
+This version is described in Euclid Collaboration: P. Monaco et al.
+2025, in preparation. It has been used to produce the simulations for
+the mock catalogs for the Euclid spectroscopic sample. Its main
+features are:
 
+ - it creates (1) halo catalogs at fixed time, with their mass
+   function; (2) merger histories for all the halos; (3) on request,
+   halo catalogs in the past light cone;
  - particle displacements can be computed with Lagrangian Perturbation
    Theory (LPT) up to third order;
- - the code is interfaced with V3 of fftw library;
- - parameter calibration has been improved;
- - the code allows the user to have a much better control of memory
-   usage, so as to best exploit a given machine;
- - it can output all particles in a Gadget2 format snapshot;
- - it can work with scale-dependent growth factors.
+ - to solve the memory limitations due to the slab distribution of
+   fftw, the code is interfaced with the pfft library;
+ - the identification of halos is based on an algorithm that is more
+   efficient in memory usage;
+ - the code allows the user to have a much better control of memory,
+   so as to best exploit a given machine;
+ - it can produce a "timeless snapshot", containing the inverse
+   collapse times, the redshift at which the particle is accreted on a
+   halo and the LPT displacement fields;
+ - it can work with massive neutrinos and f(R) gravity.
 
-With respect to V4.0, this version fixes an important bug in the
-production of halos in the past light cone. Moreover, it improves in
-the writing of results as Gadget snapshots.
-
-With respect to V4.1, this version fixes other bugs in the PLC
-reconstruction, allows the user to visualize the tiling of the box
-replications to sample the past light cone, and improves in the
-writing of snapshots.
+The companion code Pitiless-slicer uses the output of pinocchio, in
+particular the timeless snapshot, to (1) create snapshots of all
+particles in a Gadget2 format, at any redshift, (2) to produce the
+mass distribution of matter in shells around the observer and use them
+to compute lensing convergence and shear.
 
 
 *****************************************************************
 
 
 1. DIFFERENCES WITH PREVIOUS VERSIONS
-
 
 V1 of pinocchio is in fortran 77 and is not parallel. It adopts an
 out-of-core strategy to minimize memory requirements, so it needs fast
@@ -112,7 +112,7 @@ parallelization has no restrictions in validity but does not have good
 scaling properties, the scalar code on a shared-memory machine is
 preferable whenever possible.
 
-V3.0 is fully, parallel, is written in fortran90 + C, and uses Message
+V3 is fully, parallel, is written in fortran90 + C, and uses Message
 Passing Interface (MPI) for communications. It has been designed to
 run on hundreds if not thousands of cores of a massively parallel
 super-computer. Main features:
@@ -147,9 +147,8 @@ super-computer. Main features:
 A complete description of the code is provided in Monaco et
 al. (2013); see Section 7 below.
 
-V4 has been rewritten in C. It uses MPI for communications,
-extension to OpenMP is in project and may be released in future
-versions. These are the main changes:
+V4 has been fully rewritten in C. It uses MPI for communications and
+can use OpenMP for threading.
 
 - Particle displacements are computed with Zeldovich, 2LPT or 3LPT
   (without the rotational term). The LPT order is decided at
@@ -187,35 +186,70 @@ versions. These are the main changes:
   ought to be extracted from the complete halo list) and the
   quantities provided are slightly different from previous versions.
 
-V4.1 fixes a bug in the production of halos in the past light cone,
-and improves in the writing of results as Gadget snapshots.
+- The code has been extended to massive neutrinos cosmologies and to
+  some modified gravity models.
+
+V4.1.3 is the last stable version of V4, and is available on github.
+It has several bug fixes, and improves in the writing of results as
+Gadget snapshots. It has been used to produce some of the simulations
+for Euclid.
+
+V5 is able to scale up to very large boxes; its charcteristics are
+thoroughly described in Euclid Collaboration: P. Monaco et al. 2025,
+in preparation.
+
+- To overcome the slab domain decomposition of fftw, it uses pfft that
+  can distribute memory in slabs, pencils and subvolume. The
+  generation of initial conditions has been completely rewritten and
+  adapted to a generic domain decomposition.
+
+- Fragmentation is performed on much larger subvolumes, where only the
+  particles that may be relevant are acquired by a task. First each
+  task receives only the particles that are expected to collapse by
+  the final redshift, then the fragmentation is run once on a minimal
+  subvolume; then each task tags all the particles that lie outside
+  the domain and are near a halo that touches the border, and requests
+  these particles to the other tasks. The fragmentation is then run to
+  the end.
+
+- The code can write a "timeless-snapshot" that contains all the
+  inverse collapse times Fmax, the LPT displacement fields and the
+  time at which the particle enters a halo.
+
+The first two improvements lead to a much better scalability in memory
+of the code.
 
 
 *****************************************************************
 
 
-2. THE PACKAGE - V4.1
+2. THE PACKAGE - V5.1
 
 This software has been tested successfully on several machines. You
 are most warmly encouraged to use this code and report any problem to
-monaco@oats.inaf.it.
+pierluigi.monaco@inaf.it.
 
-The src/ directory of the PINOCCHIO-4.1 package contains source files,
+The src/ directory of the PINOCCHIO-5.1 package contains source files,
 headers, the Makefile, the main code pinocchio.c, and these further
 codes:
 
-- memorytest.c to test whether a given configuration will achieve the
+- run_planner.c to test whether a given configuration will achieve the
   required memory;
 
-- read_pinocchio_binary.c, read_pinocchio_binary.f90 and
-  ReadPinocchio.py to read the catalogs in binary format, and rewrite
-  them into ascii if needed (C version).
+The scripts/ directory contains:
 
-- PlotPLCGeometry.py to visualize the tiling of boxes to sample the
-  past light cone (when the PLC directive is present).
+- ReadPinocchio5.py to read the catalogs from python;
+
+- PlotPLCGeometry.py to visualize the tiling of boxes used in a run to
+  sample the past light cone (when the PLC directive is present).
+
+- Pinocchio2fits.py to translate pinocchio binary output to fits.
 
 The example/ directory contains the results of an example run, see
 below and the INSTALLATION file for more details.
+
+Finally, the tests/ contains a set of tests to perform code
+validation, see the documentation in that directory.
 
 
 *****************************************************************
@@ -234,20 +268,22 @@ if the logical keyword PLCProvideConeData is specified. The example
 parameter file is reported here for clarity. Empty lines and lines
 starting with "%" or "#" are ignored.
 
-****************************** parameter_file **********************************
+-------------------------  parameter file  -------------------------
 
-# This is an example parameter file for the Pinocchio 4.1 code
+# This is an example parameter file for the Pinocchio 5.1 code
 
 # run properties
 RunFlag                example      % name of the run
 OutputList             outputs      % name of file with required output redshifts
-BoxSize                500.0        % physical size of the box in Mpc
+BoxSize                500          % physical size of the box in Mpc
 BoxInH100                           % specify that the box is in Mpc/h
-GridSize               200          % number of grid points per side
-RandomSeed             999          % random seed for initial conditions
+GridSize               128          % number of grid points per side
+RandomSeed             486604       % random seed for initial conditions
+% FixedIC                           % if present, the modulus in ICs is fixed to the average
+% PairedIC                          % if present, the phase in ICs is shifted by PI
 
 # cosmology
-Omega0                 0.25         % Omega_m (total matter)
+Omega0                 0.25         % Omega_0 (total matter)
 OmegaLambda            0.75         % Omega_Lambda
 OmegaBaryon            0.044        % Omega_b (baryonic matter)
 Hubble100              0.70         % little h
@@ -256,7 +292,7 @@ PrimordialIndex        0.96         % n_s
 DEw0                   -1.0         % w0 of parametric dark energy equation of state
 DEwa                   0.0          % wa of parametric dark energy equation of state
 TabulatedEoSfile       no           % equation of state of dark energy tabulated in a file
-FileWithInputSpectrum  no           % P(k) tabulated in a file; 
+FileWithInputSpectrum  no           % P(k) tabulated in a file
                                     % "no" means that the fit of Eisenstein & Hu is used
 
 # from N-GenIC
@@ -264,9 +300,10 @@ InputSpectrum_UnitLength_in_cm 0    % units of tabulated P(k), or 0 if it is in 
 WDM_PartMass_in_kev    0.0          % WDM cut following Bode, Ostriker & Turok (2001)
 
 # control of memory requirements
-BoundaryLayerFactor    1.0          % width of the boundary layer for fragmentation
+BoundaryLayerFactor    3.0          % width of the boundary layer for fragmentation
 MaxMem                 3600         % max available memory to an MPI task in Mbyte
-MaxMemPerParticle      300          % max available memory in bytes per particle
+MaxMemPerParticle      150          % max available memory in bytes per particle
+PredPeakFactor         0.8          % guess for the number of peaks in the subvolume
 
 # output
 CatalogInAscii                      % catalogs are written in ascii and not in binary format
@@ -276,25 +313,28 @@ MinHaloMass            10           % smallest halo that is given in output
 AnalyticMassFunction   9            % form of analytic mass function given in the .mf.out files
 
 # output options:
-% WriteSnapshot                     % writes a Gadget2 snapshot as an output
+% WriteTimelessSnapshot             % writes a Gadget2 snapshot as an output
 % DoNotWriteCatalogs                % skips the writing of full catalogs (including PLC)
 % DoNotWriteHistories               % skips the writing of merger histories
-
-# for debugging or development purposes:
-% WriteFmax                         % writes the values of the Fmax field, particle by particle
-% WriteVmax                         % writes the values of the Vmax field, particle by particle
-% WriteRmax                         % writes the values of the Rmax field, particle by particle
-% WriteDensity                      % writes the linear density, particle by particle
 
 # past light cone
 StartingzForPLC        0.3          % starting (highest) redshift for the past light cone
 LastzForPLC            0.0          % final (lowest) redshift for the past light cone
 PLCAperture            30           % cone aperture for the past light cone
-% PLCProvideConeData                % read vertex and direction of cone from paramter file
-% PLCCenter 0. 0. 0.                % cone vertex in the same coordinates as the BoxSize
-% PLCAxis   1. 1. 0.                % un-normalized direction of the cone axis
+PLCProvideConeData                  % read vertex and direction of cone from paramter file
+PLCCenter 0. 0. 0.                  % cone vertex in the same coordinates as the BoxSize
+PLCAxis   1. 1. 0.                  % un-normalized direction of the cone axis
 
-****************************** parameter file **********************************
+# Table of collapseTime file, needed if the code is compiled with TABULATED_CT
+% CTtableFile  none
+
+# CAMB PK tables, needed if the code is compiled with READ_PK_TABLE
+% CAMBMatterFileTag     matterpower     % label for matter power spectrum files
+% CAMBTransferFileTag   transfer_out    % label for transfer function files
+% CAMBRunName           nilcdm_0.3eV    % name of CAMB run
+% CAMBRedsfhitsFile     inputredshift   % list of redshifts for which the power spectrum is avail
+
+----------------------------------------------------------------------
 
 Outputs will be given at all the redshifts specified in a file, whose
 name is given in the parameter file (OutputList). This file should
@@ -307,16 +347,17 @@ Please remember that, because pinocchio constructs merger histories
 and light cones on the fly, you will rarely need to write out a large
 number of outputs.
 
-Pinocchio uses the analytic fit of Eisenstein & Hu (1998) to compute
-the power spectrum. The user can provide a tabulated power spectrum to
-the code. The filename containing the power spectrum will be given as
-an argument of the FileWithInputSpectrum keyword. The file is supposed
-to provide two columns with k and P(k), in units of h/Mpc and
-(Mpc/h)^3; if the P(k) is provided in other units, you can specify
-them using InputSpectrum_UnitLength_in_cm. It is anyway assumed that
-units are for H=100. A P(k) generated by the CAMB code can be directly
-provided. The parameter Sigma8 gives the value of the sigma8
-parameter, used to renormalize the power spectrum. In case the
+As a default, Pinocchio uses the analytic fit of Eisenstein & Hu
+(1998) to compute the power spectrum; alternatively, the user can
+provide a tabulated power spectrum to the code. The filename
+containing the power spectrum will be given as an argument of the
+FileWithInputSpectrum keyword. The file is supposed to provide two
+columns with k and P(k), in units of h/Mpc and (Mpc/h)^3; if the P(k)
+is provided in other units, you can specify them using
+InputSpectrum_UnitLength_in_cm. It is anyway assumed that units are
+for H=100. A P(k) generated by the CAMB code can be directly provided.
+The parameter Sigma8 gives the value of the sigma8 parameter, and it
+is used to renormalize the power spectrum, but in case the
 normalization of the power spectrum provided in a file is already
 correct (say, it has been generated by CAMB), you can specify 0.0 for
 Sigma8; in this case the code will not compute the normalization
@@ -324,20 +365,47 @@ constant of the power spectrum. The value of the sigma8 parameter will
 be written in the standard output, so it is easy to check its
 correctness.
 
+Other options in the parameter file:
+
+DumpProducts: after fmax is run it writes the products on dump files,
+that can be read by another run to bypass the generation of ICs + fmax
+and directly go to the fragmentation.
+
+ReadProductsFromDumps: reads the dumped products and jumps to the
+fragmentation.
+
+UseTransposedFFT and MimicOldSeed: these two keywords should be added
+if one wants to reproduce exactly a simulation whose initial
+conditions have been produced with N-GenIC or 2lptIC.
+
+Constrain_dim0, Constrain_dim1, Constrain_dim2: these keywords force
+pfft to adopt a given domain decomposition. This can be useful to
+force a pencil domain in the case pfft prefers a slab domain despite
+it is less memory efficient. The product of these three numbers must
+be equal to the number of MPI tasks.
+
+ExitIfExtraParticles: if the memory overhead is not sufficient for
+some tasks to store all needed particles during fragmentation, then a
+warning is issued but the computation goes on. This flag forces the
+computation to stop.
+
 
 *****************************************************************
 
 
 4. PRE-COMPILER DIRECTIVES
 
-These are the pre-compiler directives that can be specified in the
-Makefile.
+These are the pre-compiler switches and directives that can be
+specified in the Makefile.
 
-TWO_LPT: activates the computation of displacements with second-order
-LPT.
+DEBUG = YES / NO
+YES will trigger the debugging symbols in the executable.
 
-THREE_LPT: activates the computation of displacements with third-order
-LPT.
+OMP = YES / NO
+YES will make the code compile with OpenMP support.
+
+TWO_LPT: activates the computation of displacements with 2LPT.
+THREE_LPT: activates the computation of displacements with 3LPT.
 
 These directives will determine the order at which particles and
 groups are displaced when a catalog is written. However, groups can be
@@ -350,18 +418,19 @@ fragment.h, and by default it is:
 #define ORDER_FOR_GROUPS 2
 #define ORDER_FOR_CATALOG 3
 
-If the corresponding directives (TWO_LPT or THREE_LPT) are not active
-the order used for the computations will be limited at the highest one
-available in that configuration.
+THREE_LPT requires TWO_LPT to be activated. If the corresponding
+directives (TWO_LPT or THREE_LPT) are not active the order used for
+the computations will be limited at the highest one available in that
+configuration.
 
 PLC: it is used to generate past-light-cone catalogs. The code chooses
 a position in the box to locate the observer (default: a random
 position in the box), defines a survey volume as a cone of aperture
-PLCAperture (in degrees) and directed toward a direction (default:
-1,1,1), replicates the box (with periodic boundary conditions) to fill
-the survey volume and stores the properties of all the groups that
-cross the PLC in each of the replications. The catalog is output at
-the end.
+PLCAperture (in degrees) and directed toward a random direction,
+replicates the box (with periodic boundary conditions) to fill the
+survey volume and stores the properties of all the groups that cross
+the PLC in each of the replications. The script PlcGeometryplot_3D.py
+visualizes how the box is tiled to cover the PLC.
 
 The corresponding parameters (StartingzForPLC, LastzForPLC,
 PLCAperture) MUST be present in the parameter file even when the PLC
@@ -371,33 +440,62 @@ result in switching off the construction of the PLC. It is possible to
 specify the position of the PLC vertex and the direction of the cone
 axis, using the keywords PLCProvideConeData, PLCCenter and PLCAxis.
 
-ROTATE_BOX: N-GenIC and 2LPTic use a different ordering of data in
-Fourier space; as a consequence, when pinocchio is run with the same
-random seed as one of these two codes, it produces a box whose
-large-scale structure is rotated with respect to the one produced by
-those codes. This directive tells the code to rotate the axes back to
-produce exactly the same large-scale structure. In cases when no
-comparison with N-body simulations is in program it has no practical
-use, though it does not introduce any significant overhead.
+ELL_CLASSIC, ELL_SNG: ellipsoidal collapse can be computed with the
+standard algorithm of Monaco (1995) (ELL_CLASSIC) or by integrating
+the system of equations for ellipsoidal collapse, as in Nadkarni-Ghosh
+et al. (2018) and Moretti et al. (2020, ELL_SNG). This latter option
+is necessary in modified gravity models. If no directive is specified
+the code uses ELL_CLASSIC.
 
-WHITENOISE: the code can upload a white noise generated by the GRAFIC2
-code; it must be contained in a file called WhiteNoise. Please ask
-details to monaco@oats.inaf.it, or have a look at the ReadWhiteNoise.c
-file.
+TABULATED_CT: instead of computing them on-the-fly, collapse times,
+that are a function of the eigenvalues of the Hessian of the initial
+potential, can be computed on a grid and then interpolated during the
+code. This option is necessary if ELL_SNG is used. The computation is
+done at each smoothing radius, and can be saved on a file to be reused
+in case of repeated runs where only the random seed changes.
 
-NO_RANDOM_MODULES: if active, the modulus of k-space modes of the
-density field is fixed to the mean value, and not randomly
-distributed; phases remain random. This is a numerical trick to
-suppress sample variance in single realizations, that can be very
-useful in some contexts. Random numbers for the moduli are anyway
-generated, so two runs with the same seed, with and without
-NO_RANDOM_MODULES will have the same phases and give roughly the same
-large-scale structure.
+CLASSIC_FRAGMENTATION: the new algorithm for identifying halos from
+collapsed particles allows to scale up to big boxes at relatively high
+resolution, but the classic algorithm for fragmentation is faster and
+may be more convenient for small runs that use few MPI tasks (and
+especially for serial runs). This directive allows to switch back to
+the old code.
 
-SCALE_DEPENDENT_GROWTH: if active, the code computes the growth
-factors (for density and velocity) from a set of power spectra, in a
-range of redshifts, generated by the CAMB code. See below for further
-explanations.
+SNAPSHOT: it allows the code to write particle-level information in
+the Gadget-2 format. This option must be switched on to have the
+timeless snapshot output.
+LONGIDS: if the number of particles is > 2^31 (2 billions), the
+particle ID in the snapshot needs a long long integer.
+
+LIGHT_OUTPUT: it reduces the amount of information stored in the PLC
+output. This is convenient for massive runs, but it misses the 3D
+values of halo velicities (that are needed only for special purposes).
+
+DOUBLE_PRECISION_PRODUCTS: Fmax and LPT fields are stored in single
+precision, with a large gain in memory at the cost of a small decrease
+of accuracy. In case accuracy is considered very important, this
+directive allows to have products in double precision.
+
+SCALE_DEPENDENT: switches on scale-dependent growth rate.
+READ_PK_TABLE: reads scale-dependent power spectra from files.
+ONLY_MATTER_POWER: uses the CDM+baryons power spectra in place of the
+total one, excluding massive neutrinos.
+RECOMPUTE_DISPLACEMENTS: periodically recomputes the LPT fields to
+adapt to the changing shape of the scale-dependent power spectrum.
+
+All the above options should be switched on to have runs with massive
+neutrinos. The last one is of minor importance, and increases the need
+of memory.
+
+MOD_GRAV_FR, FR0=[a float]: these options switch on the part of the
+code that deals with f(R) modified gravity.
+
+WHITENOISE: THIS IS A FEATURE THAT HAS BEEN SWITCHED OFF FOR THE
+MOMENT. The code can upload a white noise generated by the GRAFIC2
+code; it must be contained in a file called WhiteNoise.
+
+NO_RADIATION: it removes radiation from the solution of Friedmann
+equations; it is probably better to have it active in standard runs.
 
 
 *****************************************************************
@@ -406,9 +504,10 @@ explanations.
 5. OUTPUTS
 
 The code produces the following files. All the outputs (excluding the
-mass function) will be split in a number of files equal to the value
-of NumFiles parameters. If this is >1 then the files will have a
-further extension of an integer from 0 no NumFiles-1.
+mass function and number counts on the light-cone) will be split in a
+number of files equal to the value of NumFiles parameters. If this is
+>1 then the files will have a further extension of an integer from 0
+no NumFiles-1.
 
 - pinocchio.[output redshift].[run name].mf.out
 
@@ -461,6 +560,9 @@ If CatalogInAscii is not specified, the same quantities are provided
 in fortran binary format (see below). In this case floating-point
 quantities are in double precision.
 
+If LIGHT_OUTPUT is specified, then the number of particles, that is
+easily recovered from the group mass, is skipped.
+
 - pinocchio.[run name].histories.out
 
 This file is generated at the final output redshift and gives the
@@ -482,60 +584,55 @@ ascii output:
 #  8) redshift of peak collapse
 #  9) redshift at which the halo overtakes the minimal mass
 
-Differently from previous versions, trees are given consecutively. The
-first number in a non-commented line gives the number of slices used
-to fragment the box, then, for each slice, the total number of trees
-and branches is first provided, then the trees are given one by one.
+The first field in the file gives the number of trees and the number
+of branches contained in the file; then the merger trees are reported
+consecutively.
 
-Halos (both trees and branches) are numbered in two ways. Group ID (an
-unsigned long long integer) is the id-number of the halo, and
-corresponds to the ID of the peak of Fmax from which the halo has been
-created. If (i,j,k) are its coordinates in grid units, 0<=i<GridSize,
-then
+Group ID (an unsigned long long integer) is the id-number of the halo,
+and corresponds to the ID of the peak of Fmax from which the halo has
+been created. If (i,j,k) are its coordinates in grid units,
+0<=i<GridSize, then
 
-  ID = i + j * GridSize + k * GridSize**2
+  ID = k + j * GridSize + i * GridSize**2
 
 The "index within the tree" is a consecutive number, from 1 to
 Nbranches, that identifies the halo within the tree. The main halo has
-index=Nbranches.
+index=Nbranches. "Linking list" is a chaining mesh that allows to
+scroll the tree: starting from the main branch, it points recursively
+to all the halos that have merged into it, linking back to it at the
+end. These two fields are reported for backward compatibility; because
+the halos written in the very same order, these fields are not very
+informative.
 
-"Linking list" is a chaining mesh that allows to scroll the tree:
-starting from the main branch, it points recursively to all the halos
-that have merged into it, linking back to it at the end. Because the
-halos are in fact written in the very same order, this is an
-consecutive number that is given mostly for backward compatibility.
-
-"merged with" gives the index (within the tree) of the (larger) halo
+"Merged with" gives the index (within the tree) of the (larger) halo
 with which the halo has merged when it disappeared, or -1 if the halo
 still exists.
 
 If the halo is still existent, then the "mass of the halo at merger"
 is the number of particles of the halo at the final redshift and the
-"mass of the halo it merges with, at merger" is 0. Otherwise, the halo
-has disappeared by merging with a bigger one, and the first quantity
-is its number of particles, while the second is the number of
-particles of the halo it has merged with, both given at the time of
-merging.
+"mass of the halo it merges with, at merger" is 0. Otherwise, when the
+halo has disappeared by merging with a bigger one, these give the
+masses of the two merging halos at the time of merging.
 
-"merging redshift" is the redshift at which the group has disappeared,
+"Merging redshift" is the redshift at which the group has disappeared,
 -1 if the group exists.
 
-"redshift of peak collapse" is the redshift at which the peak
-particle, that gives the name to the halo through its group ID,
-collapses, creating the seed of the main halo branch.
+"Redshift of peak collapse" is the redshift at which the peak particle
+that gives the name to the halo through its group ID collapsed,
+creating the seed of the main halo branch.
 
-"redshift at which the halo overtakes the minimal mass" is the first
-time the halo, the main branch of the tree, overtakes the MinHaloMass
-limit specified in the parameter file. This is when storing of tree
-starts.
+"Redshift at which the halo overtakes the minimal mass" is the first
+time the halo on the main branch of the tree overtakes the MinHaloMass
+limit specified in the parameter file. This is when storing of merger
+tree starts.
 
 - pinocchio.[run name].plc.out
 
-This file is generated at the final output redshift and gives a
-catalog of all halos more massive than MinHaloMass at the redshift
-when they cross the past-light-cone in one of the replications. The
-content of the file is illustrated by its header (with CatalogInAscii
-and OutputInH100):
+This file is generated at the final output redshift (when the
+precompiler directive PLC is used) and gives a catalog of all halos
+more massive than MinHaloMass at the redshift when they cross the
+past-light-cone in one of the replications. The content of the file is
+illustrated by its header (with CatalogInAscii and OutputInH100):
 
 # Group catalog on the Past Light Cone for a minimal mass of 10 particles
 # All quantities are relative to H0=100 km/s/Mpc
@@ -555,96 +652,105 @@ Theta and phi are spherical coordinates aligned with the box axes, the
 observed redshift takes into account the peculiar velocity along the
 line of sight.
 
+When LIGHT_OUTPUT is used the file only reports these fields:
+
+#    1) group ID
+#    2) true redshift
+#    3) group mass (Msun/h)
+#    4) theta (degree)
+#    5) phi (degree)
+#    6) observed redshift
+
+Halo positions can be worked out from the comoving distance at the
+true redshift and the velocity along the line of sight can be obtained
+from the difference of true and observed redshift, but the 3D velocity
+field is lost with this option.
+
+- pinocchio.[run name].nz.out
+
+When the PLC output is given the code also computes the number counts
+of halos in the light cone, together with its expectation obtained by
+integrating the analytic halo mass function. This file is always in
+ascii and contains these fields:
+
+# 1) lower z for bin
+# 2) upper z for bin
+# 3) number of objects in bin
+# 4) number per square degree
+# 5) prediction for number of objects in bin
+
 - pinocchio.[run name].geometry.out
 
 This file is produced when the PLC option is active, and contains a
 list of the box replications that are used to sample the light cone.
-The python script PlotPLCGeometry.py reads the information in this
+The python script PlotPLCGeometry_3D.py reads the information in this
 file and plots the used box tiling.
 
 - pinocchio.[run name].cosmology.out
 
 This file contains the main cosmological quantities computed by the
 code, and is given for reference. The contained quantities are
-specified in the header.
+specified in the header:
 
-- pinocchio.[output redshift].[run name].snapshot.out
+# Cosmological quantities used in PINOCCHIO (h=0.700000)
+# TIME-DEPENDENT QUANTITIES
+# 1: scale factor
+# 2: cosmic time (Gyr)
+# 3: comoving distance (Mpc)
+# 4: diameter distance (Mpc)
+# 5: Omega matter
+# 6: dark energy EOS
+# 7: linear growth rate
+# 8: 2nd-order growth rate
+# 9: first 3rd-order growth rate
+#10: second 3rd-order growth rate
+#11: linear d ln D/d ln a
+#12: 2nd-order d ln D/d ln a
+#13: first 3rd-order d ln D/d ln a
+#14: second 3rd-order d ln D/d ln a
+# SCALE-DEPENDENT QUANTITIES
+#15: smoothing scale (Mpc)
+#16: mass variance
+#17: variance of displacements
+#18: d Log sigma^2 / d Log R
+# POWER SPECTRUM
+#19: k (true Mpc^-1)
+#20: P(k)
 
-Under request (WriteSnapshot in the parameter file) the code writes a
-gadget-2 snapshot of all the particles. This works only if the box is
-fragmented in a single slice, otherwise the writing of the snapshot is
-not done (but the code goes on to the end). Uncollapsed or filament
-particles are displaced using LPT at the order specified at
-compilation time. Halo particles are distributed around the halo
-center of mass as Navarro, Frenk \& White spheres, with concentrations
-taken from Bhattacharya et al. (2013), while velocities are
-Gaussian-distributed with standard deviation equal to the halo
-circular velocity divided by sqrt(3).  
+All these quantities are in true Mpc, not in Mpc/h, because this is
+the internal convention of the code.
 
-The snapshot contains the following block: ID (particle IDs), POS
-(positions), VEL (velocities), GRID (particle group IDs, that is 0 for
-uncollapsed particles and 1 for filaments) and an INFO block.
+- pinocchio.[run name].t_snapshot.out
 
-Halos lying at the border may be reconstructed in a slightly different
-way by different tasks, and this can result in inconsistencies in the
-halo assignment of particles.  This is evident in the halo catalogs
-only in the fact that some halos may appear in different merger
-trees. In a snapshot, each particle must be given a group ID, and this
-can be dealt with inconsistently by different tasks.  This problem is
-faced in two possible ways. As a default choice, halo consistency is
-preferred with respect to particle duplication.  As a result, the
-snapshot does not contain the right number of particles, but the
-number of particles belonging to each group is consistent with group
-mass. If the FORCE_PARTICLE_NUMBER directive is used, particle number
-is preferred with respect to halo consistency. The number of particles
-is now correct, but some halos will contain fewer particles than their
-nominal mass.
-
-Finally, the option ONLY_LPT_DISPLACEMENTS will result in all
-particles stored with their LPT positions, regardless of their
-belonging to a halo or not. The result is very similar to the special
-behaviour described below, so it can be used to generate snapshots
-with pure LPT displacement up to third order, though the whole code
-must be run to get to this point - halo construction will not be used.
-
-- Special files
-
-Special output is produced on demand. They are placed in the Data/
-directory. Most of them are produced for compatibility with
-Pinocchio-2 and can be useful for detailed analyses:
-
-  Data/Fmax.[run name].d
-  Data/Velx.[run name].d
-  Data/Vely.[run name].d
-  Data/Velz.[run name].d
-  Data/Rmax.[run name].d
-  Data/density.grid0.[run name].d
+Upon request (WriteTimelessSnapshot in the parameter file and SNAPSHOT
+in the precompiler directives) the code writes a "timeless snapshot",
+a file in the format of a gadget-2 snapshot providing, for all
+particles, the inverse collapse time Fmax, the LPT displacement fields
+(to be multiplied by the corresponding growth rates to have the LPT
+position at any time) and the redshift at which the particle has been
+accreted into a halo. To obtain a snapshot that gives positions and
+velocities for all particles, with halo particles distributed as
+spheres around their center of mass, one can use the Pitiless-slicer
+companion code.
 
 - Binary format
 
 If CatalogInAscii is not activated in the parameter file, catalogs,
 past-light cones and merger histories are written in binary format.
-This is the recommended format for large runs. We provide three codes,
-read_pinocchio_binary.c, read_pinocchio_binary.f90, and
-ReadPinocchio.py to read binary files. In particular, the C program
-can be used as follows:
+This is the recommended format for large runs. We provide the
+ReadPinocchio5.py to read binary files. This script contains three
+classes to read pinocchio outputs. It is very easy to use, for
+instance: 
 
-prompt> ./read_pinocchio_binary RunFlag redshift [ascii]
+> import ReadPinocchio5 as rp
+> mycat = rp.catalog("pinocchio.0.0000.example.catalog.out")
 
-The code will read the catalog of the run named RunFlag at the
-specified redshift, that is assumed to be a string and not a float
-number - so give exactly the number you find in the filename. If
-redshift takes the value "plc" or "hist" then the plc or histories
-file will be read. The code, that is provided just as an example code,
-prints out the information of the first ten and last lines. This is
-true for both the fortran and the C code. If the ascii argument is
-further provided to the C code, it will translate the binary file in
-ascii, producing a file very similar to the one that PINOCCHIO would
-produce with the CatalogInAscii keyword.
+then the catalog is contained in mycat.data, the list of fields can is
+available in mycat.data.dtype.names. The other classes are
+rp.histories and rp.plc. More details are given in the script.
 
-The ReadPinocchio.py contains three python classes for reading
-catalogs, past-light cones and histories. Basic instruction are given
-in the file itself.
+Binary output can be trasformed into fits format using the
+Pinocchio2fits.py script contained in the scripts/ directory.
 
 
 *****************************************************************
@@ -657,142 +763,107 @@ performed on a machine will be defined by the amount of available RAM.
 To design a run it is necessary to take into account the following
 factors.
 
-Each particle requires an amount of memory of at least ~112 bytes for
-Zeldovich, ~144 bytes for 2LPT, ~227 for 3LPT. However, the exact
-amount of memory depends on the overhead due to the boundary layers of
-sub-volumes during fragmentation. The computation of collapse times is
-performed using fftw, that distributes memory in planes, so that a few
-planes to each MPI task. Grouping of collapsed particles into halos
-(fragmentation) is performed in sub-volumes, but to avoid border
-effects each task must process a boundary layer around each
-sub-volume. This overhead in memory allows fragmentation to progress
-with minimal communications. The width of the boundary layer is
-computed as the Lagrangian radius of the largest halo that is expected
-to be present in the box at the latest redshift, times the
-BoundaryLayerFactor parameter, that thus regulates this important
-quantity. Values >=1 are recommended for this parameter, but
-distributing a relatively small box (<500 Mpc/h) on many tasks
-requires a very large overhead in memory, so it may be necessary to
-adopt lower values of BoundaryLayerFactor in these cases.
+Each particle requires an amount of memory of at least 128 bytes for
+2LPT, 152 for 3LPT. However, the exact amount of memory depends on the
+overhead due to the boundary layers of sub-volumes during
+fragmentation. Indeed, the new fragmentation code (without using
+CLASSIC_FRAGMENTATION directive) performs its calculations on a big
+volume but using a limited set of particles that cannot be exactly
+predicted from the start. Particles living outside the sub-volume
+assigned to the task require an overhead of memory; the
+MaxMemPerParticle parameter, in bytes per particle, determines the
+overhead by setting the total memory available for the run. If this is
+not sufficient, the code will end with a warning.
 
-To limit the overhead due to boundary layers, the code will perform
-the fragmentation of the box in a certain number of slices. This does
-increase the overhead by itself, but allows to divide the box in a
-larger number of sub-volumes and load only a part of them each time,
-decreasing total memory requirement at the cost of repeating the
-fragmentation process several times. However, fragmentation is a quick
-process, so this time overhead is typically small. The parameter that
-controls the slicing of the box is MaxMemPerParticle, that specifies
-the highest allowed amount of memory, in bytes, per particle: the code
-will seek for a sub-division of the volume that minimizes the overhead
-and keeps the amount of bytes per particles below that limit. Clearly
-the MaxMemPerParticle field should not be below the minimum amount of
-memory stated above, that depends on the LPT order used. Typical
-values will be 120 for Zeldovich, 150 for 2LPT, 300 for 3LPT.
+To set up a massive run the following parameters are important:
 
-Each MPI task must accommodate a given number of planes in memory. The
-MaxMem parameter (in Mbytes) should be set to the largest amount of
-memory available to an MPI task; the code will stop if the memory to
-be allocated is above this quantity. Beware that, if the number of
-planes is not a multiple of the number of MPI tasks, fftw will
-allocate the planes in an uneven way. Also, memory distribution by
-planes is the main limit to running boxes with a very large number of
-particles. Indeed, an MPI task must keep at least one plane, and this
-will create a minimum amount of memory per task that in large runs can
-be more than the available memory per core. In this case a mixed
-MPI-OpenMP design (in progress) can mitigate the problem, though an
-fft solver with pencil-based distribution of memory (in project) is
-the best solution.
+- the available RAM per node
+- the number of MPI tasks per node that one wants to use
+- MaxMem, in Mbyte, giving a cap to memory avilability
+- MaxMemPerParticle, in bytes
+- PredPeakFactor, scaling the memory for groups to the number of peaks
 
 To help in the design of a big pinocchio run, we provide a code
-memorytest.c, that can be compiled as explained in the INSTALLATION
+run_planner.c, that can be compiled as explained in the INSTALLATION
 file. To run it:
 
-> ./memorytest [parameter file] [number of tasks]
+> ./run_planner paramfile RamPerNode (Gb) TasksPerNode [Nnodes]
 
-This scalar code, that needs to know how many tasks will be used for
-the pinocchio run, will read the parameter file, initialize the
-cosmology and compute the optimal sub-division of the box to fragment,
-checking that a configuration exists that passes all tests. It will
-fail if:
-
-- There is no way to sub-divide the box to obtain an amount of memory
-  per particle below MaxMemPerParticle.  In this case either this
-  parameter is increased or BoundaryLayerFactor is decreased.
-
-- The request of memory per task is higher than MaxMem.  In this case
-  it is necessary either to increase MaxMem (if possible) or to
-  increase the number of tasks; this will however increase the
-  overhead because the box will be fragmented in more sub-volumes.
-
-- Enough memory is available in total, but the tasks will not be able
-  to load the required number of planes because these require much
-  memory. This can happen in two cases. A very big run in a machine
-  that has a limited amount of RAM per core will easily run in this
-  problem; a (very inefficient) solution is to run on fewer cores of a
-  each single shared-memory node. The second case is when the box is
-  large and the distribution of planes is not even, so as matter of
-  fact some tasks must keep in memory more than the total needed
-  memory divided by the number of tasks. The solution is to have the
-  number of planes a multiple of the number of tasks.
+where the user should provide a complete parameter file, the RAM of a
+single node and the number of MPI tasks per node to be used. The code
+is scalar and does not need much memory. It performs the same
+initializations of the standard code (without allocating memory) and
+then estimates how many nodes are needed and what is the most
+effective configuration. The output is verbose and self-explanatory.
 
 
 *****************************************************************
 
 
-7. SPECIAL BEHAVIOUR
+7. SCALE-DEPENDENT GROWTH RATE
+
+To run the code with massive neutrinos, you need to compile the code
+with the SCALE_DEPENDENT directives described in Sect. 4. As
+illustrated in the paper by Rizzo et al. (2017), neutrinos are added
+by using the cold dark matter + baryons power spectrum in place of the
+full one, taking into account the scale dependence of its growth. This
+is done by reading power spectra generated, e.g., by the CAMB code
+(http://camb.info) in a grid of redshifts. The following keywords must
+be added to the parameter file (parameter values are an example):
+
+CAMBRunName           nilcdm_0.3eV    % name of CAMB run
+CAMBMatterFileTag     matterpower     % label for matter power spectrum files
+CAMBTransferFileTag   transfer_out    % label for transfer function files
+CAMBRedsfhitsFile     inputredshift   % list of redshifts for which the power spectrum is available
+
+The code reads both the power spectra and the transfer functions; it
+is adapted to read CAMB outputs, it should be straightforward to adapt
+the code to read in output from other codes like CLASS. CAMBRunName is
+the name of the CAMB run, CAMBMatterFileTag and CAMBTransferFileTag
+are the labels added to the files that contain the matter power
+spectra and the transfer functions. CAMBRedsfhitsFile is a file with
+the list of redshifts (in chronological order) at which CAMB outputs
+are provided.
+
+
+*****************************************************************
+
+
+8. SPECIAL BEHAVIOUR
 
 The code can be run with a further line argument. If this takes the
-value 1 or 2 then a special behaviour is obtained.
+value 1, 2 or 3 then a special behaviour is obtained.
+
++ Collapse time tables
 
 > mpirun -np * pinocchio.x parameter_file 1
 
-will have as result of writing the linear density field in the
-Data/density.grid0.[run name].d.
+The code, compiled with TABULATED_CT directive, computes the table of
+collapse times, writes it on a file and then exits. This is useful for
+a simulation suites that should use the same tabulated collapse times
+and wants to read them from a file.
+
++ Linear density field
 
 > mpirun -np * pinocchio.x parameter_file 2
 
-will have the result of computing LPT displacements for all particles
-and writing a gadget-2 snapshot with particles displaced at the last
-redshift specified in the OutputList file. This can be used to
-generate initial conditions for a simulation, or an LPT density field
-at any redshift. This option presently works only for 2LPT, if the
-code is compiled with the THREE_LPT directive no output will be
-produced.  3LPT displacements can be obtained by compiling the code
-with the ONLY_LPT_DISPLACEMENTS directive, and using the WriteSnapshot
-tag in the parameter file. This will require the whole code to be run.
-In the case of Zeldovich or 2LPT, the same result is obtained this way
-with respect to using the special behaviour, but with a much longer
-computing time.
+The code generates the initial conditions and write the linear density
+field in a file pinocchio.[run name].density.out with a Gadget-2
+snapshot format.
 
++ LPT snapshot, as the initial conditions of an N-body simulation
 
-*****************************************************************
+> mpirun -np * pinocchio.x parameter_file 3
 
-
-8. SCALE-DEPENDENT GROWTH RATE
-
-Compiling the code with the SCALE_DEPENDENT_GROWTH directive allows
-the user to deal with a scale-dependent growth factor, as the one
-characterizing the growth of matter perturbations in a massive
-neutrino cosmology, if not in modified gravity theories.
-
-This is illustrated in the paper by Rizzo et al. (2016), submitted to
-JCAP.
-
-Growth functions are computed by reading power spectra generated by
-the CAMB code (http://camb.info) in a grid of redshifts. The following
-keywords must be added to the parameter file (parameter values are an
-example):
-
-CAMBMatterFileTag     matterpower       % label for matter power spectrum files
-CAMBTransferFileTag   transfer_out      % label for transfer function files
-CAMBRunName           nilcdm_0.3eV      % name of CAMB run
-CAMBRedsfhitsFile     inputredshift     % list of redshifts for which the power spectrum is available
-CAMBReferenceOutput   149               % total number of CAMB outputs
-CAMBReferenceScale    100               % reference output for the linear density field
-
-To use the code in this configuration, please contact
-monaco@oats.inaf.it; a working example can be provided.
+The code works like a generator of initial conditions for an N-body
+simulation. It generates the density field, computes the LPT
+displacements and moves all particles to the final position, specified
+by the first entry in the outputs file. Then the code writes particles
+and velocities in a Gadget-2 format snapshot, named
+pinocchio.[redshift].[run name].LPT_snapshot.out. The difference
+between this snapshot and the one obtained by reprocessing the
+timeless snapshot with Pitiless-slicer is that here we move all
+particles with LPT, without knowledge of halo formation.
 
 
 *****************************************************************
@@ -800,36 +871,44 @@ monaco@oats.inaf.it; a working example can be provided.
 
 9. PINOCCHIO PAPERS
 
+  1. The PINOCCHIO algorithm: pinpointing orbit-crossing collapsed
+  hierarchical objects in a linear density field, Pierluigi Monaco,
+  Tom Theuns & Giuliano Taffoni, 2002, MNRAS, 331, 587,
 
-    The PINOCCHIO algorithm: pinpointing orbit-crossing collapsed
-    hierarchical objects in a linear density field, Pierluigi Monaco,
-    Tom Theuns & Giuliano Taffoni, 2002, MNRAS, 331, 587
-
-    Predicting the Number, Spatial Distribution and Merging History of
-    Dark Matter Haloes, Pierluigi Monaco, Tom Theuns, Giuliano
-    Taffoni, Fabio Governato, Tom Quinn & Joachim Stadel, 2002, ApJ,
-    564, 8
-
-    PINOCCHIO and the Hierarchical Build-Up of Dark-Matter Haloes,
-    Giuliano Taffoni, Pierluigi Monaco & Tom Theuns, 2002, MNRAS, 333,
-    623
-
-    An accurate tool for the fast generation of dark matter halo
-    catalogs, Pierluigi Monaco, Emiliano Sefusatti, Stefano Borgani,
-    Martin Crocce, Pablo Fosalba, Ravi Sheth & Tom Theuns, 2013,
-    MNRAS, 433, 2389
-
-    nIFTy cosmology: Galaxy/halo mock catalogue comparison project on
-    clustering statistics, C.-H. Chuang, C. Zhao, F. Prada et al.,
-    2015, MNRAS, 452, 686.
-
-    Improving the prediction of dark matter halo clustering with
-    higher orders of Lagrangian Perturbation Theory, E. Munari,
-    P. Monaco, E. Sefusatti, E. Castorina, F.G. Mohammad, S. Anselmi &
-    S. Borgani, 2017, MNRAS, 465, 4658
-
-    Simulating cosmologies beyond LambdaCDM with Pinocchio,
-    L.A. Rizzo, F. Villaescusa-Navarro, P. Monaco, E. Munari,
-    S. Borgani, E. Castorina & E. Sefusatti, 2017, JCAP, 01 008
-    arXiv:1610.07624
+  2. Predicting the Number, Spatial Distribution and Merging History
+  of Dark Matter Haloes, Pierluigi Monaco, Tom Theuns, Giuliano
+  Taffoni, Fabio Governato, Tom Quinn & Joachim Stadel, 2002, ApJ,
+  564, 8,
+  
+  3. PINOCCHIO and the Hierarchical Build-Up of Dark-Matter Haloes,
+  Giuliano Taffoni, Pierluigi Monaco & Tom Theuns, 2002, MNRAS, 333,
+  623,
+  
+  4. An accurate tool for the fast generation of dark matter halo
+  catalogs, Pierluigi Monaco, Emiliano Sefusatti, Stefano Borgani,
+  Martin Crocce, Pablo Fosalba, Ravi Sheth & Tom Theuns, 2013, MNRAS,
+  433, 2389,
+  
+  5. Improving the prediction of dark matter halo clustering with
+  higher orders of Lagrangian Perturbation Theory, E. Munari, P.
+  Monaco, E. Sefusatti, E. Castorina, F.G. Mohammad, S. Anselmi & S.,
+  2017, MNRAS, 465,4658
+  
+  6. Simulating cosmologies beyond LambdaCDM with Pinocchio, L.A.
+  Rizzo, F. Villaescusa-Navarro, P. Monaco, E. Munari, S. Borgani, E.
+  Castorina & E. Sefusatti, 2017, JCAP, 01/2017, 008
+  
+  7. Approximated methods for the generation of dark matter halo
+  catalogs in the age of precision cosmology, P.Monaco, 2016,
+  Galaxies, N. 4, 53, special issue: "Dark Matter: Large versus Small
+  Scale Structures", ed. J. Gaite & A. Diaferio.
+  
+  8. Fast numerical method to generate halo catalogues in modified
+  gravity (part I): second-order Lagrangian perturbation theory, C.
+  Moretti, S. Mozzon, P. Monaco, E. Munari, M. Baldi, M. 2020, MNRAS,
+  493, 1153
+  
+  9. Euclid Preparation. Simulating thousands of Euclid spectroscopic
+  skies, Euclid Consortium: P. Monaco, G. Parimbelli, Y. Elkhashab et
+  al., in preparation.
 

@@ -1,4 +1,31 @@
-/* ######HEADER###### */
+/*****************************************************************
+ *                        PINOCCHIO  V5.1                        *
+ *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
+ *****************************************************************
+ 
+ This code was written by
+ Pierluigi Monaco, Tom Theuns, Giuliano Taffoni, Marius Lepinzan, 
+ Chiara Moretti, Luca Tornatore, David Goz, Tiago Castro
+ Copyright (C) 2025
+ 
+ github: https://github.com/pigimonaco/Pinocchio
+ web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
+ 
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 2 of the License, or
+ (at your option) any later version.
+ 
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ 
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+*/
+
 
 #include "pinocchio.h"
 #include "def_splines.h"
@@ -8,10 +35,6 @@ void write_cputimes(void);
 
 int main(int argc, char **argv, char **envp)
 {
-#ifdef USE_GPERFTOOLS
-  ProfilerStart("pinocchio_gprofile.log");
-#endif
-  
   /* Initialize MPI */
   int got_level;
   MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &got_level); // Hybrid MPI and OPENMP parallel
@@ -61,11 +84,31 @@ int main(int argc, char **argv, char **envp)
       if (!ThisTask)
 	printf("Usage: pinocchio.x parameterfile\n");
       MPI_Finalize();
-#ifdef USE_GPERFTOOLS
-      ProfilerStop();
-#endif
       return 0;
     }
+
+  /* exit now if a snapshot is required and SNAPSHOT is not set */
+#ifndef SNAPSHOT
+  if (argc>=3 && atoi(argv[2])>1)
+    {
+      if (!ThisTask)
+	printf("Sorry but you have to use the SNAPSHOT directive in compilation to write a snapshot\n");
+      MPI_Finalize();
+      return 0;
+    }
+#endif
+
+  /* exit now if a snapshot is required and SNAPSHOT is not set */
+#ifndef TABULATED_CT
+  if (argc>=3 && atoi(argv[2])==1)
+    {
+      if (!ThisTask)
+	printf("Sorry but you have to use the TABULATED_CT directive in compilation to write the collapse time table\n");
+      MPI_Finalize();
+      return 0;
+    }
+#endif
+
 
   /* initialization */
   memset(&params, 0, sizeof(param_data));
@@ -73,92 +116,11 @@ int main(int argc, char **argv, char **envp)
   if (initialization())
     abort_code();
 
-
   /*****************************************/
   /*********** Special behaviour ***********/
   /*****************************************/
-  /* On request, it writes the density field */
-
-  if (params.WriteDensity || (argc>=3 && atoi(argv[2])==1) )
-    {
-#ifdef SNAPSHOT
-      /* called as "pinocchio.x parameterfile 1" it writes the density field
-	 in configuration space and exits */
-      if (argc>=3 && atoi(argv[2])==1 && !ThisTask)
-	printf("In this configuration pinocchio only writes the linear density field\n");
-
-      for (int ThisGrid=0; ThisGrid<Ngrids; ThisGrid++)
-	{
-	  write_in_cvector(ThisGrid, kdensity[ThisGrid]);
-	  double time=reverse_transform(ThisGrid);
-	  if (!ThisTask)
-	    printf("[%s] compute_derivative: done fft, cpu time = %f\n",fdate(),time);
-	  write_from_rvector(ThisGrid, density[ThisGrid]);
-	  if (write_density(ThisGrid))
-	    abort_code();
-	}
-#else
-      if (!ThisTask)
-	printf("Please recompile the code with SNAPSHOT directive to write the density\n");
-#endif
-      if (!ThisTask)
-	{
-	  write_cputimes();
-	  printf("Pinocchio done!\n");
-	}
-
-      MPI_Finalize();
-#ifdef USE_GPERFTOOLS
-      ProfilerStop();
-#endif
-      return 0;
-    }
-
-  /* called as "pinocchio.x parameterfile 3" it computes and writes displacement fields, then exit */
-
-  if (argc>=3 && atoi(argv[2])==3)
-    {
-      if (!ThisTask)
-	      {
-	        printf("In this configuration pinocchio will only produce a GADGET snapshot\n");
-	        printf("at the first redshift specified by the %s file (z=%f)\n", params.OutputList,outputs.z[0]);
-        }
-
-#ifdef THREE_LPT
-      if (!ThisTask)
-	      {
-	        printf("*********************************************************\n");
-	        printf("Writing of LPT snapshot presently does not work with 3LPT\n");
-	        printf("Please recompile without the THREE_LPT directive\n");
-	        printf("*********************************************************\n");
-	      }
-
-#else
-
-      if (compute_displacements())
-          abort_code();
-
-      if (write_LPT_snapshot(outputs.z[0]))
-          abort_code();
-
-#endif
-
-      if (!ThisTask) 
-        printf("Pinocchio done!\n");
-    
-      MPI_Finalize();
-
- #ifdef USE_GPERFTOOLS 
-      ProfilerStop();
-
- #endif 
-
-      return 0; 
-    } 
-
-
-  /* called as "pinocchio.x parameterfile 2" it computes and writes collapse time table, then exit */
-  if (argc>=3 && atoi(argv[2])==3)
+  /* called as "pinocchio.x parameterfile 1" it computes and writes collapse time table, then exit */
+  if (argc>=3 && atoi(argv[2])==1)
     {
 #ifdef TABULATED_CT
       if (!ThisTask)
@@ -186,26 +148,92 @@ int main(int argc, char **argv, char **envp)
 
       if (!ThisTask)
 	printf("Pinocchio done!\n");
+
       MPI_Finalize();
-#ifdef USE_GPERFTOOLS
-      ProfilerStop();
+
 #endif
-
       return 0;
+    }
 
+  /* On request, it writes the density field */
+  if (argc>=3 && atoi(argv[2])==2)
+    {
+#ifdef SNAPSHOT
+      /* called as "pinocchio.x parameterfile 2" it writes the density field
+	 in configuration space and exits */
+      if (!ThisTask)
+	printf("In this configuration pinocchio only writes the linear density field in a snapshot\n");
+
+      for (int ThisGrid=0; ThisGrid<Ngrids; ThisGrid++)
+	{
+	  write_in_cvector(ThisGrid, kdensity[ThisGrid]);
+	  double time=reverse_transform(ThisGrid);
+	  if (!ThisTask)
+	    printf("[%s] compute_derivative: done fft, cpu time = %f\n",fdate(),time);
+	  write_from_rvector(ThisGrid, density[ThisGrid]);
+	  if (write_density(ThisGrid))
+	    abort_code();
+	}
 #else
       if (!ThisTask)
+	printf("Please compile the code with SNAPSHOT directive to use this option\n");
+      
+#endif
+      if (!ThisTask)
 	{
-	  printf("Sorry but you have to compile the code with TABULATED_CT to compute CT table\n");
+	  write_cputimes();
+	  printf("Pinocchio done!\n");
 	}
+
       MPI_Finalize();
-#ifdef USE_GPERFTOOLS
-      ProfilerStop();
+      return 0;
+    }
+
+  /* called as "pinocchio.x parameterfile 3" it computes displacements and writes a standard snapshot, 
+     then exit */
+  if (argc>=3 && atoi(argv[2])==3)
+    {
+#ifdef SNAPSHOT
+
+      if (!ThisTask)
+	      {
+	        printf("In this configuration pinocchio will only produce a GADGET snapshot\n");
+	        printf("at the first redshift specified by the %s file (z=%f)\n", params.OutputList,outputs.z[0]);
+        }
+
+      /* compute displacements for all particles */
+      double cputmp=MPI_Wtime();
+      if (!ThisTask)
+	printf("\n[%s] Computing displacements\n",fdate());
+
+      if (compute_displacements(1,1,outputs.z[0]))
+          abort_code();
+
+      cputmp=MPI_Wtime()-cputmp;
+      if (!ThisTask)
+	printf("[%s] Done computing displacements, cpu time = %f s\n",fdate(),cputmp);
+
+      /* write the snapshot */
+      cputmp=MPI_Wtime();
+      if (!ThisTask)
+	printf("\n[%s] Writing the snapshot\n",fdate());
+
+      if (write_LPT_snapshot())
+          abort_code();
+
+      cputmp=MPI_Wtime()-cputmp;
+      if (!ThisTask)
+	printf("[%s] Done snapshot, cpu time = %f s\n",fdate(),cputmp);
 #endif
 
-      return 0;
-#endif
-    }
+      if (!ThisTask) 
+        printf("Pinocchio done!\n");
+
+      MPI_Finalize();
+
+      return 0; 
+    } 
+
 
   /******************************************/
   /*********** Standard behaviour ***********/
@@ -272,10 +300,6 @@ int main(int argc, char **argv, char **envp)
   if (!ThisTask)
     printf("Pinocchio done!\n");
   MPI_Finalize();
-
-#ifdef USE_GPERFTOOLS
-      ProfilerStop();
-#endif
 
   return 0;
 }

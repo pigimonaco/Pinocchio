@@ -1,12 +1,14 @@
 /*****************************************************************
- *                        PINOCCHI0  V5.0                        *
+ *                        PINOCCHIO  V5.1                        *
  *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
  *****************************************************************
  
  This code was written by
- Pierluigi Monaco
- Copyright (C) 2016
+ Pierluigi Monaco, Tom Theuns, Giuliano Taffoni, Marius Lepinzan, 
+ Chiara Moretti, Luca Tornatore, David Goz, Tiago Castro
+ Copyright (C) 2025
  
+ github: https://github.com/pigimonaco/Pinocchio
  web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
  
  This program is free software; you can redistribute it and/or modify
@@ -37,6 +39,11 @@
 
 #define SMALL ((double)1.e-20)
 #define INV_3 (1.0 / 3.0)
+//#define TRILINEAR
+#define BILINEAR_SPLINE
+//#define ALL_SPLINE
+//#define ASCII
+//#define HISTO
 
 #ifdef TABULATED_CT  // Tabulated collapse time calculation
 
@@ -300,6 +307,26 @@ int sng_system(double t, const double y[], double f[], void *sng_par) {
     return GSL_SUCCESS;
 }
 
+/* --------------------------------------------------- Modified gravity model --------------------------------------------------------*/
+
+#ifdef MOD_GRAV_FR
+
+inline double ForceModification(double size, double a, double delta) {
+
+    double ff        = 4. * params.OmegaLambda / params.Omega0;
+    double thickness = FR0 / params.Omega0 / pow(H_over_c * size, 2.0) *
+                       pow(a, 7.) * pow((1. + delta), -1. / 3.) *
+                       (pow((1.0 + ff) / (1.0 + ff * pow(a, 3.)), 2.0) -
+                       pow((1.0 + ff) / (1.0 + delta + ff * pow(a, 3.)), 2.0));
+
+    double F3 = (thickness * (3. + thickness * (-3. + thickness)));
+    if (F3 < 0.) {
+        F3 = 0.;
+    }
+    return (F3 < 1. ? F3 / 3. : 1. / 3);
+}
+
+#endif
 
 /* Solving the ODE system for the ellipsoidal collapse following SNG */
 
@@ -346,20 +373,20 @@ FORCE_INLINE double  ell_sng(int ismooth, double l1, double l2, double l3) {
 #endif
 
 	double y[9] = {l1*D_in, l2*D_in, l3*D_in,
-		          l1*D_in/(l1*D_in - 1.), l2*D_in/(l2*D_in - 1.), l3*D_in/(l3*D_in - 1.),
-		          l1*D_in, l2*D_in, l3*D_in};
+		       l1*D_in/(l1*D_in - 1.), l2*D_in/(l2*D_in - 1.), l3*D_in/(l3*D_in - 1.),
+		       l1*D_in, l2*D_in, l3*D_in};
     
 /* Assignment of ode_param in two different cases */
 #ifdef MOD_GRAV_FR
 
 	if (ismooth<Smoothing.Nsmooth-1)
-		{
-		ode_param = Smoothing.Radius[ismooth];
-		}
+	  {
+	    ode_param = Smoothing.Radius[ismooth];
+	  }
 	else
-		{
-		ode_param = Smoothing.Radius[ismooth-1];
-		}
+	  {
+	    ode_param = Smoothing.Radius[ismooth-1];
+	  }
 #endif
 
     /*---------------- Integration step --------------- */

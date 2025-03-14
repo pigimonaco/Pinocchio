@@ -1,4 +1,31 @@
-/* ######HEADER###### */
+/*****************************************************************
+ *                        PINOCCHIO  V5.1                        *
+ *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
+ *****************************************************************
+ 
+ This code was written by
+ Pierluigi Monaco, Tom Theuns, Giuliano Taffoni, Marius Lepinzan, 
+ Chiara Moretti, Luca Tornatore, David Goz, Tiago Castro
+ Copyright (C) 2025
+ 
+ github: https://github.com/pigimonaco/Pinocchio
+ web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
+ 
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 2 of the License, or
+ (at your option) any later version.
+ 
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ 
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+*/
+
 
 #include "pinocchio.h"
 
@@ -146,6 +173,23 @@ int compute_mf(int iout)
       fclose(file);
     }
 
+
+  // LEVARE
+/*   if (iout==1) */
+/*     { */
+/*       FILE *ff=fopen("mydump","w"); */
+/*       for (int u=0; u<subbox.Nstored; u++) */
+/* #ifdef RECOMPUTE_DISPLACEMENTS */
+/* 	fprintf(ff," %d %d %d   %f %f %f\n", */
+/* 		u,frag_pos[u],sorted_pos[u],frag[u].Fmax,frag[u].Vel[0],frag[u].Vel_prev[0]); */
+/* #else */
+/* 	fprintf(ff," %d %d %d   %f %f %f\n", */
+/* 		u,frag_pos[u],sorted_pos[u],frag[u].Fmax,frag[u].Vel[0],0.0); */
+/* #endif	 */
+/*       fclose(ff); */
+/*     } */
+
+
   /* Bye! */
   return 0;
 }
@@ -197,6 +241,7 @@ int write_catalog(int iout)
   FILE *file;
   MPI_Status status;
   int idummy;
+  pos_data obj1;
 
   /* ordering of coordinates to accomodate for rotation caused by fft ordering */
 
@@ -547,7 +592,7 @@ int write_PLC(int flag)
 #endif
 
 #ifdef LIGHT_OUTPUT
-	      fprintf(file," %12Lu %16.6f %16.6f %16.6f %16.6f %16.6f\n",
+	      fprintf(file," %12Lu %16.6f %15.8e %16.6f %16.6f %16.6f\n",
 		      writethis.name,
 		      writethis.red,
 		      writethis.Mass,
@@ -668,7 +713,7 @@ int write_PLC(int flag)
 #endif
 
 #ifdef LIGHT_OUTPUT
-		      fprintf(file," %12Lu %16.6f %16.6f %16.6f %16.6f %16.6f\n",
+		      fprintf(file," %12Lu %16.6f %15.8e %16.6f %16.6f %16.6f\n",
 			      writethis.name,
 			      writethis.red,
 			      writethis.Mass,

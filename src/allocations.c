@@ -1,12 +1,14 @@
 /*****************************************************************
- *                        PINOCCHIO  V4.1                        *
+ *                        PINOCCHIO  V5.1                        *
  *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
  *****************************************************************
  
  This code was written by
- Pierluigi Monaco
- Copyright (C) 2016
+ Pierluigi Monaco, Tom Theuns, Giuliano Taffoni, Marius Lepinzan, 
+ Chiara Moretti, Luca Tornatore, David Goz, Tiago Castro
+ Copyright (C) 2025
  
+ github: https://github.com/pigimonaco/Pinocchio
  web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
  
  This program is free software; you can redistribute it and/or modify
@@ -109,7 +111,7 @@ int organize_main_memory()
      checked with an estimate of the number of halos.
 
      memory.prods:            fmax products in fft space
-     memory.fields_to_keep    kdensities
+     memory.fields_to_keep    LPT sources in kspace
      memory.fields            second_derivatives, // seedtable
      memory.first_allocated:  the three above
      memory.fft:              needed by pfft vectors
@@ -134,7 +136,7 @@ int organize_main_memory()
   ALIGN_MEMORY_BLOCK( memory.prods );
   memory.fields = memory.fields_to_keep = 0;
 
-  /* these fields are needed after Fmax if displacements are recomputed */
+  /* these fields are needed after products if displacements are recomputed */
   for (igrid=0; igrid<Ngrids; igrid++)
     {
       memory.fields_to_keep += MyGrids[igrid].total_local_size_fft * sizeof(double); /* kdensity */
@@ -318,7 +320,7 @@ int allocate_main_memory()
       fflush(stdout);
     }
 
-  // ???
+  /* this is just to have a little margin */
   memory.all+=10;
 
   /* it tests than there is enough space to allocate all needed memory */
@@ -880,26 +882,23 @@ int reallocate_memory_for_fragmentation()
 #endif
 
 #ifdef SNAPSHOT
-  /* sets zacc to -1 and group_ID to 0 before redistributing it */
+  /* initializes zacc to -1 and group_ID to 0 before redistributing it */
+  // SAREBBE DA METTERE DA UN'ALTRA PARTE
   for (int i=0; i<MyGrids[0].total_local_size; i++){
     products[i].zacc=-1;
     products[i].group_ID = 0;
   }
 #endif
 
-#ifndef RECOMPUTE_DISPLACEMENTS
-
-  /* in this case pointers to kdensity and kvector_* are set to zero
-     and the corresponding memory is freed; otherwise they are kept */
-  kdensity=0x0;
+  /* if the LPT sources are needed they are reassigned later */
+  for (int igrid=0; igrid<Ngrids; igrid++)
+    kdensity[igrid]=0x0;
 #ifdef TWO_LPT
   kvector_2LPT=0x0;
 #ifdef THREE_LPT
   kvector_3LPT_1=0x0;
   kvector_3LPT_2=0x0;
 #endif
-#endif
-
 #endif
 
 #ifdef TWO_LPT
@@ -938,21 +937,39 @@ int reallocate_memory_for_fragmentation()
 	}
     }
 
-#ifndef RECOMPUTE_DISPLACEMENTS
+  /* products have already been pointed at */
+  count_memory = memory.prods;
 
-  /* the frag structure is located just after memory products */
-  frag = (product_data *)(main_memory + memory.prods);
-  count_memory =  start_memory = memory.prods + memory.frag_prods;
-  ALIGN_MEMORY_BLOCK( count_memory );
-
-#else
-
+#ifdef RECOMPUTE_DISPLACEMENTS
   /* including fields_to_keep in this case */
-  frag = (product_data *)(main_memory + memory.prods + memory.fields_to_keep);
-  count_memory = start_memory = memory.prods + memory.fields_to_keep + memory.frag_prods;
+  for (int igrid=0; igrid<Ngrids; igrid++)
+    {
+      kdensity[igrid] = (double *)(main_memory + count_memory);
+      count_memory += MyGrids[igrid].total_local_size_fft * sizeof(double);
+      ALIGN_MEMORY_BLOCK( count_memory );
+    }
+#ifdef TWO_LPT
+  kvector_2LPT = (double *)(main_memory + count_memory);
+  count_memory += MyGrids[0].total_local_size_fft * sizeof(double);
+  ALIGN_MEMORY_BLOCK( count_memory );
+#ifdef THREE_LPT
+  kvector_3LPT_1 = (double *)(main_memory + count_memory);
+  count_memory += MyGrids[0].total_local_size_fft * sizeof(double);
+  ALIGN_MEMORY_BLOCK( count_memory );
+  kvector_3LPT_2 = (double *)(main_memory + count_memory);
+  count_memory += MyGrids[0].total_local_size_fft * sizeof(double);
+  ALIGN_MEMORY_BLOCK( count_memory );
+#endif
+#endif
+
+#endif 
+
+  /* the frag structure follows */
+  frag = (product_data *)(main_memory + count_memory);
+  count_memory += memory.frag_prods;
   ALIGN_MEMORY_BLOCK( count_memory );
 
-#endif
+  start_memory = count_memory;
 
   groups = (group_data *)(main_memory + count_memory);
   count_memory += subbox.PredNpeaks*sizeof(group_data);

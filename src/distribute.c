@@ -1,12 +1,14 @@
 /*****************************************************************
- *                        PINOCCHIO  V4.1                        *
+ *                        PINOCCHIO  V5.1                        *
  *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
  *****************************************************************
  
  This code was written by
- Pierluigi Monaco
- Copyright (C) 2016
+ Pierluigi Monaco, Tom Theuns, Giuliano Taffoni, Marius Lepinzan, 
+ Chiara Moretti, Luca Tornatore, David Goz, Tiago Castro
+ Copyright (C) 2025
  
+ github: https://github.com/pigimonaco/Pinocchio
  web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
  
  This program is free software; you can redistribute it and/or modify
@@ -23,6 +25,7 @@
  along with this program; if not, write to the Free Software
  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 */
+
 
 #include "pinocchio.h"
 
@@ -350,11 +353,6 @@ int send_data(int *mybox, int target)
 #endif
 	    {
 	      memcpy(&comm_buffer[bufcount],&products[fft_space_index(i, interbox+off)],sizeof(product_data));
-	      //comm_buffer[bufcount] = products[fft_space_index(i, interbox+off)];
-	      //*(comm_buffer + bufcount) = *(products + fft_space_index(i, interbox+off));
-
-	      //fprintf(DBGFD," %d %d %d -- %f %f\n",i, fft_space_index(i, interbox+off),bufcount,
-	      //        products[fft_space_index(i, interbox+off)].Fmax, comm_buffer[bufcount].Fmax); // LEVARE!!!
 
 	      bufcount++;
 	    }
@@ -674,8 +672,12 @@ void build_distmap(unsigned int *map, int *box)
   /* the receiver builds the map used for distribution */
   unsigned int size = box[3] * box[4] * box[5];
 
-  for (unsigned int i=0; i<size; i++)
-    set_distmap_bit(map, i, get_mapup_bit(subbox_space_index(i,box)));
+  if (map_to_be_used)
+    for (unsigned int i=0; i<size; i++)
+      set_distmap_bit(map, i, get_map_bit(subbox_space_index(i,box)));
+  else
+    for (unsigned int i=0; i<size; i++)
+      set_distmap_bit(map, i, get_mapup_bit(subbox_space_index(i,box)));
 
 }
 
@@ -827,10 +829,7 @@ int keep_data_back(int *fft_box)
 	    /* position in the fft domain */
 	    fftpos = COORD_TO_INDEX(ibox - fft_box[0], jbox - fft_box[1], kbox - fft_box[2], (fft_box+3));
 	    products[fftpos].zacc = frag[iz].zacc;
-      products[fftpos].group_ID = frag[iz].group_ID;
-      
-      // printf(" Task %d keep: particle_ID:  %d  zacc: %f   group_ID: %d\n",ThisTask,iz,frag[iz].zacc, frag[iz].group_ID);
-
+	    products[fftpos].group_ID = frag[iz].group_ID;
 	  }
       }
 
@@ -854,8 +853,6 @@ int send_data_back(int target)
 
   MPI_Recv(recv_box, 6, MPI_INT, target, 0, MPI_COMM_WORLD, &status);
 
-//  printf("BOX Task %d: [%d, %d, %d] - [%d, %d, %d]\n",ThisTask,recv_box[0],recv_box[1],recv_box[2],recv_box[3],recv_box[4],recv_box[5]); //LEVARE
-
   int bufcount=0;
   int sent=0;
 
@@ -876,8 +873,6 @@ int send_data_back(int target)
       jbox = (jbox + subbox.stabl[_y_] + MyGrids[0].GSglobal[_y_])%MyGrids[0].GSglobal[_y_];
       kbox = (kbox + subbox.stabl[_z_] + MyGrids[0].GSglobal[_z_])%MyGrids[0].GSglobal[_z_];
 
-      //printf("  oioiuoi %d %d %d %d %d\n" , iz, ibox, jbox, kbox, good_particle); // LEVARE
-
       if (good_particle &&
 	    ibox >= recv_box[0] && ibox < recv_box[0]+recv_box[3] && 
 	    jbox >= recv_box[1] && jbox < recv_box[1]+recv_box[4] &&
@@ -888,7 +883,6 @@ int send_data_back(int target)
 	    back_buffer[bufcount].zacc = frag[iz].zacc;
       back_buffer[bufcount].group_ID =frag[iz].group_ID;
 
-	    // printf(" Task %d send:  %d  %d  %f %d\n",ThisTask,iz+1,COORD_TO_INDEX(ibox,jbox,kbox,MyGrids[0].GSglobal)+1,back_buffer[iz].zacc,back_buffer[iz].group_ID); // LEVARE
 	    ++bufcount;
 	    ++sent;
 
@@ -909,8 +903,6 @@ int send_data_back(int target)
   
   bufcount=0;
   MPI_Send(&bufcount, 1, MPI_INT, target, 0, MPI_COMM_WORLD);
-
-//  printf("Task %d sent %d particles\n",ThisTask,sent); // LEVARE
 
   /* done */
   return 0;
@@ -943,15 +935,11 @@ int recv_data_back(int *mybox, int sender)
       for (int iz=0; iz<nsent; iz++)
 	{
 	  products[back_buffer[iz].pos].zacc=back_buffer[iz].zacc;
-    products[back_buffer[iz].pos].group_ID=back_buffer[iz].group_ID;
-
-    // printf(" Task %d recv:  %d  %d  %f  %d\n",ThisTask,iz+1,back_buffer[iz].pos+1,back_buffer[iz].zacc, back_buffer[iz].group_ID);
+	  products[back_buffer[iz].pos].group_ID=back_buffer[iz].group_ID;
 	}
       received+=nsent;
     }
   while (nsent);
-
-//  printf("Task %d received %d particles\n",ThisTask,received); // LEVARE
 
   /* done */
   return 0;

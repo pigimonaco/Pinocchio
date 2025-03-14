@@ -1,12 +1,14 @@
 /*****************************************************************
- *                        PINOCCHIO  V4.1                        *
+ *                        PINOCCHIO  V5.1                        *
  *  (PINpointing Orbit-Crossing Collapsed HIerarchical Objects)  *
  *****************************************************************
  
  This code was written by
- Pierluigi Monaco
- Copyright (C) 2016
+ Pierluigi Monaco, Tom Theuns, Giuliano Taffoni, Marius Lepinzan, 
+ Chiara Moretti, Luca Tornatore, David Goz, Tiago Castro
+ Copyright (C) 2025
  
+ github: https://github.com/pigimonaco/Pinocchio
  web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
  
  This program is free software; you can redistribute it and/or modify
@@ -27,7 +29,6 @@
 #include "pinocchio.h"
 
 int compute_second_derivatives(double, int);
-int compute_first_derivatives(double, int);
 int Fmax_PDF(void);
 
 
@@ -54,9 +55,8 @@ int compute_fmax(void)
     5) re-initialize fft for the small-scale grid
   */
 
-#ifdef SCALE_DEPENDENT
   ScaleDep.order=0; /* collapse times must be computed as for LambdaCDM */
-#endif
+  ScaleDep.redshift=0.0;
 
 
   /****************************
@@ -255,67 +255,24 @@ int compute_fmax(void)
    * COMPUTATION OF DISPLACEMENTS *
    ********************************/
 
-#ifdef TWO_LPT
-  ismooth=Smoothing.Nsmooth-1;
-
-  /* computes sources and displacements for 2LPT and 3LPT */
+  /* computes the displacements for all particles at zero smoothing, 
+     assuming second derivatives are already in place 
+     displacements are computed to the redshift of the first (or only) segment
+  */
   cputmp=MPI_Wtime();
-
   if (!ThisTask)
-    printf("\n[%s] Computing LPT displacements\n",fdate());
+    printf("\n[%s] Computing displacements  for redshift %f\n",fdate(),ScaleDep.z[0]);
 
-  if (compute_LPT_displacements())
+  if (compute_displacements(1,0,ScaleDep.z[0]))
     return 1;
 
   cputmp=MPI_Wtime()-cputmp;
   if (!ThisTask)
-    printf("[%s] Done LPT displacements, cpu time = %f s\n",fdate(),cputmp);
-  cputime.lpt+=cputmp;
+    printf("[%s] Done computing displacements, cpu time = %f s\n",fdate(),cputmp);
 
-#endif
-
-#ifndef RECOMPUTE_DISPLACEMENTS
-  /* displacements are computed during fragmentation in this case */
-
-  cputmp=MPI_Wtime();
-
-  if (!ThisTask)
-    printf("[%s] Computing first derivatives\n",fdate());
-
-  if (compute_first_derivatives(Smoothing.Radius[ismooth] ,ThisGrid))
-    return 1;
-
-  cputmp=MPI_Wtime()-cputmp;
-  if (!ThisTask)
-    printf("[%s] Done first derivatives, cpu time = %f s\n",fdate(),cputmp);
-
-  /* Store velocities of collapsed particles */
-  cputmp=MPI_Wtime();
-
-  if (!ThisTask)
-    printf("[%s] Storing velocities\n",fdate());
-
-  if (store_velocities())
-    return 1;
-
-  cputmp=MPI_Wtime()-cputmp;
-  if (!ThisTask)
-    printf("[%s] Done computing velocities, cpu time = %f s\n",fdate(),cputmp);
-  cputime.vel+=cputmp;
-#endif
-
-  /****************************************************/
-  /* FINAL PART                                       */
-  /* Output density, Fmax and Vel* fields if required */
-  /****************************************************/
-
-  /* Writes the results in files in the Data/ directory if required */
-  cputmp=MPI_Wtime();
-
-  /* if (write_fields()) */
-  /*   return 1; */
-
-  cputime.io+=MPI_Wtime()-cputmp;
+  /***************/
+  /* END OF FMAX */
+  /***************/
 
   if (finalize_fft())
     return 1;
@@ -335,7 +292,7 @@ int compute_fmax(void)
 }
 
 
-int compute_first_derivatives(double R, int ThisGrid)
+int compute_first_derivatives(double R, int ThisGrid, int order, double* vector)
 {
   /* computes second derivatives of the potential */
 
@@ -351,14 +308,14 @@ int compute_first_derivatives(double R, int ThisGrid)
 	printf("[%s] Computing 1st derivative: %d\n",fdate(),ia);
 
       double tmp = MPI_Wtime();
-      write_in_cvector(ThisGrid, kdensity[ThisGrid]);
+      write_in_cvector(ThisGrid, vector);
       timetmp += MPI_Wtime() - tmp;
-      
+
       if (compute_derivative(ThisGrid,ia,0))
 	return 1;
 
       tmp = MPI_Wtime();
-      write_from_rvector(ThisGrid, first_derivatives[ThisGrid][ia-1]);
+      write_from_rvector_to_products(ThisGrid, ia-1, order);
       timetmp += MPI_Wtime() - tmp;
     }
 
@@ -434,32 +391,79 @@ char *fdate()
 }
 
 
-int compute_displacements(void)
+int compute_displacements(int compute_sources, int recompute_sd, double redshift)
 {
-  int i;
+  /* This routine computes the displacement fields at a specified redshift
+     if recompute_sd is true, it recomputes the second derivatives */
+
+  double cputmp;
 
 #ifdef TWO_LPT
-  int j;
 
-  if (compute_second_derivatives(0.0, 0))
+  if (recompute_sd)
+    {
+      /* second derivatives are needed for LPT displacements, if not already in place they must be recomputed */
+      cputmp=MPI_Wtime();
+      if (!ThisTask)
+	printf("\n[%s] Computing second derivatives\n",fdate());
+
+      ScaleDep.order=0;  /* sources are computed as for LambdaCDM at z=0 */
+      ScaleDep.redshift=0.0;
+
+      if (compute_second_derivatives(0.0, 0))
+	return 1;
+
+      cputmp=MPI_Wtime()-cputmp;
+      if (!ThisTask)
+	printf("[%s] Done second derivatives, cpu time = %f s\n",fdate(),cputmp);
+      cputime.deriv+=cputmp;
+    }
+
+  /* computes the 2LPT and 3LPT displacement fields and stores them in the products */
+  cputmp=MPI_Wtime();
+  if (!ThisTask)
+    printf("\n[%s] Computing LPT displacements\n",fdate());
+
+  if (compute_LPT_displacements(compute_sources, redshift))
     return 1;
-  if (compute_LPT_displacements(0))
-    return 1;
 
-  for (i=0; i<3; i++)
-    for (j=0; j<MyGrids[0].total_local_size; j++)
-      second_derivatives[0][i+3][j]=second_derivatives[0][i][j];
-
-  for (i=0; i<3; i++)
-    VEL2_for_displ[i]=second_derivatives[0][i+3];
+  cputmp=MPI_Wtime()-cputmp;
+  if (!ThisTask)
+    printf("[%s] Done LPT displacements, cpu time = %f s\n",fdate(),cputmp);
+  cputime.lpt+=cputmp;
 
 #endif
 
-  if (compute_first_derivatives(0.0, 0))
+  /* computes Zeldovich displacements */
+  cputmp=MPI_Wtime();
+  if (!ThisTask)
+    printf("[%s] Computing first derivatives\n",fdate());
+
+  /* for scale-dependent growth we compute the displacements for the first redshift segment 
+     in case there is only one segment, this implies to compute them at the final redshift */
+  ScaleDep.redshift=redshift;
+  ScaleDep.order=1;   /* here we need the first-order growth */
+
+  if (compute_first_derivatives(0.0, 0, 1, kdensity[0]))
     return 1;
 
-  for (i=0; i<3; i++)
-    VEL_for_displ[i]=first_derivatives[0][i];
+  cputmp=MPI_Wtime()-cputmp;
+  if (!ThisTask)
+    printf("[%s] Done first derivatives, cpu time = %f s\n",fdate(),cputmp);
+  cputime.deriv+=cputmp;
+
+  /* /\* Store Zeldovich displacements in the products *\/ */
+  /* cputmp=MPI_Wtime(); */
+  /* if (!ThisTask) */
+  /*   printf("[%s] Storing velocities\n",fdate()); */
+
+  /* if (store_velocities()) */
+  /*   return 1; */
+
+  /* cputmp=MPI_Wtime()-cputmp; */
+  /* if (!ThisTask) */
+  /*   printf("[%s] Done storing velocities, cpu time = %f s\n",fdate(),cputmp); */
+  /* cputime.vel+=cputmp; */
 
   return 0;
 }
