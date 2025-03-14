@@ -22,7 +22,7 @@ print(myhist.name)
 Written by Pierluigi Monaco, Matteo Biagetti and Emiliano Munari
 
 LAST MODIFIED:
-Pierlugi Monaco 30/12/22
+Pierlugi Monaco 13/3/2025
 
 """
 
@@ -37,6 +37,34 @@ import struct
 VERBOSE=False
 
 class catalog:
+
+    '''
+    Reads a pinocchio catalog at fixed redshift
+    Usage: mycat=rp.catalog(filename, silent=False, first_file=None, last_file=None)
+
+    filename: name of catalog file, ending with .out. The code will recognise if the catalog is writen in several files
+    silent: if True, the script does not give messages in the standard output
+    first_file ,last_file: if the catalog if written in several files, it allows to select a limited range of output files
+
+    Returns:
+    mycat.data: the catalog, a structured numpy array
+    mycat.cat_dtype: the data type of the catalog:
+        [('name', numpy.int64),
+        ('Mass', numpy.float32),
+        ('pos', numpy.float32, 3),
+        ('vel', numpy.float32, 3),
+        ('posin', numpy.float32, 3),
+        ('npart', numpy.int32)]       (absent in light format)
+    mycat.Nhalos: number of halos in the catalog
+    mycat.Nfiles:  number of files in which the catalog is written
+
+    mycat.Mass: Mass field (for faster access)
+    mycat.pos: pos field
+    mycat.vel: vel field
+    mycat.posin: posin field
+    mycat.npart: npart field            (absent in light format)
+
+    '''
 
     def __init__(self,filename,silent=False,first_file=None,last_file=None):
 
@@ -227,6 +255,7 @@ class catalog:
         else:
             first_file=0
             last_file=Nfiles
+        self.Nfiles=Nfiles
 
         # prepares to read the file(s)
         self.data=None
@@ -330,13 +359,42 @@ class catalog:
         if not silent:
             print("Reading catalog done, {} groups found".format(NhalosPerFile.sum()))
 
-        # Create few pointers to make it compatible
+        self.Nhalos = len(self.data)
+
+        # Create few pointers to make it compatible with previous versions
         self.Mass  = self.data['Mass']
         self.pos   = self.data['pos']
-        self.Npart = self.data['npart']
+        if record_length>48:
+            self.Npart = self.data['npart']
         self.vel   = self.data['vel']
 
 class plc:
+
+    '''
+    Reads a pinocchio catalog on the past light cone
+    Usage: myplc=rp.plc(filename, silent=False, first_file=None, last_file=None, onlyNfiles=False)
+
+    filename: name of catalog file, ending with .out. The code will recognise if the catalog is writen in several files
+    silent: if True, the script does not give messages in the standard output
+    first_file ,last_file: if the catalog if written in several files, it allows to select a limited range of output files
+    onlyNfiles: it computes Nfiles and exits returning its value, without reading the catalog
+
+    Returns:
+    myplc.data: the catalog, a structured numpy array 
+    myplc.cat_dtype: the data type of the catalog:
+        [('name', numpy.uint64),
+        ('truez', numpy.float32),
+        ('pos', numpy.float32, 3),       (absent in light format)
+        ('vel', numpy.float32, 3),       (absent in light format)
+        ('Mass', numpy.float32),
+        ('theta', numpy.float32),
+        ('phi', numpy.float32),
+        ('vlos', numpy.float32),         (absent in light format)
+        ('obsz', numpy.float32)]
+    myplc.Nhalos: number of halos in the catalog
+    myplc.Nfiles: number of files in which the catalog is written
+    
+    '''
 
     def __init__(self,filename,silent=False,first_file=None,last_file=None,onlyNfiles=False):
 
@@ -423,41 +481,55 @@ class plc:
                                ( 'vlos' , np.float64 ),
                                ( 'obsz' , np.float64 ) ]
 
-            stored_dtype   = [ ('fort',  np.int32),
-                               ( 'name'  , np.uint64 ),
-                               ( 'truez' , np.float64 ),
-                               ( 'pos'   , np.float64,3 ),
-                               ( 'vel' , np.float64,3 ),
+            stored_dtype   = [ ('fort',   np.int32),
+                               ( 'name',  np.uint64 ),
+                               ( 'truez', np.float64 ),
+                               ( 'pos',   np.float64,3 ),
+                               ( 'vel',   np.float64,3 ),
                                ( 'Mass' , np.float64 ),
-                               ( 'theta' , np.float64 ),
-                               ( 'phi' , np.float64 ),
+                               ( 'theta', np.float64 ),
+                               ( 'phi',   np.float64 ),
                                ( 'vlos' , np.float64 ),
                                ( 'obsz' , np.float64 ) ,
-                               ('trof',  np.int32) ]
+                               ( 'trof',  np.int32) ]
 
         elif record_length==56:
 
-            self.cat_dtype = [ ( 'name'  , np.uint64 ),
-                               ( 'truez' , np.float32 ),
-                               ( 'pos'   , np.float32,3 ),
-                               ( 'vel' , np.float32,3 ),
-                               ( 'Mass' , np.float32 ),
-                               ( 'theta' , np.float32 ),
-                               ( 'phi' , np.float32 ),
-                               ( 'vlos' , np.float32 ),
-                               ( 'obsz' , np.float32 ) ]
-                  
-            stored_dtype   = [ ('fort',  np.int32),
-                               ( 'name'  , np.uint64 ),
-                               ( 'truez' , np.float32 ),
-                               ( 'pos'   , np.float32,3 ),
-                               ( 'vel' , np.float32,3 ),
-                               ( 'Mass' , np.float32 ),
-                               ( 'theta' , np.float32 ),
-                               ( 'phi' , np.float32 ),
-                               ( 'vlos' , np.float32 ),
-                               ( 'obsz' , np.float32 ) ,
-                               ('trof',  np.int32) ]
+            self.cat_dtype = [ ( 'name',  np.uint64 ),
+                               ( 'truez', np.float32 ),
+                               ( 'pos',   np.float32,3 ),
+                               ( 'vel',   np.float32,3 ),
+                               ( 'Mass',  np.float32 ),
+                               ( 'theta', np.float32 ),
+                               ( 'phi',   np.float32 ),
+                               ( 'vlos',  np.float32 ),
+                               ( 'obsz',  np.float32 ) ]
+            if newRun:
+
+                stored_dtype   = [ ( 'name',  np.uint64 ),
+                                   ( 'truez', np.float32 ),
+                                   ( 'pos',   np.float32,3 ),
+                                   ( 'vel',   np.float32,3 ),
+                                   ( 'Mass',  np.float32 ),
+                                   ( 'theta', np.float32 ),
+                                   ( 'phi',   np.float32 ),
+                                   ( 'vlos',  np.float32 ),
+                                   ( 'obsz',  np.float32 ) ]
+
+            else:
+
+                stored_dtype   = [ ( 'fort',  np.int32),
+                                   ( 'name',  np.uint64 ),
+                                   ( 'truez', np.float32 ),
+                                   ( 'pos',   np.float32,3 ),
+                                   ( 'vel',   np.float32,3 ),
+                                   ( 'Mass',  np.float32 ),
+                                   ( 'theta', np.float32 ),
+                                   ( 'phi',   np.float32 ),
+                                   ( 'vlos',  np.float32 ),
+                                   ( 'obsz',  np.float32 ),
+                                   ( 'trof',  np.int32) ]
+
 
         elif record_length==32:
 
@@ -602,13 +674,41 @@ class plc:
             if not silent:
                 print("done with file {}".format(myfname))
 
+        self.Nhalos = len(self.data)
+
         if not silent:
             print("Reading plc done, {} groups found".format(NhalosPerFile.sum()))
 
 
 
-        
 class histories:
+    '''
+    Reads a pinocchio histories catalog
+    Usage: myhist=rp.histories(filename, silent=False, first_file=None, last_file=None)
+
+    filename: name of catalog file, ending with .out. The code will recognise if the catalog is writen in several files
+    silent: if True, the script does not give messages in the standard output
+    first_file ,last_file: if the catalog if written in several files, it allows to select a limited range of output files
+
+    Returns:
+    myhist.data: the catalog, a structured numpy array
+    myhist.cat_dtype: the data type of the catalog:
+       [('name', numpy.uint64),
+        ('nickname', numpy.int32),
+        ('link', numpy.int32),
+        ('merged_with', numpy.int32),
+        ('mass_at_merger', numpy.int32),
+        ('mass_of_main', numpy.int32),
+        ('z_merging', numpy.float32),
+        ('z_peak', numpy.float32),
+        ('z_appear', numpy.float32)]
+    myhist.Nfiles: number of files in which the catalog is written
+    myhist.Ntrees: number of trees in the catalog
+    myhist.Nbranches_tot: total number of branches in the catalog
+    myhist.Nbranches: array of size Ntrees giving the number of branches for each tree
+    myhist.pointers; array of size Ntrees giving a pointer to the start of the tree in the catalog
+
+    '''
 
     def __init__(self,filename,silent=False,first_file=None,last_file=None):
 
@@ -733,6 +833,7 @@ class histories:
             print("sorry, I do not recognize this record length")
             return None
 
+        self.Nfiles=Nfiles
         # decides what files to read
         if Nfiles>1:
             if first_file is None:
@@ -918,3 +1019,4 @@ class histories:
 
         if not silent:
             print("Reading catalog done")
+
