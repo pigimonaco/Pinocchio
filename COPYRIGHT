@@ -1,11 +1,13 @@
-Copyright (c) 2016
+Copyright (c) 2025
 Pierluigi Monaco     Dipartimento di Fisica, Universita` di Trieste
 
-web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
+This code was written by
+Pierluigi Monaco, Tom Theuns, Giuliano Taffoni, Marius Lepinzan, 
+Chiara Moretti, Luca Tornatore, David Goz, Tiago Castro
+Copyright (C) 2025
 
-The original code was developed with:
-Tom Theuns           Institute for Computational Cosmology, University of Durham
-Giuliano Taffoni     INAF - Osservatorio Astronomico di Trieste
+github: https://github.com/pigimonaco/Pinocchio
+web page: http://adlibitum.oats.inaf.it/monaco/pinocchio.html
 
 
 This program is free software; you can redistribute it and/or modify
