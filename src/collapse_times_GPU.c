@@ -35,8 +35,10 @@
 #define _MIN_(a,b) ((a) < (b) ? (a) : (b))
 #define _MAX_(a,b) ((a) > (b) ? (a) : (b))
 
+
 #ifdef TABULATED_CT  // Tabulated collapse time calculation
 
+#define BILINEAR_SPLINE // The CUSTOM_FULL_GPU interpolation only works with the bilinear spline
 #define CT_NBINS_XY (50) 
 #define CT_NBINS_D (100) 
 #define CT_SQUEEZE (1.2) 

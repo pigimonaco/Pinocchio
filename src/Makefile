@@ -37,7 +37,7 @@ SYSTYPE ?= LeonardoBoost
 #####################################################################
 # The following variables should be passed from command line to make
 # Executable name
-EXEC         ?= test
+EXEC         ?= merged_Refactoring_GPU_CT_Table
 # Compilation options
 
 # C compiler
@@ -62,13 +62,13 @@ OPTIONS += -DTHREE_LPT
 
 # PLC reconstruction
 
-OPTIONS += -DPLC
+# OPTIONS += -DPLC
 
 # Dynamics of triaxial collapse #
 
 OPTIONS += -DELL_CLASSIC
 # OPTIONS += -DELL_SNG
-# OPTIONS += -DTABULATED_CT
+OPTIONS += -DTABULATED_CT
 
 # Building groups and fragmentation #
 
@@ -205,42 +205,6 @@ OMP_FFTW =
 endif # OMP, YES
 
 ########################### SYSTYPE CONFIGURATION ###################################
-#####################################################################################
-######################################################################################
-ifeq ($(SYSTYPE),"Marconi100")
-# CC          =  mpicc
-CDEBUG      = -ggdb3 -Wall $(OMP_FLAG)
-COPTIMIZED  = -O2 -Wno-unused-result  $(OMP_FLAG)
-FFTW_LIBR   = -L$(HOME)/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
-FFTW_INCL   = -I$(HOME)/include
-PFFT_LIBR   = -lpfft
-PFFT_INCL   = 
-MPI_LIBR    = -L$(SMPI_ROOT)/lib -lmpi_ibm
-MPI_INCL    = -I$(SMPI_ROOT)/include
-GSL_LIBR    = -L$(GSL_LIB) -lgsl -lgslcblas -lm
-GSL_INCL    = -I$(GSL_INC)
-endif
-
-###################### LEONARDO ######################
-
-ifeq ($(SYSTYPE),"LEONARDO")
-# CC          = nvc
-# CC          = mpicc
-# CDEBUG      = -ggdb3 -Wall 
-# COPTIMIZED  = -acc -gpu=ccnative -Minfo=accel
-COPTIMIZED  =    $(OMP_FLAG)
-# COPTIMIZED  = -mp=gpu -gpu=cc80 -target=gpu -gpu=managed -Minfo=all -v  
-# COPTIMIZED  = -g -mp=gpu -gpu=ccnative,debug,lineinfo -target=gpu -Minfo=all -v
-FFTW_LIBR   = -L/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/fftw-3.3.10-aqomamymhcna6zjrd6nlrync7oag4fkg/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
-FFTW_INCL   = -I/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/fftw-3.3.10-aqomamymhcna6zjrd6nlrync7oag4fkg/include
-PFFT_LIBR   = -L$(HOME)/lib -lpfft
-PFFT_INCL   = -I$(HOME)/include
-
-MPI_LIBR    = -L/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/openmpi-4.1.4-si334jjzldoxyl3jbbb3cf6legzshlqn/lib -lmpi
-MPI_INCL    = -I/leonardo/prod/spack/03/install/0.19/linux-rhel8-icelake/gcc-11.3.0/openmpi-4.1.4-si334jjzldoxyl3jbbb3cf6legzshlqn/include
-GSL_LIBR    = -L$(GSL_LIB) -lgsl -lgslcblas -lm
-GSL_INCL    = -I$(GSL_INC)
-endif
 
 ###################### LeonardoBoost ######################
 
@@ -248,12 +212,6 @@ ifeq ($(SYSTYPE), LeonardoBoost)
 
 CDEBUG      = -g -O0 -Minfo=all -v -Mneginfo $(GPU_FLAG) $(OMP_FLAG)
 COPTIMIZED  = -O3 -fast -Minfo=all -v -Mneginfo $(GPU_FLAG) $(OMP_FLAG)
-
-##################### DA CAMBIARE ###############################
-# GPU_FLAG   = -gpu=ccnative,debug,lineinfo -target=gpu -gpu=nomanaged
-# OMP_FLAG   = -mp=multicore,gpu
-# COPTIMIZED = -g -O0 -Minfo=all -v -Mneginfo $(GPU_FLAG) $(OMP_FLAG)
-##############################################################
 
 MPI         = /leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3/
 MPI_LIBR    = -L$(MPI)/lib -lmpi
@@ -280,23 +238,6 @@ PMT_INCL    = -I$(PMT)/include
 endif
 
 ##########################################################################
-
-###################### PLEIADI ######################
-
-ifeq ($(SYSTYPE),"pleiadi")
-CC          =  mpicc
-CDEBUG      = -g -Wall $(OMP_FLAG)
-COPTIMIZED  = -O3 -Wno-unused-result $(OMP_FLAG)
-FFTW_LIBR   = -L/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/fftw-3.3.10-bap3ootbcmiypnmo7rouk57jbdhfjuty/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
-FFTW_INCL   = -I/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/fftw-3.3.10-bap3ootbcmiypnmo7rouk57jbdhfjuty/include
-PFFT_LIBR   = -L/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/pfft-1.0.8-alpha-qy6lqerctfrhjzaoamzjhbpga2ofejqf/lib -lpfft
-PFFT_INCL   = -I/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/pfft-1.0.8-alpha-qy6lqerctfrhjzaoamzjhbpga2ofejqf/include
-MPI_LIBR    =
-MPI_INCL    =
-GSL_LIBR    = -L/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/gsl-2.7.1-uehbowahpvubxundtx3cz4a4a5sdwzun/lib -lgsl -lgslcblas -lm
-GSL_INCL    = -I/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/gsl-2.7.1-uehbowahpvubxundtx3cz4a4a5sdwzun/include
-endif
-
 
 ########## System-specific Configuration end ########## 
 
