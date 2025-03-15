@@ -1,0 +1,7 @@
+# This file contains the list of output redshifts, in chronological
+# (i.e. descending) order. The last value is the final redshift of the
+# run.  The past-light cone is NOT generated using these outputs but
+# is computed with continuous time sampling.
+
+0.0
+
