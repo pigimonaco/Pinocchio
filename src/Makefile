@@ -48,7 +48,7 @@ OPTIONS += -DTHREE_LPT
 
 # PLC reconstruction
 
-OPTIONS += -DPLC
+# OPTIONS += -DPLC
 
 # Dynamics of triaxial collapse #
 
@@ -100,7 +100,7 @@ endif
 
 ########## System-specific Configuration ############
 
-SYSTYPE="base"
+SYSTYPE ?= LeonardoBoost
 
 ###################### BASE ######################
 
@@ -149,6 +149,38 @@ MPI_LIBR    =
 MPI_INCL    =
 GSL_LIBR    = -L/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/gsl-2.7.1-uehbowahpvubxundtx3cz4a4a5sdwzun/lib -lgsl -lgslcblas -lm
 GSL_INCL    = -I/opt/cluster/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/gsl-2.7.1-uehbowahpvubxundtx3cz4a4a5sdwzun/include
+endif
+
+
+###################### LEONARDO ######################
+ifeq ($(SYSTYPE), LeonardoBoost)
+
+CC          =  nvc
+CDEBUG      = -g -O0 -Minfo=all -v -Mneginfo $(OMP_FLAG)
+COPTIMIZED  = -O3 -fast -Minfo=all -v -Mneginfo $(OMP_FLAG)
+
+MPI         = /leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3/
+MPI_LIBR    = -L$(MPI)/lib -lmpi
+MPI_INCL    = -I$(MPI)/include
+
+LIBDIR      = /leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11
+FFTW        = $(LIBDIR)/fftw/fftw-3.3.10
+FFTW_LIBR   = -L$(FFTW)/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
+FFTW_INCL   = -I$(FFTW)/include
+
+GSL         = $(LIBDIR)/gsl/gsl-2.7.1
+GSL_LIBR    = -L$(GSL)/lib -lgsl -lgslcblas -lm
+GSL_INCL    = -I$(GSL)/include
+
+PFFT        = $(LIBDIR)/pfft/pfft
+PFFT_LIBR   = -L$(PFFT)/lib -lpfft
+PFFT_INCL   = -I$(PFFT)/include
+
+
+PMT         = /leonardo_scratch/fast/CNHPC_1498509/lib/pmt/local
+PMT_LIBR    = -L$(PMT)/lib64 -lpmt
+PMT_INCL    = -I$(PMT)/include
+
 endif
 
 
