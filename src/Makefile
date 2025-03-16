@@ -100,7 +100,7 @@ endif
 
 ########## System-specific Configuration ############
 
-SYSTYPE ?= LeonardoBoost
+SYSTYPE ?= base
 
 ###################### BASE ######################
 
