@@ -100,7 +100,7 @@ endif
 
 ########## System-specific Configuration ############
 
-SYSTYPE ?= base
+SYSTYPE ?= "base"
 
 ###################### BASE ######################
 
@@ -153,7 +153,7 @@ endif
 
 
 ###################### LEONARDO ######################
-ifeq ($(SYSTYPE), LeonardoBoost)
+ifeq ($(SYSTYPE), "LeonardoBoost")
 
 CC          =  nvc
 CDEBUG      = -g -O0 -Minfo=all -v -Mneginfo $(OMP_FLAG)
