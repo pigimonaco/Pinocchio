@@ -37,7 +37,7 @@ SYSTYPE ?= LeonardoBoost
 #####################################################################
 # The following variables should be passed from command line to make
 # Executable name
-EXEC         ?= merged_Refactoring_GPU_CT_Table
+EXEC         ?= pinocchio.x
 # Compilation options
 
 # C compiler
@@ -68,7 +68,7 @@ OPTIONS += -DTHREE_LPT
 
 OPTIONS += -DELL_CLASSIC
 # OPTIONS += -DELL_SNG
-OPTIONS += -DTABULATED_CT
+# OPTIONS += -DTABULATED_CT
 
 # Building groups and fragmentation #
 

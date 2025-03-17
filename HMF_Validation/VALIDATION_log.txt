@@ -1,0 +1,102 @@
+=== Compilation Log ===
+make COMPILER_CC=nvc COMPILER_CPP=nvc++ DEBUG=NO OMP=YES GPU=NO FULL_GPU=YES SCOREP_NO=NO NSIGHT=NO ENERGY_CPU=NO ENERGY_GPU=NO OPTIONS=-DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -j16
+GPU_FLAG = -gpu=ccnative -target=gpu -gpu=nomanaged
+COPTS    = -O3 -fast -Minfo=all -v -Mneginfo -gpu=ccnative -target=gpu -gpu=nomanaged -mp=multicore,gpu
+nvc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/pmt/local/include -O3 -fast -Minfo=all -v -Mneginfo -gpu=ccnative -target=gpu -gpu=nomanaged -mp=multicore,gpu -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c fmax.c
+nvc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/pmt/local/include -O3 -fast -Minfo=all -v -Mneginfo -gpu=ccnative -target=gpu -gpu=nomanaged -mp=multicore,gpu -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c variables.c
+nvc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/pmt/local/include -O3 -fast -Minfo=all -v -Mneginfo -gpu=ccnative -target=gpu -gpu=nomanaged -mp=multicore,gpu -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c cubic_spline_interpolation.c
+nvc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/pmt/local/include -O3 -fast -Minfo=all -v -Mneginfo -gpu=ccnative -target=gpu -gpu=nomanaged -mp=multicore,gpu -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c cubic_spline_interpolation_full_GPU.c
+nvc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/pmt/local/include -O3 -fast -Minfo=all -v -Mneginfo -gpu=ccnative -target=gpu -gpu=nomanaged -mp=multicore,gpu -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c cosmo.c
+nvc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/pmt/local/include -O3 -fast -Minfo=all -v -Mneginfo -gpu=ccnative -target=gpu -gpu=nomanaged -mp=multicore,gpu -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c initialization.c
+nvc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/pmt/local/include -O3 -fast -Minfo=all -v -Mneginfo -gpu=ccnative -target=gpu -gpu=nomanaged -mp=multicore,gpu -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c fmax-pfft.c
+nvc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/pmt/local/include -O3 -fast -Minfo=all -v -Mneginfo -gpu=ccnative -target=gpu -gpu=nomanaged -mp=multicore,gpu -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c GenIC.c
+nvc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/pmt/local/include -O3 -fast -Minfo=all -v -Mneginfo -gpu=ccnative -target=gpu -gpu=nomanaged -mp=multicore,gpu -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c ReadParamfile.c
+nvc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/pmt/local/include -O3 -fast -Minfo=all -v -Mneginfo -gpu=ccnative -target=gpu -gpu=nomanaged -mp=multicore,gpu -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c allocations.c
+nvc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/pmt/local/include -O3 -fast -Minfo=all -v -Mneginfo -gpu=ccnative -target=gpu -gpu=nomanaged -mp=multicore,gpu -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c LPT.c
+nvc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/pmt/local/include -O3 -fast -Minfo=all -v -Mneginfo -gpu=ccnative -target=gpu -gpu=nomanaged -mp=multicore,gpu -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c distribute.c
+nvc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/pmt/local/include -O3 -fast -Minfo=all -v -Mneginfo -gpu=ccnative -target=gpu -gpu=nomanaged -mp=multicore,gpu -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c collapse_times.c
+nvc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/pmt/local/include -O3 -fast -Minfo=all -v -Mneginfo -gpu=ccnative -target=gpu -gpu=nomanaged -mp=multicore,gpu -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c collapse_times_GPU.c
+nvc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/pmt/local/include -O3 -fast -Minfo=all -v -Mneginfo -gpu=ccnative -target=gpu -gpu=nomanaged -mp=multicore,gpu -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c fragment.c
+nvc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/pmt/local/include -O3 -fast -Minfo=all -v -Mneginfo -gpu=ccnative -target=gpu -gpu=nomanaged -mp=multicore,gpu -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c build_groups.c
+nvc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/pmt/local/include -O3 -fast -Minfo=all -v -Mneginfo -gpu=ccnative -target=gpu -gpu=nomanaged -mp=multicore,gpu -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c write_halos.c
+nvc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/pmt/local/include -O3 -fast -Minfo=all -v -Mneginfo -gpu=ccnative -target=gpu -gpu=nomanaged -mp=multicore,gpu -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c write_snapshot.c
+nvc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/pmt/local/include -O3 -fast -Minfo=all -v -Mneginfo -gpu=ccnative -target=gpu -gpu=nomanaged -mp=multicore,gpu -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c pinocchio.c
+nvc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/pmt/local/include -O3 -fast -Minfo=all -v -Mneginfo -gpu=ccnative -target=gpu -gpu=nomanaged -mp=multicore,gpu -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c mpi_debugger.c
+nvc -O3 -fast -Minfo=all -v -Mneginfo -gpu=ccnative -target=gpu -gpu=nomanaged -mp=multicore,gpu -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -o ./pinocchio.x fmax.o  variables.o  cubic_spline_interpolation.o cubic_spline_interpolation_full_GPU.o cosmo.o initialization.o fmax-pfft.o GenIC.o ReadParamfile.o allocations.o LPT.o distribute.o collapse_times.o collapse_times_GPU.o fragment.o build_groups.o write_halos.o write_snapshot.o pinocchio.o mpi_debugger.o -lm -L/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/lib -lpfft -L/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/lib -lfftw3_mpi -lfftw3 -lfftw3_omp -lfftw3_threads -L/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//lib -lmpi -L/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/lib -lgsl -lgslcblas -lm -L/leonardo_scratch/fast/CNHPC_1498509/lib/pmt/local/lib64 -lpmt
+ldd ./pinocchio.x
+	linux-vdso.so.1 (0x00007ffe60f8b000)
+	libm.so.6 => /lib64/libm.so.6 (0x0000150959f0e000)
+	libpfft.so.0 => /leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/lib/libpfft.so.0 (0x0000150959c82000)
+	libfftw3_mpi.so.3 => /leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/lib/libfftw3_mpi.so.3 (0x0000150959a5b000)
+	libfftw3.so.3 => /leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/lib/libfftw3.so.3 (0x00001509596cb000)
+	libfftw3_omp.so.3 => /leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/lib/libfftw3_omp.so.3 (0x00001509594c4000)
+	libfftw3_threads.so.3 => /leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/lib/libfftw3_threads.so.3 (0x00001509592bc000)
+	libmpi.so.40 => /leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3/lib/libmpi.so.40 (0x0000150958f98000)
+	libgsl.so.27 => /leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/lib/libgsl.so.27 (0x000015095892b000)
+	libgslcblas.so.0 => /leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/lib/libgslcblas.so.0 (0x000015095868b000)
+	libpmt.so => /leonardo_scratch/fast/CNHPC_1498509/lib/pmt/local/lib64/libpmt.so (0x000015095a491000)
+	libacchost.so => /leonardo/prod/spack/5.2/install/0.21/linux-rhel8-icelake/gcc-8.5.0/nvhpc-24.3-v63z4inohb4ywjeggzhlhiuvuoejr2le/Linux_x86_64/24.3/compilers/lib/libacchost.so (0x0000150958426000)
+	libaccdevaux.so => /leonardo/prod/spack/5.2/install/0.21/linux-rhel8-icelake/gcc-8.5.0/nvhpc-24.3-v63z4inohb4ywjeggzhlhiuvuoejr2le/Linux_x86_64/24.3/compilers/lib/libaccdevaux.so (0x000015095820a000)
+	libaccdevice.so => /leonardo/prod/spack/5.2/install/0.21/linux-rhel8-icelake/gcc-8.5.0/nvhpc-24.3-v63z4inohb4ywjeggzhlhiuvuoejr2le/Linux_x86_64/24.3/compilers/lib/libaccdevice.so (0x0000150957ede000)
+	libdl.so.2 => /lib64/libdl.so.2 (0x0000150957cda000)
+	libcudadevice.so => /leonardo/prod/spack/5.2/install/0.21/linux-rhel8-icelake/gcc-8.5.0/nvhpc-24.3-v63z4inohb4ywjeggzhlhiuvuoejr2le/Linux_x86_64/24.3/compilers/lib/libcudadevice.so (0x0000150957ac3000)
+	libnvomp.so => /leonardo/prod/spack/5.2/install/0.21/linux-rhel8-icelake/gcc-8.5.0/nvhpc-24.3-v63z4inohb4ywjeggzhlhiuvuoejr2le/Linux_x86_64/24.3/compilers/lib/libnvomp.so (0x0000150956ac2000)
+	libpthread.so.0 => /lib64/libpthread.so.0 (0x00001509568a2000)
+	libnvcpumath.so => /leonardo/prod/spack/5.2/install/0.21/linux-rhel8-icelake/gcc-8.5.0/nvhpc-24.3-v63z4inohb4ywjeggzhlhiuvuoejr2le/Linux_x86_64/24.3/compilers/lib/libnvcpumath.so (0x000015095645e000)
+	libnvc.so => /leonardo/prod/spack/5.2/install/0.21/linux-rhel8-icelake/gcc-8.5.0/nvhpc-24.3-v63z4inohb4ywjeggzhlhiuvuoejr2le/Linux_x86_64/24.3/compilers/lib/libnvc.so (0x00001509561fa000)
+	libc.so.6 => /lib64/libc.so.6 (0x0000150955e34000)
+	libgcc_s.so.1 => /leonardo/prod/spack/5.2/install/0.21/linux-rhel8-icelake/gcc-8.5.0/gcc-12.2.0-gmhym3kmbzqlpwkzhgab2xsoygsdwxcl/lib64/libgcc_s.so.1 (0x000015095a46c000)
+	/lib64/ld-linux-x86-64.so.2 (0x000015095a290000)
+	libopen-rte.so.40 => /leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--23.11/lib/libopen-rte.so.40 (0x0000150955b67000)
+	libopen-pal.so.40 => /leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--23.11/lib/libopen-pal.so.40 (0x0000150955889000)
+	librt.so.1 => /lib64/librt.so.1 (0x0000150955681000)
+	libutil.so.1 => /lib64/libutil.so.1 (0x000015095547d000)
+	libz.so.1 => /lib64/libz.so.1 (0x0000150955265000)
+	libhwloc.so.15 => /lib64/libhwloc.so.15 (0x0000150955015000)
+	libevent_core-2.1.so.6 => /lib64/libevent_core-2.1.so.6 (0x0000150954ddc000)
+	libevent_pthreads-2.1.so.6 => /lib64/libevent_pthreads-2.1.so.6 (0x0000150954bd9000)
+	libnvcpumath-avx512.so => /leonardo/prod/spack/5.2/install/0.21/linux-rhel8-icelake/gcc-8.5.0/nvhpc-23.11-wnrvac5a7nx7cnbtaamktaaqljmgorva/Linux_x86_64/23.11/compilers/lib/libnvcpumath-avx512.so (0x0000150954796000)
+	libnvhpcatm.so => /leonardo/prod/spack/5.2/install/0.21/linux-rhel8-icelake/gcc-8.5.0/nvhpc-23.11-wnrvac5a7nx7cnbtaamktaaqljmgorva/Linux_x86_64/23.11/compilers/lib/libnvhpcatm.so (0x000015095458b000)
+	libcuda.so.1 => /lib64/libcuda.so.1 (0x00001509528a2000)
+	libnvidia-ml.so.1 => /lib64/libnvidia-ml.so.1 (0x00001509518f2000)
+	libstdc++.so.6 => /leonardo/prod/spack/5.2/install/0.21/linux-rhel8-icelake/gcc-8.5.0/gcc-12.2.0-gmhym3kmbzqlpwkzhgab2xsoygsdwxcl/lib64/libstdc++.so.6 (0x00001509516ca000)
+	libcrypto.so.1.1 => /lib64/libcrypto.so.1.1 (0x00001509511e0000)
+
+
+=== Simulation Log ===
+Simulation log saved to: ../HMF_Validation/log_RUN.txt
+
+=== Analysis Results ===
+HMF Average Residual: 3.72019e-01
+Plot saved to: ../HMF_Validation/HMF.png
+
+Compilation Options:
+  DEBUG: NO
+  OMP: YES
+  GPU: NO
+  FULL_GPU: YES
+  SCOREP_NO: NO
+  NSIGHT: NO
+  ENERGY_CPU: NO
+  ENERGY_GPU: NO
+
+Preprocessor Flags:
+  -DTWO_LPT: YES
+  -DTHREE_LPT: YES
+  -DPLC: NO
+  -DELL_CLASSIC: YES
+  -DELL_SNG: NO
+  -DTABULATED_CT: NO
+  -DCLASSIC_FRAGMENTATION: NO
+  -DSNAPSHOT: NO
+  -DLIGHT_OUTPUT: NO
+  -DLONGIDS: NO
+  -DDOUBLE_PRECISION_PRODUCTS: NO
+  -DSCALE_DEPENDENT: NO
+  -DREAD_PK_TABLE: NO
+  -DONLY_MATTER_POWER: NO
+  -DRECOMPUTE_DISPLACEMENTS: NO
+  -DMOD_GRAV_FR: NO
+  -DFR0=1.e-8: NO
+  -DWHITENOISE: NO
+  -DNORADIATION: YES
