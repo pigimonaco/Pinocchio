@@ -1,0 +1,53 @@
+=== Compilation Log ===
+make EXEC=pinocchio.x CC=mpicc DEBUG=NO OMP=YES OPTIONS=-DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -j16
+mpicc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -O3 -fast -Minfo=all -v -Mneginfo  -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c fmax.c
+mpicc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -O3 -fast -Minfo=all -v -Mneginfo  -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c variables.c
+mpicc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -O3 -fast -Minfo=all -v -Mneginfo  -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c initialization.c
+mpicc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -O3 -fast -Minfo=all -v -Mneginfo  -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c collapse_times.c
+mpicc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -O3 -fast -Minfo=all -v -Mneginfo  -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c fmax-pfft.c
+mpicc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -O3 -fast -Minfo=all -v -Mneginfo  -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c GenIC.c
+mpicc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -O3 -fast -Minfo=all -v -Mneginfo  -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c ReadParamfile.c
+mpicc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -O3 -fast -Minfo=all -v -Mneginfo  -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c allocations.c
+mpicc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -O3 -fast -Minfo=all -v -Mneginfo  -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c LPT.c
+mpicc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -O3 -fast -Minfo=all -v -Mneginfo  -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c distribute.c
+mpicc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -O3 -fast -Minfo=all -v -Mneginfo  -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c fragment.c
+mpicc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -O3 -fast -Minfo=all -v -Mneginfo  -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c build_groups.c
+mpicc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -O3 -fast -Minfo=all -v -Mneginfo  -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c write_halos.c
+mpicc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -O3 -fast -Minfo=all -v -Mneginfo  -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c write_snapshot.c
+mpicc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -O3 -fast -Minfo=all -v -Mneginfo  -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c cosmo.c
+mpicc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -O3 -fast -Minfo=all -v -Mneginfo  -DTWO_LPT -DTHREE_LPT -DELL_CLASSIC -DNORADIATION -c pinocchio.c
+mpicc -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/include -I/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//include -I/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/include -O3 -fast -Minfo=all -v -Mneginfo  -o ./pinocchio.x pinocchio.o fmax.o variables.o initialization.o collapse_times.o fmax-pfft.o GenIC.o ReadParamfile.o allocations.o LPT.o distribute.o fragment.o build_groups.o write_halos.o write_snapshot.o cosmo.o -lm -L/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/pfft/pfft/lib -lpfft -L/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/fftw/fftw-3.3.10/lib -lfftw3_mpi -lfftw3  -L/leonardo/prod/opt/libraries/openmpi/4.1.6/nvhpc--24.3//lib -lmpi -L/leonardo_scratch/fast/CNHPC_1498509/lib/nvhpc-23.11/gsl/gsl-2.7.1/lib -lgsl -lgslcblas -lm
+
+
+=== Simulation INFO ===
+Using RunFlag: test, BoxSize: 128, GridSize: 128
+Simulation log saved to: ../HMF_Validation/log_RUN.txt
+
+=== Analysis Results ===
+HMF Average Residual: 2.06137e-01
+Plot saved to: ../HMF_Validation/MHF_Validation_with_Watson_fit.png
+
+Compilation Options:
+  DEBUG: NO
+  OMP: YES
+
+Preprocessor Flags:
+  -DTWO_LPT: YES
+  -DTHREE_LPT: YES
+  -DPLC: NO
+  -DELL_CLASSIC: YES
+  -DELL_SNG: NO
+  -DTABULATED_CT: NO
+  -DCLASSIC_FRAGMENTATION: NO
+  -DSNAPSHOT: NO
+  -DLIGHT_OUTPUT: NO
+  -DLONGIDS: NO
+  -DDOUBLE_PRECISION_PRODUCTS: NO
+  -DSCALE_DEPENDENT: NO
+  -DREAD_PK_TABLE: NO
+  -DONLY_MATTER_POWER: NO
+  -DRECOMPUTE_DISPLACEMENTS: NO
+  -DMOD_GRAV_FR: NO
+  -DFR0=1.e-8: NO
+  -DWHITENOISE: NO
+  -DNORADIATION: YES
