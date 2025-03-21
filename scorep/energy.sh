@@ -75,7 +75,7 @@ do
 
     		    # create a subdirectory for each MAP/MPI/OMP configuration
 		    SUB_DIR=${PWD}/nodes_${NODES}_map_${MAP}_MPI_${NT}_OMP_${OMP}
-		    mkdir -p ${SUB_DIR} && cd ${SUB_DIR} && rm -rf * && cp ${OUTPUTS} ${PARAMFILE_} .
+		    mkdir -p ${SUB_DIR} && cd ${SUB_DIR} && rm -rf * && cp ${OUTPUTS} .
 
 		    PARA=$(basename ${PARAMFILE_})
     		    OUT=${PWD}/$(basename ${EXE})_nodes_${NODES}_map_${MAP}_MPI_${NT}_OMP_${OMP}_energy_output.txt
@@ -92,7 +92,7 @@ do
 
 		    # set the MaxMem parameter according to NTASKS_PER_NODE
 		    MAX_MEM_MPI_TASK=$(echo "${MAX_MEM} * 1024 / ${NTASKS_PER_NODE}" | bc) # MaxMem in Mbyte
-		    gawk -i inplace '{if ($1=="MaxMem") {$2="'${MAX_MEM_MPI_TASK}'"} print $0}' ${PARA}
+		    gawk '{if ($1=="MaxMem") {$2="'${MAX_MEM_MPI_TASK}'"} print $0}' ${PARAMFILE_} > tmp.txt && mv tmp.txt ${PARA}
 		    
     		    # timer
     		    SECONDS=0

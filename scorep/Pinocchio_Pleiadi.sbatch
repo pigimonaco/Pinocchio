@@ -6,7 +6,7 @@
 #SBATCH --exclusive
 #SBATCH --output=Pinocchio_Scorep-%j.out
 #SBATCH --error=Pinocchio_Scorep-%j.err
-#SBATCH --time=00:30:00
+#SBATCH --time=03:00:00
 
 ########################################### MODULES / LIBRARIES #################################################
 export MODULE_VERSION=5.0.1
@@ -32,7 +32,7 @@ export OMP_WAIT_POLICY=ACTIVE
 export WORKDIR=/u/dgoz/work/Pinocchio
 
 #-------- swith on/off production
-PRODUCTION=1
+PRODUCTION=0
 
 #-------- swith on/off energy (PMT library is required and code instrumentation)
 ENERGY=0  # not working yet
@@ -42,9 +42,9 @@ PROFILING=0
 
 #------ switch on/off tracing
 # Tracing is meant to be run after the profiling
-TRACING=0
+TRACING=1
 #------ set the scorep memory if tracing is enable
-export SCOREP_TOTAL_MEMORY=41MB # set this value according to estimated memory requirements during profiling analysis
+export SCOREP_TOTAL_MEMORY=21MB # set this value according to estimated memory requirements during profiling analysis
 
 # set the compilers
 COMPILER_CC=mpicc
@@ -56,21 +56,21 @@ SYSTEM=pleiadi
 BASE=Pinocchio
 
 # executable with/without OMP or Debug support
-EXEC=( "${BASE}_OMP" )
+EXEC=( "${BASE}_OMP" "${BASE}" )
 
 # Select the PAPI metrics (empty means do not use PAPI counters)
 # string comma-separated
 # PAPI_METRIC="PAPI_L1_DCM, PAPI_L2_DCM, PAPI_L3_TCM, PAPI_TLB_DM, PAPI_MEM_SCY, PAPI_TOT_INS, PAPI_TOT_CYC"
-PAPI_METRIC="PAPI_L1_DCM, PAPI_L2_DCM, PAPI_TLB_DM, PAPI_TOT_INS, PAPI_TOT_CYC"
+# PAPI_METRIC="PAPI_L1_DCM, PAPI_L2_DCM, PAPI_TLB_DM"
 
 # Number of MPI tasks (array)
-NTASKS=( 1 2 4 )
+NTASKS=( 4 8 )
 
 # MPI mapping list (e.g. socket, numa, core)
-MPI_MAP_BY=( numa )
+MPI_MAP_BY=( numa socket )
 
 # Number of OMP threads per MPI task (array)
-OMP_THR=( 1 2 4 8 )
+OMP_THR=( 1 2 )
 
 # box size
 BOX=( 128 )
@@ -79,7 +79,7 @@ BOX=( 128 )
 GRID=( 128 )
 
 # max memory per node available in Gbytes
-MAX_MEM=250
+MAX_MEM=120
 
 # Parameter file
 PARAMFILE_TEMPLATE=${WORKDIR}/example/parameter_file
@@ -88,7 +88,7 @@ PARAMFILE_TEMPLATE=${WORKDIR}/example/parameter_file
 OUTPUTS=${WORKDIR}/example/outputs
 
 # output directory
-OUTPUT_DIRECTORY=${WORKDIR}/example/scorep
+OUTPUT_DIRECTORY=${WORKDIR}/example/scorep_no_PAPI
 
 ####################################################################################################################
 ####################################################################################################################

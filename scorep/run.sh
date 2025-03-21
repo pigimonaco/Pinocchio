@@ -84,16 +84,40 @@ else
     NODES=${SLURM_NNODES}
 fi
 
+# set the paramfile
+PARAMFILE=()
+# set the output directory
+OUT_DIR=()
+for box in ${BOX[@]}
+do
+    for grid in ${GRID[@]}
+    do 
+	DIR=${OUTPUT_DIRECTORY}/${DIRNAME_PREFIX}_BoxSize_${box}_GridSize_${grid}
+	mkdir -p ${DIR}
+	cp ${OUTPUTS} ${DIR}
+	OUT_DIR+=( "${DIR}" )
+	NAME=${DIR}/paramfile_BoxSize_${box}_GridSize_${grid}
+	# edit the 'paramfile starting from the template'
+	gawk '{if ($1=="BoxSize") {$2="'${box}'"} else if ($1=="GridSize") {$2="'${grid}'"} print $0}' ${PARAMFILE_TEMPLATE} > ${NAME}
+	PARAMFILE+=( "${NAME}" )
+    done # loop over GRID
+done # loop over BOX
+
+# check
+if [ ${#PARAMFILE[@]} -ne ${#OUT_DIR[@]} ]
+then
+    printf "\n\t Missmatch between paramefile and output directory ...aborting...\n"
+    exit 10
+fi
+
 # PAPI metrics
 PAPI_METRICS=()
-# set the output directory
-DIR=${OUTPUT_DIRECTORY}/${DIRNAME_PREFIX}_BoxSize_${box}_GridSize_${grid}
-OUT_DIR=()
-
 if [ ${PROFILING} -eq 1 ] || [ ${TRACING} -eq 1 ]
 then
     if [ ${#PAPI_METRIC} -ne 0 ]
     then
+	PAPI_OUT_DIR=()
+
 	# get the number of items
 	ITEMS=$(echo ${PAPI_METRIC} | gawk -F "," '{print NF}')
 	for ((item=0 ; item<${ITEMS} ; item+=2))
@@ -101,28 +125,16 @@ then
 	    if [[ ${item} -ne $((ITEMS - 1)) ]]
 	    then
 		# extract the papi metric
-		METRIC=$(echo ${PAPI_METRIC} | gawk -F "," -v start=$((item + 1)) 'BEGIN {stop = start + 1} {print $start","$stop}' | tr -d ' ')
-		PAPI_DIR=$(echo ${METRIC} | sed -r 's/,/_/g')
+		METRIC=$(echo ${PAPI_METRIC} | gawk -F "," -v start=$((item + 1)) 'BEGIN {stop = start + 1} ; {print $start","$stop}' | tr -d ' ')
+		PAPI_DIR=$(echo ${METRIC} | sed -r 's/,/___/g')
 	    else
 		METRIC=$(echo ${PAPI_METRIC} | gawk -F "," -v start=$((item + 1)) '{print $start}' | tr -d ' ')
 		PAPI_DIR=${METRIC}
 	    fi
 	    PAPI_METRICS+=( "${METRIC}" )
-	    DIR_NAME="${DIR}_${PAPI_DIR}"
-	    # make directory
-	    mkdir -p ${DIR_NAME}
-	    OUT_DIR+=( ${DIR_NAME} )
+	    PAPI_OUT_DIR+=( "${PAPI_DIR}" )
 	done
-    else
-	# make directory
-	mkdir -p ${DIR}
-	OUT_DIR+=( ${DIR} )
-    fi
-fi
+    fi # PAPI_METRIC
+fi # PROFILING || TRACING
 
-if [ ${PRODUCTION} -eq 1 ]
-then
-    # make directory
-    mkdir -p ${DIR}
-    OUT_DIR+=( ${DIR} )
-fi
+cd ${WORKDIR}

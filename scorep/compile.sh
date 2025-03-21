@@ -93,7 +93,7 @@ do
     fi
     
     printf "\n\t Compiling ${EXE_SCOREP}... \n"
-    COMPILE=compile_${EXE_SCOREP}.txt
+    COMPILE=compile_${EXE_}.txt
     make clean && make EXEC=${EXE_} COMPILER_CC=${CC} COMPILER_CPP=${CPP} DEBUG=${DEBUG_SWITCH} OMP=${OMP_SWITCH} FULL_GPU=${GPU_SWITCH} SYSTYPE=${SYSTEM} ENERGY_CPU=${ENERGY_CPU_SWITCH} ENERGY_GPU=${ENERGY_GPU_SWITCH} SCOREP=${SCOREP_SWITCH} |& tee ${COMPILE}
     file ${EXE_} |& tee -a ${COMPILE}
     ldd ${EXE_} |& tee -a ${COMPILE}
