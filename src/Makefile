@@ -158,7 +158,8 @@ endif
 
 ifeq ($(FULL_GPU), YES)
 OPTIONS += -DGPU_OMP_FULL
-GPU_FLAG = -gpu=ccnative -target=gpu -gpu=nomanaged
+# GPU_FLAG = -gpu=ccnative -target=gpu -gpu=nomanaged
+GPU_FLAG =
 endif
 
 ifeq ($(NSIGHT), YES)
@@ -180,24 +181,25 @@ endif
 
 ifeq ($(OMP), YES)
 OPTIONS += -DUSE_FFT_THREADS
-OMP_FLAG = -mp=multicore
+# OMP_FLAG = -mp=multicore
+OMP_FLAG = -fopenmp
 OMP_FFTW = -lfftw3_omp -lfftw3_threads
 
 ifeq ($(GPU), YES)
-OMP_FLAG = -mp=multicore,gpu
+# OMP_FLAG = -mp=multicore,gpu
 endif
 
 ifeq ($(FULL_GPU), YES)
-OMP_FLAG = -mp=multicore,gpu
+# OMP_FLAG = -mp=multicore,gpu
 endif
 
 else
 ifeq ($(GPU), YES)
-OMP_FLAG = -mp=gpu
+# OMP_FLAG = -mp=gpu
 endif
 
 ifeq ($(FULL_GPU), YES)
-OMP_FLAG = -mp=gpu
+# OMP_FLAG = -mp=gpu
 endif
 
 OMP_FLAG =
@@ -239,6 +241,26 @@ endif
 
 ##########################################################################
 
+
+# ###################### PLEIADI ######################
+
+# ifeq ($(SYSTYPE), pleiadi)
+
+COPTIMIZED  = -O3 -g -fopenmp -march=native -mtune=native -ftree-vectorize
+FFTW        = /u/dgoz/lib/fftw-3.3.10_pleiadi
+FFTW_LIBR   = -L$(FFTW)/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
+FFTW_INCL   = -I$(FFTW)/include
+PFFT        = /u/dgoz/lib/pfft-1.0.8-alpha_pleiadi
+PFFT_LIBR   = -L$(PFFT)/lib -lpfft
+PFFT_INCL   = -I$(PFFT)/include
+MPI_LIBR    =
+MPI_INCL    =
+GSL         = /u/dgoz/lib/gsl-2.7.1_pleiadi
+GSL_LIBR    = -L$(GSL)/lib -lgsl -lgslcblas -lm
+GSL_INCL    = -I$(GSL)/include
+
+# endif
+######################################################
 
 ########## System-specific Configuration end ########## 
 

@@ -1,1 +1,10 @@
+# Untracked files
+
+*~
+*.txt
+*.err
+*.out
+*_profiling/
+*Scorep*
+log
 *.o

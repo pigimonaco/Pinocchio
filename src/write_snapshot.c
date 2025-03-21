@@ -52,10 +52,11 @@ static unsigned long long largest32 = (unsigned)1<<31;
 #define MYIDTYPE unsigned int
 #endif
 
+
 /* gadget header */
 typedef struct
 {
-  unsigned NPart[6];
+  MYIDTYPE NPart[6];
   double   Mass[6];
   double   Time;
   double   RedShift;
@@ -124,8 +125,8 @@ void set_point_timedep(double);
 
 char filename[LBLENGTH];
 FILE *file;
-int NTasksPerFile,collector,ThisFile,NPartInFile,myNpart,myiout;
-int *Npart_array;
+int NTasksPerFile,collector,ThisFile,myNpart,myiout;
+MYIDTYPE NPartInFile, *Npart_array;
 
 /* this is the redshift at which an LPT snapshot is written */
 int myiout;
@@ -408,7 +409,7 @@ int write_header()
   int itask, dummy;
   unsigned long long int myNtotal;
   char my_filename[LBLENGTH],tag[SBLENGTH];
-  int *tmp_array;
+  MYIDTYPE *tmp_array;
   SnapshotHeader_data Header;
 
   NTasksPerFile=NTasks/params.NumFiles;
@@ -418,13 +419,13 @@ int write_header()
   myNpart = MyGrids[0].total_local_size;
 
   /* Number of particles in each file */
-  Npart_array = (int*)calloc(params.NumFiles, sizeof(int));
-  tmp_array   = (int*)calloc(params.NumFiles, sizeof(int));
+  Npart_array = (MYIDTYPE*)calloc(params.NumFiles, sizeof(*Npart_array));
+  tmp_array   = (MYIDTYPE*)calloc(params.NumFiles, sizeof(*tmp_array));
   tmp_array[collector]=myNpart;
 
   /* this computes the number of particles in each file */
-  MPI_Reduce(tmp_array, Npart_array, params.NumFiles, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-  MPI_Bcast(Npart_array, params.NumFiles, MPI_INT, 0, MPI_COMM_WORLD);
+  MPI_Reduce(tmp_array, Npart_array, params.NumFiles, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Bcast(Npart_array, params.NumFiles, MPI_UNSIGNED_LONG_LONG, 0, MPI_COMM_WORLD);
   NPartInFile=Npart_array[collector];
 
   /* total number of particles that will be contained in the complete snapshot */
@@ -432,13 +433,13 @@ int write_header()
     myNtotal+=Npart_array[itask];
 
   /* sets arrays to zero (probably superfluous) */
-  memset(tmp_array, 0, params.NumFiles*sizeof(int));
-  memset(Npart_array, 0, params.NumFiles*sizeof(int));
+  memset(tmp_array, 0, params.NumFiles*sizeof(*tmp_array));
+  memset(Npart_array, 0, params.NumFiles*sizeof(*Npart_array));
   tmp_array[collector]=myNpart;
 
   /* this computes the largest number of particles a task can have for each collector */
-  MPI_Reduce(tmp_array, Npart_array, params.NumFiles, MPI_INT, MPI_MAX, 0, MPI_COMM_WORLD);
-  MPI_Bcast(Npart_array, params.NumFiles, MPI_INT, 0, MPI_COMM_WORLD);
+  MPI_Reduce(tmp_array, Npart_array, params.NumFiles, MPI_UNSIGNED_LONG_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+  MPI_Bcast(Npart_array, params.NumFiles, MPI_UNSIGNED_LONG_LONG, 0, MPI_COMM_WORLD);
   free(tmp_array);
 
   // if (!ThisTask)
@@ -456,7 +457,7 @@ int write_header()
 	}
 
       if (!ThisTask)
-	printf("[%s] Task 0 will write %d particles out of %Ld in snapshot file %s\n",fdate(), NPartInFile, MyGrids[0].Ntotal, my_filename);
+	printf("[%s] Task 0 will write %lu particles out of %Ld in snapshot file %s\n",fdate(), NPartInFile, MyGrids[0].Ntotal, my_filename);
 
       if ( (file=fopen(my_filename,"w"))==0x0)
 	{
