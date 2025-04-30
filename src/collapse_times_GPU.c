@@ -325,9 +325,10 @@ int compute_collapse_times_gpu(int ismooth)
   // Update each individual each individual second_derivatives
   for (int igrid = 0; igrid < Ngrids; igrid++) {
     for (int i = 0; i < 6; i++) {
-        #pragma omp target update to(second_derivatives[igrid][i][0:total_size]) device(devID)
+        #pragma omp target update to(second_derivatives[igrid][i][0:total_size]) device(devID) nowait
     }
   }
+  #pragma omp taskwait
 
   #endif
 
