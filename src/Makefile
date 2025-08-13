@@ -28,7 +28,7 @@
 
 # Directory settings #
 
-RUNDIR = ./
+RUNDIR = ../example/
 
 # Executable name #
 
@@ -48,7 +48,7 @@ OPTIONS += -DTHREE_LPT
 
 # PLC reconstruction
 
-# OPTIONS += -DPLC
+OPTIONS += -DPLC
 
 # Dynamics of triaxial collapse #
 
@@ -58,7 +58,7 @@ OPTIONS += -DELL_CLASSIC
 
 # Building groups and fragmentation #
 
-# OPTIONS += -DCLASSIC_FRAGMENTATION
+#OPTIONS += -DCLASSIC_FRAGMENTATION
 
 # Output #
 
@@ -70,10 +70,10 @@ OPTIONS += -DELL_CLASSIC
 # Beyond LambdaCDM models
 
 # these are for neutrino cosmology
-# OPTIONS += -DSCALE_DEPENDENT
-# OPTIONS += -DREAD_PK_TABLE
-# OPTIONS += -DONLY_MATTER_POWER
-# OPTIONS += -DRECOMPUTE_DISPLACEMENTS
+OPTIONS += -DSCALE_DEPENDENT
+OPTIONS += -DREAD_PK_TABLE
+OPTIONS += -DONLY_MATTER_POWER
+OPTIONS += -DRECOMPUTE_DISPLACEMENTS
 
 # add also these for f(R) gravity
 # OPTIONS += -DMOD_GRAV_FR
@@ -82,7 +82,7 @@ OPTIONS += -DELL_CLASSIC
 # Other options # 
 
 # OPTIONS += -DWHITENOISE
-OPTIONS += -DNORADIATION
+# OPTIONS += -DNORADIATION
 
 
 ########## Preprocessor Definitions end ########## 
@@ -100,7 +100,24 @@ endif
 
 ########## System-specific Configuration ############
 
-SYSTYPE ?= "base"
+SYSTYPE ?= "mylaptop"
+
+################### mylaptop ####################
+
+ifeq ($(SYSTYPE),"mylaptop")
+CC          =  mpicc
+CDEBUG      = -ggdb3 -Wall $(OMP_FLAG)
+COPTIMIZED  = -O3 -Wno-unused-result $(OMP_FLAG)
+FFTW_LIBR   = -L/usr/lib/ -lfftw3_mpi -lfftw3 $(OMP_FFTW)
+FFTW_INCL   = -I/usr/include
+PFFT_LIBR   = -L$(HOME)/lib -lpfft
+PFFT_INCL   = -I$(HOME)/include
+
+MPI_LIBR    =
+MPI_INCL    =
+GSL_LIBR    = -L$(HOME)/lib -lgsl -lgslcblas -lm
+GSL_INCL    = -I$(HOME)/include/gsl
+endif
 
 ###################### BASE ######################
 
