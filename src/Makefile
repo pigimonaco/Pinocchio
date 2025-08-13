@@ -83,7 +83,7 @@ OPTIONS += -DREAD_HUBBLE_TABLE
 # Other options # 
 
 # OPTIONS += -DWHITENOISE
-# OPTIONS += -DNORADIATION
+OPTIONS += -DNORADIATION
 
 
 ########## Preprocessor Definitions end ########## 
