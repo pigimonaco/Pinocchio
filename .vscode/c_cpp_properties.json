@@ -1,9 +1,0 @@
-{
-  "configurations": [
-    {
-      "name": "Linux",
-      "compileCommands": "${workspaceFolder}/src/compile_commands.json"
-    }
-  ],
-  "version": 4
-}
