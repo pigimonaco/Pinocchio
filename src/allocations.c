@@ -192,10 +192,6 @@ int organize_main_memory()
                      + memory.fields_to_keep + memory.fft
 #endif
       ;
-  printf("memory.prods = %zu\n", memory.prods);
-  printf("memory.groups = %zu\n", memory.groups);
-  printf("memory.fields_to_keep = %zu\n", memory.fields_to_keep);
-  printf("memory.fft = %zu\n", memory.fft);
 
   if (other_mem > MyGrids[0].ParticlesPerTask * params.MaxMemPerParticle)
     myNalloc = 0;

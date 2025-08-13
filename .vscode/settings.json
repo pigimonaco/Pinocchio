@@ -1,3 +1,7 @@
 {
-    "C_Cpp.dimInactiveRegions": false
+    "C_Cpp.dimInactiveRegions": false,
+    "files.associations": {
+        "cmath": "c",
+        "complex": "c"
+    }
 }

@@ -66,7 +66,7 @@ int read_power_table_from_CAMB()
     {
         /* count the number of CAMB files and, from the first, the number of data lines */
         params.camb.NCAMB = 0;
-        sprintf(filename, "%s_%s_%03d.dat", params.camb.RunName, params.camb.MatterFile, params.camb.NCAMB);
+        sprintf(filename, "%s_%03d.dat", params.camb.MatterFile, params.camb.NCAMB);
         while ((fd = fopen(filename, "r")) != 0x0)
         {
             if (!params.camb.NCAMB)
@@ -81,7 +81,7 @@ int read_power_table_from_CAMB()
             }
             fclose(fd);
             params.camb.NCAMB++;
-            sprintf(filename, "%s_%s_%03d.dat", params.camb.RunName, params.camb.MatterFile, params.camb.NCAMB);
+            sprintf(filename, "%s_%03d.dat", params.camb.MatterFile, params.camb.NCAMB);
         }
 
         if (!params.camb.NCAMB)
@@ -91,7 +91,7 @@ int read_power_table_from_CAMB()
         }
         else if (!params.camb.Nkbins)
         {
-            sprintf(filename, "%s_%s_%03d.dat", params.camb.RunName, params.camb.MatterFile, 0);
+            sprintf(filename, "%s_%03d.dat", params.camb.MatterFile, 0);
             printf("Error on Task 0: problem in reading CAMB file %s\n", filename);
             return 1;
         }
@@ -121,16 +121,16 @@ int read_power_table_from_CAMB()
     {
         for (i = 0; i < params.camb.NCAMB; i++)
         {
-            sprintf(filename, "%s_%s_%03d.dat", params.camb.RunName, params.camb.MatterFile, i);
+            sprintf(filename, "%s_%03d.dat", params.camb.MatterFile, i);
             fd = fopen(filename, "r");
             for (j = 0; j < params.camb.Nkbins; j++)
             {
                 ff = fscanf(fd, "%lf %lf", &kappa, &Pk);
                 (void)ff; /* suppress unused warning if not checked */
                 /* Input already in h-units: k in h/Mpc and P in (Mpc/h)^3 */
-                StoredLogTotalPowerSpectrum[i * params.camb.Nkbins + j] = log(Pk);
+                StoredLogTotalPowerSpectrum[i * params.camb.Nkbins + j] = log(Pk / pow(params.Hubble100, 3.));
                 if (!i)
-                    StoredLogK[j] = log(kappa);
+                    StoredLogK[j] = log(kappa * params.Hubble100);
             }
             fclose(fd);
         }

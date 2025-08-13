@@ -1,27 +1,26 @@
 # This is an example parameter file for the Pinocchio 5.1 code
 
 # run properties
-RunFlag         example      % name of the run
-OutputList     /home/tcastro/Pinocchio/example/outputs
+RunFlag                example      % name of the run
+OutputList             outputs      % output list 
 BoxSize                500          % physical size of the box in Mpc
 BoxInH100                           % specify that the box is in Mpc/h
-GridSize               64           % number of grid points per side
+GridSize               256          % number of grid points per side
 RandomSeed             486604       % random seed for initial conditions
 % FixedIC                           % if present, the modulus in ICs is fixed to the average
 % PairedIC                          % if present, the phase in ICs is shifted by PI
 
 # cosmology
-Omega0                 0.25         % Omega_0 (total matter)
-OmegaLambda            0.75         % Omega_Lambda
-OmegaBaryon            0.044        % Omega_b (baryonic matter)
-Hubble100              0.70         % little h
+Omega0                 0.3110       % Omega_0 (CDM + Baryons)
+OmegaLambda            0.6890       % Omega_Lambda
+OmegaBaryon            0.0489       % Omega_b (baryonic matter)
+Hubble100              0.6766       % little h
 Sigma8                 0.0          % sigma8; if 0, it is computed from the provided P(k)
 PrimordialIndex        0            % n_s
 DEw0                   -1.0         % w0 of parametric dark energy equation of state
 DEwa                   0.0          % wa of parametric dark energy equation of state
 TabulatedEoSfile       no           % equation of state of dark energy tabulated in a file
-FileWithInputSpectrum  CAMBTable
-                                    % "no" means that the fit of Eisenstein & Hu is used
+FileWithInputSpectrum  CAMBTable    % "no" means that the fit of Eisenstein & Hu is used
 
 # from N-GenIC
 InputSpectrum_UnitLength_in_cm 0    % units of tabulated P(k), or 0 if it is in h/Mpc
@@ -57,8 +56,6 @@ PLCAxis   1. 1. 0.                  % un-normalized direction of the cone axis
 % CTtableFile  none
 
 # CAMB PK tables, needed if the code is compiled with READ_PK_TABLE
-CAMBMatterFileTag     pk              % label for matter power spectrum files
-CAMBTransferFileTag   tk              % label for transfer function files
-CAMBRunName           ../scripts/camb            % name of CAMB run
-CAMBRedshiftsFile     ../scripts/redshifts.dat
-
+CAMBMatterFile      CAMBFiles/pk_cb         % label for matter power spectrum files (CDM+Baryons)
+CAMBRedshiftsFile   CAMBFiles/redshifts.dat % list of redshifts for the Pk table
+HubbleTableFile     CAMBFiles/hubble.dat    % Hubble table file

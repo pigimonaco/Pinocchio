@@ -219,20 +219,18 @@ int read_parameter_file()
 #endif
 
 #ifdef READ_PK_TABLE
-    strcpy(tag[nt], "CAMBRunName");
-    addr[nt] = params.camb.RunName;
-    id[nt++] = STRING;
-
-    strcpy(tag[nt], "CAMBMatterFileTag");
+    strcpy(tag[nt], "CAMBMatterFile");
     addr[nt] = params.camb.MatterFile;
-    id[nt++] = STRING;
-
-    strcpy(tag[nt], "CAMBTransferFileTag");
-    addr[nt] = params.camb.TransferFile;
     id[nt++] = STRING;
 
     strcpy(tag[nt], "CAMBRedshiftsFile");
     addr[nt] = params.camb.RedshiftsFile;
+    id[nt++] = STRING;
+#endif
+
+#ifdef READ_HUBBLE_TABLE
+    strcpy(tag[nt], "HubbleTableFile");
+    addr[nt] = params.HubbleTableFile;
     id[nt++] = STRING;
 #endif
 

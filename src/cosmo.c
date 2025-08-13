@@ -62,6 +62,9 @@ static double kmin, kmax;
 int system_of_ODEs(double, const double[], double *, void *);
 int system_of_ODEs_small(double, const double[], double *, void *);
 int read_TabulatedEoS(void);
+#ifdef READ_HUBBLE_TABLE
+int read_TabulatedHubble(void);
+#endif
 int initialize_PowerSpectrum(void);
 int normalize_PowerSpectrum(void);
 int read_Pk_from_file(void);
@@ -155,6 +158,12 @@ int initialize_cosmology()
     free(IntEoS);
     free(scalef);
   }
+
+#ifdef READ_HUBBLE_TABLE
+  /* If requested, read tabulated H(z) and create its spline over log10(a). */
+  if (read_TabulatedHubble())
+    return 1;
+#endif
 
 #ifdef SCALE_DEPENDENT
   kmin = pow(10., LOGKMIN);
@@ -835,6 +844,66 @@ double DE_EquationOfState(double a)
   else
     return my_spline_eval(SPLINE[SP_EOS], log10(a), ACCEL[SP_EOS]);
 }
+/* optional: read external H(z) table */
+#ifdef READ_HUBBLE_TABLE
+int read_TabulatedHubble(void)
+{
+  /* Reads a table with redshift z and H(z) [km/s/Mpc] and builds a spline over log10(a). */
+  if (!strcmp(params.HubbleTableFile, "no") || !strcmp(params.HubbleTableFile, "\0"))
+    return 0; /* nothing to do */
+
+  int n = 0;
+  FILE *fd;
+  double z, H;
+  double *ax, *Hz;
+
+  if (!ThisTask)
+  {
+    if (!(fd = fopen(params.HubbleTableFile, "r")))
+    {
+      printf("ERROR on task 0: can't open Hubble table file '%s' (READ_HUBBLE_TABLE)\n", params.HubbleTableFile);
+      fflush(stdout);
+      return 1;
+    }
+    while (fscanf(fd, " %lf %lf", &z, &H) == 2)
+      n++;
+    fclose(fd);
+    if (!n)
+    {
+      printf("ERROR on task 0: Hubble table file '%s' is empty or malformed (READ_HUBBLE_TABLE)\n", params.HubbleTableFile);
+      fflush(stdout);
+      return 1;
+    }
+  }
+
+  MPI_Bcast(&n, sizeof(int), MPI_BYTE, 0, MPI_COMM_WORLD);
+  SPLINE[SP_EXT_HUBBLE] = gsl_spline_alloc(gsl_interp_cspline, n);
+  ax = (double *)malloc(n * sizeof(double));
+  Hz = (double *)malloc(n * sizeof(double));
+
+  if (!ThisTask)
+  {
+    fd = fopen(params.HubbleTableFile, "r");
+    int i = 0;
+    while (i < n && fscanf(fd, " %lf %lf", &z, &H) == 2)
+    {
+      double a = 1.0 / (1.0 + z);
+      ax[i] = log10(a);
+      Hz[i] = log10(H); /* already km/s/Mpc */
+      i++;
+    }
+    fclose(fd);
+  }
+
+  MPI_Bcast(ax, n * sizeof(double), MPI_BYTE, 0, MPI_COMM_WORLD);
+  MPI_Bcast(Hz, n * sizeof(double), MPI_BYTE, 0, MPI_COMM_WORLD);
+
+  gsl_spline_init(SPLINE[SP_EXT_HUBBLE], ax, Hz, n);
+  free(Hz);
+  free(ax);
+  return 0;
+}
+#endif
 
 double IntegrandForEoS(double a, void *param)
 {
@@ -1103,8 +1172,8 @@ int read_Pk_table_from_CAMB(double *scalef, double *grow1, double *grow2, double
      - scale-dependent growth arrays from ratios of k^3 P(k,z) to k^3 P(k,0)
 
      Expected CAMB files:
-       RunName_MatterFile_000.dat, ..., RunName_MatterFile_(NCAMB-1).dat
-       RunName_RedshiftsFile (two columns: index  redshift)
+       MatterFile_000.dat, ..., MatterFile_(NCAMB-1).dat
+       RedshiftsFile (two columns: index  redshift)
      Units expected from CAMB:
        k in h/Mpc, P(k) in (Mpc/h)^3.
   */
@@ -1119,7 +1188,7 @@ int read_Pk_table_from_CAMB(double *scalef, double *grow1, double *grow2, double
   {
     /* count the number of CAMB P(k) files and lines */
     params.camb.NCAMB = 0;
-    sprintf(filename, "%s_%s_%03d.dat", params.camb.RunName, params.camb.MatterFile, params.camb.NCAMB);
+    sprintf(filename, "%s_%03d.dat", params.camb.MatterFile, params.camb.NCAMB);
     while ((fd = fopen(filename, "r")) != 0x0)
     {
       if (!params.camb.NCAMB)
@@ -1134,7 +1203,7 @@ int read_Pk_table_from_CAMB(double *scalef, double *grow1, double *grow2, double
       }
       fclose(fd);
       params.camb.NCAMB++;
-      sprintf(filename, "%s_%s_%03d.dat", params.camb.RunName, params.camb.MatterFile, params.camb.NCAMB);
+      sprintf(filename, "%s_%03d.dat", params.camb.MatterFile, params.camb.NCAMB);
     }
 
     if (!params.camb.NCAMB)
@@ -1144,7 +1213,7 @@ int read_Pk_table_from_CAMB(double *scalef, double *grow1, double *grow2, double
     }
     else if (!NPowerTable)
     {
-      sprintf(filename, "%s_%s_%03d.dat", params.camb.RunName, params.camb.MatterFile, 0);
+      sprintf(filename, "%s_%03d.dat", params.camb.MatterFile, 0);
       printf("Error on Task 0: problem in reading CAMB file %s\n", filename);
       return 1;
     }
@@ -1187,7 +1256,7 @@ int read_Pk_table_from_CAMB(double *scalef, double *grow1, double *grow2, double
     /* loop over files starting from z=0 one (last index) */
     for (i = params.camb.NCAMB - 1; i >= 0; i--)
     {
-      sprintf(filename, "%s_%s_%03d.dat", params.camb.RunName, params.camb.MatterFile, i);
+      sprintf(filename, "%s_%03d.dat", params.camb.MatterFile, i);
       fd = fopen(filename, "r");
       for (j = 0; j < NPowerTable; j++)
       {
@@ -1598,6 +1667,11 @@ double Hubble(double z)
   /* Hubble parameter as a function of redshift
      DIMENSION: km/s/Mpc  */
   double Esq, de_eos;
+#ifdef READ_HUBBLE_TABLE
+  /* If an external H(z) table is provided, prefer it. */
+  if (SPLINE[SP_EXT_HUBBLE])
+    return 100 * params.Hubble100 * pow(10, my_spline_eval(SPLINE[SP_EXT_HUBBLE], -log10(1. + z), ACCEL[SP_EXT_HUBBLE]));
+#endif
 
   if (params.simpleLambda)
     Esq = params.Omega0 * pow(1. + z, 3.) + OmegaK * pow(1. + z, 2.) + params.OmegaLambda;

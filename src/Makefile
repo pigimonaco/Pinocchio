@@ -28,7 +28,7 @@
 
 # Directory settings #
 
-RUNDIR = ../example/
+RUNDIR = ./
 
 # Executable name #
 
@@ -37,7 +37,7 @@ EXEC = pinocchio.x
 # Compilation options #
 
 DEBUG = NO
-OMP   = NO
+OMP   = YES
 
 ########## Preprocessor Definitions ########## 
 
@@ -74,6 +74,7 @@ OPTIONS += -DSCALE_DEPENDENT
 OPTIONS += -DREAD_PK_TABLE
 OPTIONS += -DONLY_MATTER_POWER
 OPTIONS += -DRECOMPUTE_DISPLACEMENTS
+OPTIONS += -DREAD_HUBBLE_TABLE
 
 # add also these for f(R) gravity
 # OPTIONS += -DMOD_GRAV_FR

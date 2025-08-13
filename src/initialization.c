@@ -104,12 +104,11 @@ int initialization()
   ASSIGN_WTIME(partial, set_plc);
 
   /* computes the number of sub-boxes for fragmentation */
-  printf("Setting up sub-boxes...\n");
+
   SET_WTIME;
   if (set_subboxes())
     return 1;
   ASSIGN_WTIME(partial, set_subboxes);
-  printf("Sub-boxes set up in %14.6f seconds\n", cputime.set_subboxes);
 
 #ifdef SCALE_DEPENDENT
   /* computes the growth rates for displacements */
@@ -372,9 +371,7 @@ int set_parameters()
     dprintf(VMSG, 0, "CTtableFile                    %s\n", params.CTtableFile);
 #endif
 #ifdef READ_PK_TABLE
-    dprintf(VMSG, 0, "CAMBRunName                    %s\n", params.camb.RunName);
-    dprintf(VMSG, 0, "CAMBMatterFileTag              %s\n", params.camb.MatterFile);
-    dprintf(VMSG, 0, "CAMBTransferFileTag            %s\n", params.camb.TransferFile);
+    dprintf(VMSG, 0, "CAMBMatterFile                 %s\n", params.camb.MatterFile);
     dprintf(VMSG, 0, "CAMBRedshiftsFile              %s\n", params.camb.RedshiftsFile);
 #endif
     dprintf(VMSG, 0, "\n");
