@@ -811,20 +811,30 @@ is done by reading power spectra generated, e.g., by the CAMB code
 (http://camb.info) in a grid of redshifts. The following keywords must
 be added to the parameter file (parameter values are an example):
 
-CAMBRunName           nilcdm_0.3eV    % name of CAMB run
-CAMBMatterFileTag     matterpower     % label for matter power spectrum files
-CAMBTransferFileTag   transfer_out    % label for transfer function files
-CAMBRedsfhitsFile     inputredshift   % list of redshifts for which the power spectrum is available
+CAMBMatterFile      CAMBFiles/pk_cb         % label for matter power spectrum files (CDM+Baryons)
+CAMBRedshiftsFile   CAMBFiles/redshifts.dat % list of redshifts for the Pk table
+HubbleTableFile     CAMBFiles/hubble.dat    % Hubble table file
 
-The code reads both the power spectra and the transfer functions; it
-is adapted to read CAMB outputs, it should be straightforward to adapt
-the code to read in output from other codes like CLASS. CAMBRunName is
-the name of the CAMB run, CAMBMatterFileTag and CAMBTransferFileTag
-are the labels added to the files that contain the matter power
-spectra and the transfer functions. CAMBRedsfhitsFile is a file with
-the list of redshifts (in chronological order) at which CAMB outputs
-are provided.
+The code reads the power spectra which the user must pass as the Pk of 
+CDM + Baryons; it is adapted to read CAMB outputs but it should be 
+straightforward to adapt the code to read in output from other codes 
+like CLASS. CAMBMatterFileTag is the label added to the files that 
+contain the CDM + Baryons power spectra. CAMBRedsfhitsFile is a file 
+with the list of redshifts (in chronological order) at which CAMB 
+outputs are provided i.e.:
 
+000 highest_z
+001 second highest_z 
+  .      .
+  .      .
+  .      .
+*** lowest_z
+
+HubbleTableFile is a file containing the Hubble function, ensuring 
+that, in the case of massive neutrinos, the background evolution is 
+consistent with the P(k) used.
+In the scripts/ directory a PkCamb.py that computes the needed files 
+for running with neutrinos is available.
 
 *****************************************************************
 
