@@ -58,7 +58,7 @@ OPTIONS += -DELL_CLASSIC
 
 # Building groups and fragmentation #
 
-#OPTIONS += -DCLASSIC_FRAGMENTATION
+# OPTIONS += -DCLASSIC_FRAGMENTATION
 
 # Output #
 

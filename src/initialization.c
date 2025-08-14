@@ -562,6 +562,18 @@ int set_plc(void)
     return 0;
   }
 
+  /* Ensure the PLC redshift interval is ordered as Startingz >= Lastz
+     to avoid negative bin counts and inconsistencies downstream. */
+  if (params.StartingzForPLC < params.LastzForPLC)
+  {
+    if (!ThisTask)
+      printf("Warning: StartingzForPLC (%g) < LastzForPLC (%g). Swapping them to ensure a valid PLC interval.\n",
+             params.StartingzForPLC, params.LastzForPLC);
+    double tmpz = params.StartingzForPLC;
+    params.StartingzForPLC = params.LastzForPLC;
+    params.LastzForPLC = tmpz;
+  }
+
   /* here we define the vertex and axis direction of the cone */
   if (params.PLCProvideConeData)
   {
@@ -722,6 +734,14 @@ int set_plc(void)
   /* n(z) for the light cone */
   plc.delta_z = 0.05; /* NB: this is hard-coded... */
   plc.nzbins = (int)((params.StartingzForPLC - params.LastzForPLC) / plc.delta_z + 0.1);
+  if (plc.nzbins < 0)
+  {
+    /* This should not happen due to the swap above, but guard anyway */
+    if (!ThisTask)
+      printf("ERROR: computed negative plc.nzbins=%d. Check PLC redshift settings. Forcing nzbins=0 to continue safely.\n",
+             plc.nzbins);
+    plc.nzbins = 0;
+  }
   plc.nz = (double *)calloc(plc.nzbins, sizeof(double));
 
   if (!ThisTask)
