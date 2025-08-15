@@ -108,6 +108,52 @@
 
 #define SWAP_INT(A, B) (A) ^= (B), (B) ^= (A), (A) ^= (B);
 
+/*
+  Global diagnostic wrapper for MPI_Reduce
+  - Logs rank and file:line for each Reduce
+  - Adds barriers before/after to catch divergence
+  - Prints MPI error string and aborts on failure
+  Enable by default; define DISABLE_MPI_REDUCE_DIAG to turn off.
+*/
+#define DISABLE_MPI_REDUCE_DIAG
+#ifndef DISABLE_MPI_REDUCE_DIAG
+static inline int pin_MPI_Reduce_diag(const void *sendbuf, void *recvbuf, int count,
+                                      MPI_Datatype datatype, MPI_Op op, int root,
+                                      MPI_Comm comm, const char *file, int line)
+{
+  int rank = -1, size = -1;
+  PMPI_Comm_rank(comm, &rank);
+  PMPI_Comm_size(comm, &size);
+  fprintf(stderr, "[diag] rank %d/%d entering MPI_Reduce at %s:%d (count=%d, root=%d)\n",
+          rank, size, file, line, count, root);
+  fflush(stderr);
+  PMPI_Barrier(comm);
+
+  int rc = PMPI_Reduce(sendbuf, recvbuf, count, datatype, op, root, comm);
+  if (rc != MPI_SUCCESS)
+  {
+    char errstr[MPI_MAX_ERROR_STRING];
+    int elen = 0;
+    PMPI_Error_string(rc, errstr, &elen);
+    fprintf(stderr, "[diag] MPI_Reduce FAILED at %s:%d on rank %d: %.*s\n",
+            file, line, rank, elen, errstr);
+    fflush(stderr);
+    PMPI_Abort(comm, rc);
+  }
+
+  PMPI_Barrier(comm);
+  if (rank == root)
+  {
+    fprintf(stderr, "[diag] MPI_Reduce OK at %s:%d (root=%d)\n", file, line, root);
+    fflush(stderr);
+  }
+  return rc;
+}
+
+#define MPI_Reduce(sendbuf, recvbuf, count, datatype, op, root, comm) \
+  pin_MPI_Reduce_diag((sendbuf), (recvbuf), (count), (datatype), (op), (root), (comm), __FILE__, __LINE__)
+#endif /* DISABLE_MPI_REDUCE_DIAG */
+
 /* checks of compiler flags */
 #if defined(THREE_LPT) && !defined(TWO_LPT)
 #define TWO_LPT
@@ -555,6 +601,7 @@ int initialize_MassVariance();
 double OmegaMatter(double);
 double OmegaLambda(double);
 double Hubble(double);
+double Ez(double);
 double Hubble_Gyr(double);
 double fomega(double, double);
 double fomega_2LPT(double, double);
@@ -581,6 +628,7 @@ double dOmega_dVariance(double, double);
 double AnalyticMassFunction(double, double);
 double WindowFunction(double);
 double my_spline_eval(gsl_spline *, double, gsl_interp_accel *);
+double my_spline_eval_deriv(gsl_spline *, double, gsl_interp_accel *);
 int jac(double, const double[], double *, double[], void *);
 
 /* prototypes for functions defined in ReadParamFile.c */

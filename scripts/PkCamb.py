@@ -52,10 +52,10 @@ def parse_redshifts(args) -> np.ndarray:
 def background_scale_factor_grid() -> tuple[np.ndarray, np.ndarray]:
     """Return (a_bg, z_bg) for the fixed background grid.
 
-    a: 200 linearly spaced points in [0.0001, 1.51356].
+    a: 200 linearly spaced points in [1e-5, 1.5].
     z: 1/a - 1 for each of those scale factors.
     """
-    a_bg = np.geomspace(0.0001, 1.51356, 200, dtype=float)
+    a_bg = np.geomspace(1e-5, 1.5, 500, dtype=float)
     z_bg = 1.0 / a_bg - 1.0
     return a_bg, z_bg
 

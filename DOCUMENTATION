@@ -477,9 +477,9 @@ of accuracy. In case accuracy is considered very important, this
 directive allows to have products in double precision.
 
 SCALE_DEPENDENT: switches on scale-dependent growth rate.
-READ_PK_TABLE: reads scale-dependent power spectra from files.
-ONLY_MATTER_POWER: uses the CDM+baryons power spectra in place of the
-total one, excluding massive neutrinos.
+READ_PK_TABLE: reads scale-dependent power spectra from files for 
+CDM+baryons power spectra in place of the total one, excluding 
+massive neutrinos.
 RECOMPUTE_DISPLACEMENTS: periodically recomputes the LPT fields to
 adapt to the changing shape of the scale-dependent power spectrum.
 

@@ -795,18 +795,29 @@ int write_PLC(int flag)
 	/* writes the n(z) at the last call */
 	if (flag)
 	{
-		/* Guard against invalid or inconsistent bin counts */
+		/* Guard against invalid or inconsistent bin counts, and synchronize them across ranks */
 		int nzbins_local = plc.nzbins;
 		if (nzbins_local < 0)
 		{
-			fprintf(stderr, "[Task %d] ERROR: plc.nzbins is negative (%d) in write_halos before Reduce. Forcing to 0.\n", ThisTask, nzbins_local);
-			nzbins_local = 0;
+			fprintf(stderr, "[Task %d] ERROR: plc.nzbins is negative (%d) in write_halos.\n", ThisTask, nzbins_local);
+			fflush(stderr);
+			MPI_Abort(MPI_COMM_WORLD, 99);
 		}
-		double *totnz = (nzbins_local > 0) ? (double *)calloc(nzbins_local, sizeof(double)) : NULL;
+		int nz_min = 0, nz_max = 0;
+		MPI_Allreduce(&nzbins_local, &nz_min, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+		MPI_Allreduce(&nzbins_local, &nz_max, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+		if (nz_min != nz_max)
+		{
+			fprintf(stderr, "[Task %d] ERROR: Inconsistent plc.nzbins across ranks (min=%d, max=%d). Aborting to avoid MPI_Reduce mismatch.\n", ThisTask, nz_min, nz_max);
+			fflush(stderr);
+			MPI_Abort(MPI_COMM_WORLD, 99);
+		}
+		int nzbins = nz_min; /* synchronized count for all ranks */
+		double *totnz = (nzbins > 0) ? (double *)calloc(nzbins, sizeof(double)) : NULL;
 
 		/* Only perform reduction if there is at least one bin */
-		if (nzbins_local > 0)
-			MPI_Reduce(plc.nz, totnz, nzbins_local, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+		if (nzbins > 0)
+			MPI_Reduce(plc.nz, totnz, nzbins, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
 		else
 			MPI_Reduce(NULL, NULL, 0, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
 
@@ -814,7 +825,7 @@ int write_PLC(int flag)
 		if (!ThisTask)
 		{
 			double tot = 0;
-			for (int ibin = 0; ibin < nzbins_local; ibin++)
+			for (int ibin = 0; ibin < nzbins; ibin++)
 				tot += totnz[ibin];
 			printf("[%s] total number of halos in the PLC: %g\n", fdate(), tot);
 
@@ -829,11 +840,11 @@ int write_PLC(int flag)
 			fprintf(file, "#\n");
 
 			double skyarea = (1 - cos((params.PLCAperture > 90. ? 90. : params.PLCAperture) / 180. * PI)) * 2. * PI * pow(180. / PI, 2.);
-			for (int ibin = 0; ibin < nzbins_local; ibin++)
+			for (int ibin = 0; ibin < nzbins; ibin++)
 			{
 				double zlow = params.LastzForPLC + ibin * plc.delta_z;
 				double zhigh = params.LastzForPLC + (ibin + 1) * plc.delta_z;
-				if (ibin == nzbins_local - 1)
+				if (ibin == nzbins - 1)
 					zhigh = params.StartingzForPLC;
 				double prediction = compute_Nhalos_in_PLC(zlow, zhigh);
 				fprintf(file, "%8.3f %8.3f %12g %8.3f %12g\n",

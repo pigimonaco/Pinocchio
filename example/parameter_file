@@ -5,7 +5,7 @@ RunFlag                example      % name of the run
 OutputList             outputs      % output list 
 BoxSize                500          % physical size of the box in Mpc
 BoxInH100                           % specify that the box is in Mpc/h
-GridSize               256          % number of grid points per side
+GridSize               128          % number of grid points per side
 RandomSeed             486604       % random seed for initial conditions
 % FixedIC                           % if present, the modulus in ICs is fixed to the average
 % PairedIC                          % if present, the phase in ICs is shifted by PI
@@ -20,7 +20,7 @@ PrimordialIndex        0            % n_s
 DEw0                   -1.0         % w0 of parametric dark energy equation of state
 DEwa                   0.0          % wa of parametric dark energy equation of state
 TabulatedEoSfile       no           % equation of state of dark energy tabulated in a file
-FileWithInputSpectrum  CAMBTable    % "no" means that the fit of Eisenstein & Hu is used
+FileWithInputSpectrum  CAMBTable  
 
 # from N-GenIC
 InputSpectrum_UnitLength_in_cm 0    % units of tabulated P(k), or 0 if it is in h/Mpc
