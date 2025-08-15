@@ -564,10 +564,10 @@ int set_plc(void)
 
   /* Ensure the PLC redshift interval is ordered as Startingz >= Lastz
      to avoid negative bin counts and inconsistencies downstream. */
-  if (params.StartingzForPLC > params.LastzForPLC)
+  if (params.StartingzForPLC < params.LastzForPLC)
   {
     if (!ThisTask)
-      printf("Warning: StartingzForPLC (%g) > LastzForPLC (%g). Swapping them to ensure a valid PLC interval.\n",
+      printf("Warning: StartingzForPLC (%g) < LastzForPLC (%g). Swapping them to ensure a valid PLC interval.\n",
              params.StartingzForPLC, params.LastzForPLC);
     double tmpz = params.StartingzForPLC;
     params.StartingzForPLC = params.LastzForPLC;
