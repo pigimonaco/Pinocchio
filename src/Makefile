@@ -48,7 +48,7 @@ OPTIONS += -DTHREE_LPT
 
 # PLC reconstruction
 
-OPTIONS += -DPLC
+# OPTIONS += -DPLC
 
 # Dynamics of triaxial collapse #
 
@@ -58,7 +58,7 @@ OPTIONS += -DELL_CLASSIC
 
 # Building groups and fragmentation #
 
-#OPTIONS += -DCLASSIC_FRAGMENTATION
+# OPTIONS += -DCLASSIC_FRAGMENTATION
 
 # Output #
 
@@ -72,7 +72,6 @@ OPTIONS += -DELL_CLASSIC
 # these are for neutrino cosmology
 OPTIONS += -DSCALE_DEPENDENT
 OPTIONS += -DREAD_PK_TABLE
-OPTIONS += -DONLY_MATTER_POWER
 OPTIONS += -DRECOMPUTE_DISPLACEMENTS
 OPTIONS += -DREAD_HUBBLE_TABLE
 
@@ -83,8 +82,7 @@ OPTIONS += -DREAD_HUBBLE_TABLE
 # Other options # 
 
 # OPTIONS += -DWHITENOISE
-OPTIONS += -DNORADIATION
-
+# OPTIONS += -DNORADIATION
 
 ########## Preprocessor Definitions end ########## 
 

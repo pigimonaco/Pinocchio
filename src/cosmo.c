@@ -606,10 +606,60 @@ double mu(double a, double k)
 
 #endif
 
+/* Helpers to compute E(a)^2 and its derivative from H(z) uniformly */
+static inline double a_to_z(double a) { return 1.0 / a - 1.0; }
+static inline double Ez2_from_a(double a)
+{
+  double Ezv = Ez(a_to_z(a));
+  return Ezv * Ezv;
+}
+static inline double dlnE2_da(double a)
+{
+  /* If we have an external H(z) table, use spline derivative of log10 H(a) */
+#ifdef READ_HUBBLE_TABLE
+  if (SPLINE[SP_EXT_HUBBLE])
+  {
+    double xlna = log10(a);
+    /* my_spline_eval_deriv returns d/dx of the spline y(x); here y=log10 H, x=log10 a */
+    double dlogH_dlogA = my_spline_eval_deriv(SPLINE[SP_EXT_HUBBLE], xlna, ACCEL[SP_EXT_HUBBLE]);
+    /* ln(E^2) = 2 ln H + const => d/da ln(E^2) = 2 d/da ln H
+       and d/da ln H = (1/a) d/d(log a) ln H; since log10, there is a constant factor that cancels
+       when converting derivative of log10 to natural log ratio. Using (2/a) * d log10 H / d log10 a suffices. */
+    return (2.0 / a) * dlogH_dlogA;
+  }
+#endif
+
+  /* Otherwise, use analytic expression consistent with Hubble() when not tabulated */
+  const double a2 = a * a;
+  const double a3 = a2 * a;
+  const double a4 = a2 * a2;
+  const double a5 = a4 * a;
+
+  double E2 = params.Omega0 / a3 + OmegaK / a2 + OmegaRad / a4;
+  double dE2_da = -3.0 * params.Omega0 / a4 - 2.0 * OmegaK / a3 - 4.0 * OmegaRad / a5;
+
+  if (params.simpleLambda)
+  {
+    E2 += params.OmegaLambda;
+    /* derivative of constant term is zero */
+  }
+  else
+  {
+    /* Dark-energy term: params.OmegaLambda a^{-3} exp(3 ∫ w(a) d ln a) */
+    double de_eos_int = my_spline_eval(SPLINE[SP_INTEOS], log10(a), ACCEL[SP_INTEOS]);
+    double w = DE_EquationOfState(a);
+    double fac = params.OmegaLambda * exp(3.0 * de_eos_int);
+    E2 += fac / a3;
+    dE2_da += -3.0 * (1.0 + w) * fac / a4;
+  }
+
+  return dE2_da / E2;
+}
+
 int system_of_ODEs(double x, const double y[], double *dydx, void *param)
 {
 
-  double a1, b1, Esq, de_eos, de_Esq, de_a1;
+  double a1, b1;
 
   /*
     0 : cosmic time t
@@ -624,28 +674,16 @@ int system_of_ODEs(double x, const double y[], double *dydx, void *param)
     8 : D(3b)
   */
 
-  if (params.simpleLambda)
-  {
-    de_Esq = 1.;
-    de_a1 = 0.;
-  }
-  else
-  {
-    /* in this case Dark Energy Equation of State is not constant */
-    de_eos = my_spline_eval(SPLINE[SP_INTEOS], log10(x), ACCEL[SP_INTEOS]);
-    de_Esq = exp(3. * de_eos) / pow(x, 3.0);
-    de_a1 = -3 * ((1 + DE_EquationOfState(x)) / pow(x, 4)) * params.OmegaLambda * exp(3 * de_eos);
-  }
-
-  Esq = params.Omega0 / pow(x, 3.0) /* adimensional Hubble factor squared */
-        + OmegaK / (x * x) + OmegaRad / pow(x, 4.0) + params.OmegaLambda * de_Esq;
+  /* Build E(a)^2 and its derivative uniformly via H(z) */
+  double E2 = Ez2_from_a(x);
+  double dlnE2 = dlnE2_da(x);
 
   /* coefficients in the growth rate equations */
-  a1 = -(3. / x + 0.5 * ((-3. * params.Omega0 / pow(x, 4.0) - 2 * OmegaK / pow(x, 3.0) - 4 * OmegaRad / pow(x, 5.0) + de_a1) / Esq));
-  b1 = 1.5 * params.Omega0 / (Esq * pow(x, 5.0));
+  a1 = -(3. / x + 0.5 * dlnE2);
+  b1 = 1.5 * params.Omega0 / (E2 * pow(x, 5.0));
 
   /* cosmic time */
-  dydx[0] = 1.0 / x / sqrt(Esq);
+  dydx[0] = 1.0 / x / sqrt(E2);
 
 #if !defined(MOD_GRAV_FR) && !defined(FOMEGA_GAMMA)
 
@@ -669,8 +707,9 @@ int system_of_ODEs(double x, const double y[], double *dydx, void *param)
   /* this is a toy model: D(t) is the one obtained by forcing
      the gamma RSD parameter to a certain value.
      Higher orders are obtained with Bouchet's fits */
+  /* E2 from the uniform path was computed above; reuse it here. */
   dydx[1] = 0.;
-  dydx[2] = (pow(params.Omega0 / pow(x, 3.0) / Esq, FOMEGA_GAMMA)) / x * y[1];
+  dydx[2] = (pow(params.Omega0 / pow(x, 3.0) / E2, FOMEGA_GAMMA)) / x * y[1];
 
   for (i = 3; i < 9; i++)
     dydx[i] = 0.;
@@ -718,28 +757,15 @@ int system_of_ODEs(double x, const double y[], double *dydx, void *param)
 int system_of_ODEs_small(double x, const double y[], double *dydx, void *param)
 {
 
-  double Esq, de_eos, de_Esq;
+  double E2;
 
   /*
     0 : cosmic time t
   */
 
-  if (params.simpleLambda)
-  {
-    de_Esq = 1.;
-  }
-  else
-  {
-    /* in this case Dark Energy Equation of State is not constant */
-    de_eos = my_spline_eval(SPLINE[SP_INTEOS], log10(x), ACCEL[SP_INTEOS]);
-    de_Esq = exp(3. * de_eos) / pow(x, 3.0);
-  }
-
-  Esq = params.Omega0 / pow(x, 3.0) /* adimensional Hubble factor squared */
-        + OmegaK / (x * x) + OmegaRad / pow(x, 4.0) + params.OmegaLambda * de_Esq;
-
-  /* cosmic time */
-  dydx[0] = 1.0 / x / sqrt(Esq);
+  /* cosmic time using uniform H(z) path */
+  E2 = Ez2_from_a(x);
+  dydx[0] = 1.0 / x / sqrt(E2);
 
   return GSL_SUCCESS;
 }
@@ -1650,16 +1676,16 @@ double OmegaMatter(double z)
 {
   /* Cosmological mass density parameter as a function of redshift
      DIMENSIONLESS */
-
-  return params.Omega0 * pow(1. + z, 3.) * pow(Hubble(z) / 100. / params.Hubble100, -2);
+  double Ezv = Ez(z);
+  return params.Omega0 * pow(1. + z, 3.) / (Ezv * Ezv);
 }
 
 double OmegaLambda(double z)
 {
   /* Cosmological mass density parameter as a function of redshift
      DIMENSIONLESS */
-
-  return params.OmegaLambda * pow(Hubble(z) / 100. / params.Hubble100, -2);
+  double Ezv = Ez(z);
+  return params.OmegaLambda / (Ezv * Ezv);
 }
 
 double Hubble(double z)
@@ -1674,14 +1700,21 @@ double Hubble(double z)
 #endif
 
   if (params.simpleLambda)
-    Esq = params.Omega0 * pow(1. + z, 3.) + OmegaK * pow(1. + z, 2.) + params.OmegaLambda;
+    Esq = OmegaRad * pow(1. + z, 4.) + params.Omega0 * pow(1. + z, 3.) + OmegaK * pow(1. + z, 2.) + params.OmegaLambda;
   else
   {
     de_eos = my_spline_eval(SPLINE[SP_INTEOS], -log10(1. + z), ACCEL[SP_INTEOS]);
-    Esq = params.Omega0 * pow(1. + z, 3.) + OmegaK * pow(1. + z, 2.) + params.OmegaLambda * pow(1. + z, 3.) * exp(3. * de_eos);
+    Esq = OmegaRad * pow(1. + z, 4.) + params.Omega0 * pow(1. + z, 3.) + OmegaK * pow(1. + z, 2.) + params.OmegaLambda * pow(1. + z, 3.) * exp(3. * de_eos);
   }
 
   return 100. * params.Hubble100 * sqrt(Esq);
+}
+
+double Ez(double z)
+{
+  /* Dimensionless Hubble function E(z) = H(z)/H0 */
+  double H0 = Hubble(0.0);
+  return Hubble(z) / H0;
 }
 
 double Hubble_Gyr(double z)
@@ -1991,4 +2024,16 @@ double my_spline_eval(gsl_spline *spline, double x, gsl_interp_accel *accel)
                                              (spline->y[spline->size - 1] - spline->y[spline->size - 2]) / (spline->x[spline->size - 1] - spline->x[spline->size - 2]);
   else
     return gsl_spline_eval(spline, x, accel);
+}
+
+double my_spline_eval_deriv(gsl_spline *spline, double x, gsl_interp_accel *accel)
+{
+  /* derivative with linear extrapolation beyond the x-range limits,
+     and gsl derivative in between */
+  if (x < spline->x[0])
+    return (spline->y[1] - spline->y[0]) / (spline->x[1] - spline->x[0]);
+  else if (x > spline->x[spline->size - 1])
+    return (spline->y[spline->size - 1] - spline->y[spline->size - 2]) / (spline->x[spline->size - 1] - spline->x[spline->size - 2]);
+  else
+    return gsl_spline_eval_deriv(spline, x, accel);
 }
