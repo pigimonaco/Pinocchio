@@ -27,6 +27,7 @@
 */
 
 #include "pinocchio.h"
+#include "initial_density.h"
 
 // #define BL_GRANDISSIMA
 
@@ -436,11 +437,7 @@ int set_smoothing()
 
 int generate_densities()
 {
-
   cputime.dens = MPI_Wtime();
-
-  if (!ThisTask)
-    dprintf(VMSG, 0, "[%s] Generating density in Fourier space\n", fdate());
 
 #ifdef WHITENOISE
 
@@ -451,15 +448,31 @@ int generate_densities()
     return 1;
   }
 
+  if (ThisTask == 0)
+    printf("[%s] Reading \"WhiteNoise\" file.\n", fdate());
   if (read_white_noise())
     return 1;
 
 #else
 
-  int igrid;
-  for (igrid = 0; igrid < Ngrids; igrid++)
-    if (GenIC_large(igrid))
+  if (strlen(params.InitialDensityFile)) {
+    if (ThisTask == 0)
+      printf(
+        "[%s] Reading initial density from \"%s\".\n",
+        fdate(), params.InitialDensityFile
+      );
+    int error = read_initial_density(
+      kdensity, params.InitialDensityFile, 0, MyGrids
+    );
+    if (error)
       return 1;
+  }
+  else {
+    int igrid;
+    for (igrid = 0; igrid < Ngrids; igrid++)
+      if (GenIC_large(igrid))
+        return 1;
+  }
 
 #endif
 

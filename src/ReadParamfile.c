@@ -40,9 +40,11 @@
 #define LOGICAL 4
 #define INT3 5
 #define DOUBLE3 6
-#define INT_SKIP_DEF 98 /* this is previously set to the default value */
-#define INT_SKIP 99     /* this is set to 0 if not present in the parameter file */
+#define INT_SKIP_DEF 98   /* This is previously set to the default value. */
+#define INT_SKIP 99       /* Defaults to 0 if not present in parameter file. */
 #define MAXTAGS 100
+#define DOUBLE_SKIP 101   /* Defaults to 0.0. */
+#define STRING_SKIP 102   /* Defaults to empty string. */
 
 int read_parameter_file()
 {
@@ -79,6 +81,10 @@ int read_parameter_file()
     strcpy(tag[nt], "GridSize");
     addr[nt] = &(params.GridSize[0]);
     id[nt++] = INT;
+
+    strcpy(tag[nt], "InitialDensityFile");
+    addr[nt] = &params.InitialDensityFile;
+    id[nt++] = STRING_SKIP;
 
     strcpy(tag[nt], "RandomSeed");
     addr[nt] = &params.RandomSeed;
@@ -316,6 +322,7 @@ int read_parameter_file()
           switch (id[j])
           {
           case DOUBLE:
+          case DOUBLE_SKIP:
             if (number_of_fields < 2)
               j = -10;
             else
@@ -323,6 +330,7 @@ int read_parameter_file()
             break;
 
           case STRING:
+          case STRING_SKIP:
             if (number_of_fields < 2)
               j = -10;
             else
@@ -411,6 +419,10 @@ int read_parameter_file()
       {
         if (id[i] == LOGICAL || id[i] == INT_SKIP || id[i] == DOUBLE3)
           *((int *)addr[i]) = 0;
+        else if (id[i] == DOUBLE_SKIP)
+          *((double*)addr[i]) = 0.0;
+        else if (id[i] == STRING_SKIP)
+          *((char*)addr[i]) = '\0';
         else if (id[i] != INT_SKIP_DEF)
         {
           printf("ERROR on task 0: I miss a value for tag '%s' in parameter file '%s'.\n", tag[i], params.ParameterFile);

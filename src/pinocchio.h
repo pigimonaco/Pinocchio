@@ -327,7 +327,8 @@ typedef struct
       BoundaryLayerFactor, Largest, MaxMemPerParticle, k_for_GM, PredPeakFactor, PLCAperture,
       PLCCenter[3], PLCAxis[3];
   char RunFlag[SBLENGTH], DumpDir[SBLENGTH], TabulatedEoSfile[LBLENGTH], ParameterFile[LBLENGTH],
-      OutputList[LBLENGTH], FileWithInputSpectrum[LBLENGTH], CTtableFile[LBLENGTH];
+      OutputList[LBLENGTH], FileWithInputSpectrum[LBLENGTH], CTtableFile[LBLENGTH],
+      InitialDensityFile[LBLENGTH];
   int GridSize[3], DumpProducts, ReadProductsFromDumps,
       CatalogInAscii, DoNotWriteCatalogs, DoNotWriteHistories, WriteTimelessSnapshot,
       OutputInH100, RandomSeed, MaxMem, NumFiles,

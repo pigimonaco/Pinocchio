@@ -29,6 +29,7 @@
 
 #include "pinocchio.h"
 #include "def_splines.h"
+#include "initial_density.h"
 
 void abort_code(void);
 void write_cputimes(void);
@@ -210,6 +211,36 @@ int main(int argc, char **argv, char **envp)
 
       return 0; 
     } 
+
+  // Output initial density, then exit, when called as:
+  //   pinocchio parameter_file --write-initial-density
+  // The output file name can be specified as an optional third command-line
+  // argument that defaults to "initial_density.dat".
+  if (argc >= 3 && strcmp(argv[2], "--write-initial-density") == 0) {
+    char* const file_name = (argc >= 4) ? argv[3] : "initial_density.dat";
+    if (ThisTask == 0)
+      printf("Writing initial density to file \"%s\".\n", file_name);
+    int ThisGrid = 0;         // Not implemented for multiple grids.
+    int exit_code = write_initial_density(
+      kdensity, file_name, ThisGrid, MyGrids
+    );
+    MPI_Finalize();
+    return exit_code;
+  }
+
+  // Abort on any other second command-line argument.
+  if (argc == 3) {
+    printf("Error: Unknown command-line argument \"%s\".\n", argv[2]);
+    MPI_Finalize();
+    return 1;
+  }
+
+  // Abort if more arguments are passed.
+  if (argc > 3) {
+    printf("Error: Too many command-line argument.\n");
+    MPI_Finalize();
+    return 1;
+  }
 
 
   /******************************************/
