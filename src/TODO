@@ -1,0 +1,10 @@
+V trovare bug
+
+V confrontarsi con la frammentazione standard e classic su 8 task
+
+-> A_THR meglio metterlo a 5 o 6, ideale 10
+-> R_THR inutile metterlo oltre 2
+
+CON R_THR>8 CRASHA, TROVARE IL BUG (crasha anche con Nsub=2)
+
+- calcolare concentrazione, a che ci siamo

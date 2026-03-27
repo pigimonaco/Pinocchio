@@ -36,8 +36,8 @@ EXEC = pinocchio.x
 
 # Compilation options #
 
-DEBUG = NO
-OMP   = YES
+DEBUG = YES
+OMP   = NO
 
 ########## Preprocessor Definitions ########## 
 
@@ -58,7 +58,7 @@ OPTIONS += -DELL_CLASSIC
 
 # Building groups and fragmentation #
 
-# OPTIONS += -DCLASSIC_FRAGMENTATION
+OPTIONS += -DCLASSIC_FRAGMENTATION
 
 # Output #
 
@@ -70,10 +70,10 @@ OPTIONS += -DELL_CLASSIC
 # Beyond LambdaCDM models
 
 # these are for neutrino cosmology
-OPTIONS += -DSCALE_DEPENDENT
-OPTIONS += -DREAD_PK_TABLE
-OPTIONS += -DRECOMPUTE_DISPLACEMENTS
-OPTIONS += -DREAD_HUBBLE_TABLE
+# OPTIONS += -DSCALE_DEPENDENT
+# OPTIONS += -DREAD_PK_TABLE
+# OPTIONS += -DONLY_MATTER_POWER
+# OPTIONS += -DRECOMPUTE_DISPLACEMENTS
 
 # add also these for f(R) gravity
 # OPTIONS += -DMOD_GRAV_FR
@@ -82,7 +82,8 @@ OPTIONS += -DREAD_HUBBLE_TABLE
 # Other options # 
 
 # OPTIONS += -DWHITENOISE
-# OPTIONS += -DNORADIATION
+OPTIONS += -DNORADIATION
+
 
 ########## Preprocessor Definitions end ########## 
 
@@ -99,32 +100,15 @@ endif
 
 ########## System-specific Configuration ############
 
-SYSTYPE ?= "mylaptop"
-
-################### mylaptop ####################
-
-ifeq ($(SYSTYPE),"mylaptop")
-CC          =  mpicc
-CDEBUG      = -ggdb3 -Wall $(OMP_FLAG)
-COPTIMIZED  = -O3 -Wno-unused-result $(OMP_FLAG)
-FFTW_LIBR   = -L/usr/lib/ -lfftw3_mpi -lfftw3 $(OMP_FFTW)
-FFTW_INCL   = -I/usr/include
-PFFT_LIBR   = -L$(HOME)/lib -lpfft
-PFFT_INCL   = -I$(HOME)/include
-
-MPI_LIBR    =
-MPI_INCL    =
-GSL_LIBR    = -L$(HOME)/lib -lgsl -lgslcblas -lm
-GSL_INCL    = -I$(HOME)/include/gsl
-endif
+SYSTYPE ?= "base"
 
 ###################### BASE ######################
 
 ifeq ($(SYSTYPE),"base")
 CC          =  mpicc
-CDEBUG      = -ggdb3 -Wall $(OMP_FLAG)
+CDEBUG      = -ggdb3 -Wno-unused-result -Wall $(OMP_FLAG)
 COPTIMIZED  = -O3 -Wno-unused-result $(OMP_FLAG)
-FFTW_LIBR   = -L$(FFTW_LIB) -lfftw3_mpi -lfftw3 $(OMP_FFTW)
+FFTW_LIBR   = -L$(HOME)/lib -lfftw3_mpi -lfftw3 $(OMP_FFTW)
 FFTW_INCL   = -I$(HOME)/include
 PFFT_LIBR   = -L$(HOME)/lib -lpfft
 PFFT_INCL   = -I$(HOME)/include
